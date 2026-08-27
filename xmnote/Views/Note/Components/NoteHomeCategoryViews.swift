@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 StarredChapterGroup、RelatedCategorySnapshot、BookReviewListSnapshot 只读模型，接收分类搜索词与业务操作回调，并使用 XMBookCover/ExpandableRichText/ContentImageWall/XMRatingBar/XMToastCenter 基础组件
- * [OUTPUT]: 对外提供 Note 页面私有的星标章节、相关分类与增量书评首页内容视图，以连续阅读流承载正文展开、附图浏览、轻透明紧凑书籍来源区、编辑型元信息页脚及上下文操作
+ * [OUTPUT]: 对外提供 Note 页面私有的星标章节、相关分类与增量书评首页内容视图，以连续阅读流承载正文展开、附图浏览、轻透明紧凑书籍来源区、编辑型元信息页脚及中性上下文操作
  * [POS]: Note/Components 页面私有展示集合，仅被 NoteCollectionView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -180,6 +180,7 @@ private struct NoteStarredChapterRow: View {
             Button("打开目录", systemImage: "list.bullet", action: onLocateChapter)
             Button("打开书籍", systemImage: "book.closed", action: onOpenBook)
         }
+        .xmMenuNeutralTint()
     }
 }
 
@@ -264,6 +265,7 @@ private struct NoteRelatedCategoryItemView: View {
                     }
                     .disabled(isWriting)
                 }
+                .xmMenuNeutralTint()
         } else {
             categoryButton
         }
@@ -471,6 +473,7 @@ private struct NoteBookReviewCard: View {
             }
             Button("删除", systemImage: "trash", role: .destructive, action: onDeleteReview)
         }
+        .xmMenuNeutralTint()
         .accessibilityElement(children: .contain)
         .accessibilityLabel(reviewTitle.isEmpty ? "书评" : reviewTitle)
         .accessibilityAction(named: "查看书评", onOpenReview)

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 AITextResultViewModel/AIAutoTagViewModel、AIRepositoryProtocol、AIMarkdownResultView、系统 Sheet/Liquid Glass、LoadingGate、xmMinimumHitTarget 与现有反馈组件
- * [OUTPUT]: 对外提供 AITextResultSheet 与 AIAutoTagSheet，承接流式 Markdown 结果、克制等待态、模型切换、固定底部品牌确认操作、编辑器请求交接和 AI 标签确认写回生命周期
+ * [OUTPUT]: 对外提供 AITextResultSheet 与 AIAutoTagSheet，承接流式 Markdown 结果、克制等待态、中性模型菜单、固定底部品牌确认操作、编辑器请求交接和 AI 标签确认写回生命周期
  * [POS]: Views/Content/Sheets 的 AI 业务 Sheet，被通用 viewer 及单页详情入口复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -273,6 +273,7 @@ struct AITextResultSheet: View {
                 .xmMinimumHitTarget(anchor: .top)
         }
         .buttonStyle(.plain)
+        .xmMenuNeutralTint()
         .disabled(viewModel.availableProviders.isEmpty || viewModel.isSwitchingModel)
         .accessibilityLabel("当前模型，\(modelMenuTitle)")
         .accessibilityHint("打开菜单切换 AI 模型")

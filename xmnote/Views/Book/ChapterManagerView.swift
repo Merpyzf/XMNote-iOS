@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer 注入 ChapterManagement/OCR Repository，依赖 ChapterManagerViewModel、XMStarredAppearance、批量/远端目录 Sheet、InteractionMetrics 与页面私有布局刻度
- * [OUTPUT]: 对外提供 ChapterManagerView，覆盖五层目录展开、叶子章节书摘导航、手工/OCR/远端导入、搜索、定位、新增编辑、星标、可撤销移动重排、多选删除与清空子章节
+ * [OUTPUT]: 对外提供 ChapterManagerView，覆盖五层目录展开、叶子章节书摘导航、中性菜单、手工/OCR/远端导入、搜索、定位、新增编辑、星标、可撤销移动重排、多选删除与清空子章节
  * [POS]: Views/Book 的书内目录管理页面壳层，由 BookRoute.chapterManager 在当前 Tab NavigationStack 中 push
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -256,6 +256,7 @@ private struct ChapterManagerContentView: View {
         if viewModel.snapshot.chapterCount > 0 {
             ToolbarItem(placement: .topBarLeading) {
                 EditButton()
+                    .xmToolbarNeutralTint()
                     .disabled(viewModel.isWriting)
             }
         }
@@ -265,6 +266,7 @@ private struct ChapterManagerContentView: View {
                 Button(action: viewModel.presentCreateRoot) {
                     TopBarActionIcon(systemName: "plus")
                 }
+                .xmToolbarNeutralTint()
                 .disabled(viewModel.isWriting)
                 .accessibilityLabel("新增一级章节")
 
@@ -281,6 +283,7 @@ private struct ChapterManagerContentView: View {
                 } label: {
                     TopBarActionIcon(systemName: "ellipsis")
                 }
+                .xmToolbarNeutralTint()
                 .accessibilityLabel("更多目录操作")
             }
         }
@@ -444,7 +447,7 @@ private struct ChapterStructureUndoBar: View {
     var body: some View {
         HStack(spacing: Spacing.cozy) {
             Image(systemName: "arrow.uturn.backward.circle.fill")
-                .foregroundStyle(Color.appTint)
+                .foregroundStyle(Color.iconSecondary)
                 .accessibilityHidden(true)
 
             Text(message)
@@ -530,6 +533,7 @@ private struct ChapterManagementRow: View {
             }
         }
         .contextMenu { contextMenuContent }
+        .xmMenuNeutralTint()
         .swipeActions(edge: .leading, allowsFullSwipe: true) {
             Button(action: onToggleStarred) {
                 Label(visibleItem.item.isStarred ? "取消星标" : "星标", systemImage: visibleItem.item.isStarred ? "star.slash" : "star")

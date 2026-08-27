@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 OCRRepositoryProtocol 与 NotePhotoOCRFlowViewModel 驱动正式书摘 OCR 状态，依赖 AppTypography、AVFoundation/PhotosUI 提供排版、拍照与选图能力
- * [OUTPUT]: 对外提供 NotePhotoOCRFlowView，以统一文本 token 承载书摘编辑页的拍照、单框裁切与识别回填流程
+ * [OUTPUT]: 对外提供 NotePhotoOCRFlowView，以统一文本与中性辅助图标 token 承载书摘编辑页的拍照、单框裁切与识别回填流程
  * [POS]: Views/Note/Components 的页面私有子视图，负责对齐 Android 的正式拍照 OCR 主流程
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -323,7 +323,7 @@ private extension OCRCameraScreen {
         HStack(alignment: .top, spacing: Spacing.half) {
             Image(systemName: "sparkles")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(Color.appTint)
+                .foregroundStyle(Self.darkForegroundSecondary)
                 .padding(.top, Spacing.tiny)
 
             VStack(alignment: .leading, spacing: Spacing.micro) {

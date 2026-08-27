@@ -1,10 +1,25 @@
 # XMMinimumHitTarget 使用说明
 
-`XMMinimumHitTarget` 是紧凑视觉控件的交互基础设施。它只把命中与可访问性轮廓补足到设计系统规定的最小 `44pt × 44pt`，不改变控件的 `frame`、约束、间距、背景或实际绘制尺寸。
+`XMMinimumHitTarget` 是默认 44pt 点击热区基线下的紧凑控件交互基础设施。它把需要满足基线的控件命中与可访问性轮廓补足到 `44pt × 44pt`，不改变控件的 `frame`、约束、间距、背景或实际绘制尺寸；它不是要求所有可点击文字都机械扩展到 44pt 的全局修饰器。
 
 - SwiftUI：`xmnote/UIComponents/Controls/Button/XMMinimumHitTarget.swift`
 - UIKit：`xmnote/UIComponents/Controls/Button/XMMinimumHitTargetButton.swift`
 - 唯一尺寸令牌：`xmnote/Utilities/DesignSystem/InteractionMetrics.swift`
+
+## 接入判断
+
+以下场景必须达到 `InteractionMetrics.minimumTouchTarget`：
+
+- 主操作、导航与关闭。
+- 破坏性或不可逆操作。
+- 频繁或连续交互。
+- 独立图标按钮和表单控件。
+
+只有副标题、状态、元数据等以信息展示为主的内联次级文字，同时满足低频、非破坏性且不是完成主任务的必要入口时，才允许保留小于 44pt 的文字自然命中范围。“低频”本身不能构成例外，独立按钮、图标和主要操作不得借此缩小。
+
+内联例外仍须使用 `Button`、`NavigationLink` 等原生语义控件并保留 VoiceOver label/value/hint，禁止改成 `onTapGesture`。调用处相邻注释必须写明业务角色、低频与非破坏性依据及不扩展命中范围的原因，并通过文字内/外 A/B 点击确认不会让周围空白或邻近控件误响应。
+
+例外不新增更小的全局点击尺寸 token，也不修改 `InteractionMetrics.minimumTouchTarget`。
 
 ## 快速接入
 
@@ -36,9 +51,23 @@ button.hitTargetAnchor = .trailing
 
 视觉为 `24pt × 24pt` 的关闭图标应用修饰器后，布局和截图仍是 `24pt × 24pt`，但中心外侧、44pt 轮廓以内的坐标可以命中。设计系统展厅提供默认命中与扩展命中的 A/B 场景；`DesignSystemInfrastructureTests` 同时验证 SwiftUI 计算矩形、RTL 锚点、UIKit `bounds` 不变与命中范围扩展。
 
-系统导航栏按钮、标准 `Button` 或其他已经提供合规目标的系统控件无需重复扩展。使用前应先确认真实命中范围，而不是仅根据图标大小判断。
+系统导航栏按钮、已经提供合规目标的系统控件或符合上述内联例外的次级文字无需重复扩展。使用前应先确认业务角色和真实命中范围，而不是仅根据图标或文字大小判断。
+
+符合内联例外时保留原生控件与自然命中范围：
+
+```swift
+// 该文本以副标题信息展示为主，管理入口低频且非破坏性；保留文字自然命中范围，避免标题栏空白响应点击。
+Button("已选择 3 本", action: onOpenSelection)
+    .buttonStyle(.plain)
+    .accessibilityLabel("已选择 3 本书")
+    .accessibilityHint("查看并管理已选书籍")
+```
 
 ## 常见问题
+
+### 所有小于 44pt 的可点击内容都必须接入吗？
+
+不是。先按“接入判断”确定业务角色。主要、独立、高频、破坏性或任务必要入口仍执行 44pt 基线；只有满足全部条件并完成注释、可访问性与命中歧义验证的内联次级文字可以保留自然范围。不要为了消除单点视觉间距而把整片标题栏变成点击区域。
 
 ### 为什么不用 `.frame(minWidth: 44, minHeight: 44)`？
 

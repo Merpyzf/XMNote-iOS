@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖章节移动/排序/批量/远端同步状态，依赖现有 DesignTokens、XMStarredAppearance、LoadingGate、XMSystemAlert、OCRRepository 与系统相机/照片入口
- * [OUTPUT]: 对外提供章节移动、排序、手工批量录入与文曲目录选择 Sheet，覆盖选区缩进、预览、文本历史、OCR 追加和写入反馈
+ * [OUTPUT]: 对外提供章节移动、排序、手工批量录入与文曲目录选择 Sheet，覆盖中性目录图标与菜单、选区缩进、预览、文本历史、OCR 追加和写入反馈
  * [POS]: Views/Book/Sheets 的目录管理辅助任务页，由 ChapterManagerView 以 sheet(item:) 展示
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -73,7 +73,7 @@ private struct ChapterMoveTargetRow: View {
     var body: some View {
         HStack(spacing: Spacing.base) {
             Image(systemName: target.isRoot ? "books.vertical" : "folder")
-                .foregroundStyle(target.isEnabled ? Color.appTint : Color.textHint)
+                .foregroundStyle(target.isEnabled ? Color.iconSecondary : Color.textHint)
                 .frame(width: Spacing.double)
 
             VStack(alignment: .leading, spacing: Spacing.compact) {
@@ -370,6 +370,7 @@ private extension ChapterBatchImportSheet {
                 .font(AppTypography.subheadline)
                 .frame(minHeight: InteractionMetrics.minimumTouchTarget)
         }
+        .xmMenuNeutralTint()
         .disabled(viewModel.text.isEmpty || isBusy)
     }
 
@@ -1002,7 +1003,7 @@ private struct ChapterRemoteCandidateRow: View {
     var body: some View {
         HStack(spacing: Spacing.base) {
             Image(systemName: "book.closed")
-                .foregroundStyle(Color.appTint)
+                .foregroundStyle(Color.iconSecondary)
                 .frame(width: Spacing.double)
 
             VStack(alignment: .leading, spacing: Spacing.compact) {

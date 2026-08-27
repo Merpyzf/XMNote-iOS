@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer 注入 SourceManagementRepositoryProtocol，依赖 SourceManagementViewModel 驱动来源管理状态，依赖 PersonalManagementSearchBar、XMScopeSelector 与系统分组 List/Toolbar/scroll-edge，并由页面壳层稳定承载导航命令
- * [OUTPUT]: 对外提供 SourceManagementView，以首帧稳定的顶部命令、固定来源范围、可滚动系统搜索、自动顶部边缘过渡和单一数据容器承接来源管理
+ * [OUTPUT]: 对外提供 SourceManagementView，以中性顶部命令、固定来源范围、可滚动系统搜索、自动顶部边缘过渡和单一数据容器承接来源管理
  * [POS]: Views/Personal 的书籍来源管理页面壳层，被 PersonalRoute.bookSource 导航消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -32,7 +32,6 @@ struct SourceManagementView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.surfacePage.ignoresSafeArea())
-        .tint(Color.iconPrimary)
         .navigationTitle(isReordering ? "调整来源顺序" : "书籍来源")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbarContent }
@@ -59,6 +58,7 @@ struct SourceManagementView: View {
                 Button("完成") {
                     isReordering = false
                 }
+                .xmToolbarNeutralTint()
                 .disabled(viewModel?.activeWriteAction == .reorder)
                 .allowsHitTesting(isToolbarReady)
                 .accessibilityHidden(!isToolbarReady)
@@ -70,22 +70,26 @@ struct SourceManagementView: View {
                 } label: {
                     Image(systemName: "plus")
                 }
+                .xmToolbarNeutralTint()
                 .disabled(viewModel.map { !$0.canCreateSource } ?? false)
                 .allowsHitTesting(isToolbarReady)
                 .accessibilityHidden(!isToolbarReady)
                 .accessibilityLabel("添加来源")
 
                 Menu {
-                    Button("调整顺序", systemImage: "arrow.up.arrow.down") {
+                    Button {
                         guard viewModel?.canEnterReorder == true else { return }
                         deactivateSearch()
                         isReordering = true
+                    } label: {
+                        XMMenuLabel("调整顺序", systemImage: "arrow.up.arrow.down")
                     }
                     .disabled(viewModel?.canEnterReorder != true)
                     .accessibilityHint(viewModel?.reorderActionAccessibilityHint ?? "")
                 } label: {
                     Image(systemName: "ellipsis")
                 }
+                .xmToolbarNeutralTint()
                 .disabled(viewModel?.activeWriteAction != nil)
                 .allowsHitTesting(isToolbarReady)
                 .accessibilityHidden(!isToolbarReady)

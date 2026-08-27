@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 或 Debug 仓储替身提供本地书与在线搜索，依赖 BookPickerViewModel 维护共享选择草稿
- * [OUTPUT]: 对外提供 BookPickerView，使用统一 Sheet 骨架、原生系统搜索、稳定结果快照与可降级结构过渡承载选择流
+ * [INPUT]: 依赖 RepositoryContainer 或 Debug 仓储替身提供本地书与在线搜索，依赖 BookPickerViewModel 维护共享选择草稿及 XMSheetScaffold 动态副标题槽位
+ * [OUTPUT]: 对外提供 BookPickerView，使用统一标题副标题层级、原生系统搜索、稳定结果快照与可降级结构过渡承载选择流
  * [POS]: Book 模块业务 Sheet，负责统一书籍选择流，不承担具体业务页保存逻辑
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -158,8 +158,15 @@ private struct BookPickerResolvedView: View {
                 title: configuration.title,
                 onClose: handleCancel,
                 scrollEdgePresentation: .overlaySoft,
+                titleSubtitle: {
+                    BookPickerSelectionSubtitle(
+                        count: viewModel.selectedCount,
+                        allowsEmptySelection: viewModel.allowsEmptyMultipleConfirmation,
+                        onOpenSelection: { activeSheet = .selectedBooks }
+                    )
+                },
                 contentTopBar: {
-                    pickerTopBar(viewModel, includesSelectionSummary: true)
+                    searchBar(viewModel)
                 },
                 bottomBar: {
                     multipleSelectionBar(viewModel)
@@ -173,30 +180,11 @@ private struct BookPickerResolvedView: View {
                 onClose: handleCancel,
                 scrollEdgePresentation: .overlaySoft,
                 contentTopBar: {
-                    pickerTopBar(viewModel, includesSelectionSummary: false)
+                    searchBar(viewModel)
                 }
             ) {
                 scrollableContent(viewModel)
             }
-        }
-    }
-
-    private func pickerTopBar(
-        _ viewModel: BookPickerViewModel,
-        includesSelectionSummary: Bool
-    ) -> some View {
-        VStack(spacing: Spacing.none) {
-            if includesSelectionSummary {
-                BookPickerSelectionSubtitle(
-                    count: viewModel.selectedCount,
-                    allowsEmptySelection: viewModel.allowsEmptyMultipleConfirmation,
-                    onOpenSelection: { activeSheet = .selectedBooks }
-                )
-                .padding(.horizontal, Spacing.screenEdge)
-                .padding(.bottom, Spacing.comfortable)
-            }
-
-            searchBar(viewModel)
         }
     }
 
@@ -720,7 +708,7 @@ private struct BookPickerResolvedView: View {
     }
 }
 
-/// 多选标题副文案只扩展命中形状，不改变普通副标题的字体、颜色、间距或可见尺寸。
+/// 多选标题副文案保留标准副标题视觉，仅在存在已选书籍时提供低频管理入口。
 private struct BookPickerSelectionSubtitle: View {
     let count: Int
     let allowsEmptySelection: Bool
@@ -744,23 +732,17 @@ private struct BookPickerSelectionSubtitle: View {
     var body: some View {
         ZStack {
             if displayedCount > 0 {
+                // 该文本以副标题信息展示为主，打开已选管理仅为低频、非破坏性辅助操作；按项目例外保留文字自然命中范围，避免标题栏空白响应点击。
                 Button(action: onOpenSelection) {
                     Text("已选择 \(displayedCount) 本")
-                        .font(AppTypography.caption2)
-                        .foregroundStyle(Color.textSecondary)
-                        .lineLimit(1)
                         .contentTransition(.numericText(countsDown: countsDown))
                 }
                 .buttonStyle(.plain)
-                .contentShape(BookPickerSubtitleHitShape())
                 .accessibilityLabel("已选择 \(displayedCount) 本书")
                 .accessibilityHint("查看并管理已选书籍")
                 .transition(.opacity)
             } else {
                 Text(allowsEmptySelection ? "全部书籍" : "请选择书籍")
-                    .font(AppTypography.caption2)
-                    .foregroundStyle(Color.textSecondary)
-                    .lineLimit(1)
                     .transition(.opacity)
             }
         }
@@ -785,22 +767,6 @@ private struct BookPickerSelectionSubtitle: View {
                 displayedCount = newValue
             }
         }
-    }
-}
-
-/// 把副标题命中区域扩展到至少 44pt，路径扩展不参与布局计算也不产生可见样式。
-private struct BookPickerSubtitleHitShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        let width = max(rect.width, InteractionMetrics.minimumTouchTarget)
-        let height = max(rect.height, InteractionMetrics.minimumTouchTarget)
-        return Path(
-            CGRect(
-                x: rect.midX - width / 2,
-                y: rect.midY - height / 2,
-                width: width,
-                height: height
-            )
-        )
     }
 }
 

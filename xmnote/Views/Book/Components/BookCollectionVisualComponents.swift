@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 BookCollectionListItem、BookCollectionDisplaySetting、BookCollectionDetail、BookCollectionBookItem、XMBookCover、XMBookCoverAppearance、InteractionMetrics 与 ReadingStatusPresentation 渲染书单列表、详情和书单内书籍关系
- * [OUTPUT]: 对外提供书单模块页面私有视觉组件，统一堆叠/规整封面、海报式封面、指标、详情头、书籍卡片、书籍元信息入口与 relation 文本语义区块
+ * [OUTPUT]: 对外提供书单模块页面私有视觉组件，统一堆叠/规整封面、海报式封面、指标、详情头、书籍卡片、中性上下文操作、书籍元信息入口与 relation 文本语义区块
  * [POS]: Book 模块书单页面私有展示组件，被 BookCollectionListView、BookCollectionDetailView 与加入书单 Sheet 复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -1995,6 +1995,7 @@ struct BookCollectionBookCard: View {
                 }
             }
         }
+        .xmMenuNeutralTint()
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             if canEditRelationNote {
                 Button {

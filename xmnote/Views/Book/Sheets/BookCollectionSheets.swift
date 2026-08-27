@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 BookCollectionDetail、BookCollectionFormPresentation、BookCollectionRecommendEdit、BookCollectionBookMetadataEdit、XMBookCoverAppearance、InteractionMetrics 与页面私有顶部栏布局承载书单详情、书单编辑、书籍元信息编辑和关系备注编辑上下文
- * [OUTPUT]: 对外提供 BookCollectionSummarySheet、BookCollectionFormSheet、BookCollectionBookMetadataEditSheet 与 BookCollectionRecommendSheet，承载书单简介查看、创建/编辑、书籍元信息和收藏理由/年度点评编辑的任务面板
+ * [OUTPUT]: 对外提供 BookCollectionSummarySheet、BookCollectionFormSheet、BookCollectionBookMetadataEditSheet 与 BookCollectionRecommendSheet，承载书单简介查看、创建/编辑、中性封面辅助操作、书籍元信息和收藏理由/年度点评编辑的任务面板
  * [POS]: Book 模块业务 Sheet，替代书单文本输入类中心弹窗
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -534,7 +534,7 @@ struct BookCollectionBookMetadataEditSheet: View {
                         } label: {
                             Label("在线匹配", systemImage: "magnifyingglass")
                                 .font(AppTypography.subheadlineMedium)
-                                .foregroundStyle(Color.appTint.opacity(0.86))
+                                .foregroundStyle(Color.textPrimary)
                                 .frame(maxWidth: .infinity, minHeight: InteractionMetrics.minimumTouchTarget)
                                 .background(Color.surfaceNested, in: RoundedRectangle(cornerRadius: CornerRadius.blockSmall, style: .continuous))
                         }
@@ -547,7 +547,7 @@ struct BookCollectionBookMetadataEditSheet: View {
                         ) {
                             Label("选择封面", systemImage: "photo")
                                 .font(AppTypography.subheadlineMedium)
-                                .foregroundStyle(Color.appTint.opacity(0.86))
+                                .foregroundStyle(Color.textPrimary)
                                 .frame(maxWidth: .infinity, minHeight: InteractionMetrics.minimumTouchTarget)
                                 .background(Color.surfaceNested, in: RoundedRectangle(cornerRadius: CornerRadius.blockSmall, style: .continuous))
                         }

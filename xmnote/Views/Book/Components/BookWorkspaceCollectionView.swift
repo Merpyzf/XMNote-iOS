@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 BookWorkspacePresentationSnapshot、Nuke/Core Image 封面处理管线、XMMarqueeText、XMStarredAppearance、ReadingStatusPresentation、InteractionMetrics、SwiftUI 普通胶囊行内容构建器与 UIKit UICollectionView
- * [OUTPUT]: 对外提供背景与前景同步折叠及回弹、下拉时整幅等比填充且共同穿过状态栏/导航栏的无边缘光晕封面影像 Hero、Android 等效模糊、随折叠末段淡出并拉平的中性圆角 Tab 台阶、整体导航中和、接入公共连续跑马灯的书名状态行、书脊封面、单行出版元数据、轻量色点状态、与缺席态共享等距底部呼吸的普通轻透评分与三项精致阅读指标 Chip、与系统标题互斥联动的共享可收起书籍头部、统一内容卡片轮廓、几何稳定的吸顶 Tab 与纯内容原生 Pager
+ * [OUTPUT]: 对外提供背景与前景同步折叠及回弹、下拉时整幅等比填充且共同穿过状态栏/导航栏的无边缘光晕封面影像 Hero、Android 等效模糊、随折叠末段淡出并拉平的中性圆角 Tab 台阶、整体导航中和、接入公共连续跑马灯的书名状态行、书脊封面、单行出版元数据、轻量色点状态、中性上下文操作、与缺席态共享等距底部呼吸的普通轻透评分与三项精致阅读指标 Chip、与系统标题互斥联动的共享可收起书籍头部、统一内容卡片轮廓、几何稳定的吸顶 Tab 与纯内容原生 Pager
  * [POS]: Views/Book/Components 的页面私有 UIKit 混合列表，负责影像 Hero/中性内容分层、分页、共享 Chrome、diff、章节吸顶和视口稳定
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -3547,6 +3547,7 @@ private struct BookWorkspaceRelatedCollectionRow: View {
                 Button("编辑", systemImage: "pencil", action: onEdit)
                 Button("删除", systemImage: "trash", role: .destructive, action: onDelete)
             }
+            .xmMenuNeutralTint()
         }
     }
 
@@ -3661,6 +3662,7 @@ private struct BookWorkspaceReviewCollectionRow: View {
                 Button("编辑", systemImage: "pencil", action: onEdit)
                 Button("删除", systemImage: "trash", role: .destructive, action: onDelete)
             }
+            .xmMenuNeutralTint()
         }
     }
 }

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer、AppNavigationCoordinator、RelatedCategoryListViewModel 与 RelatedListRow
- * [OUTPUT]: 对外提供 RelatedCategoryListView，覆盖相关内容混排、局部搜索排序分页、内容/相关书编辑、复制/分享与软删除
+ * [OUTPUT]: 对外提供 RelatedCategoryListView，覆盖相关内容混排、局部搜索排序分页、中性菜单、内容/相关书编辑、复制/分享与软删除
  * [POS]: Note 模块相关分类二级页面壳层，由 NoteRoute.relatedCategory 进入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -98,6 +98,7 @@ struct RelatedCategoryListView: View {
                 } label: {
                     Label("排序", systemImage: "arrow.up.arrow.down")
                 }
+                .xmToolbarNeutralTint()
             }
         }
         .xmSystemAlert(item: $pendingDelete) { request in
@@ -188,6 +189,7 @@ struct RelatedCategoryListView: View {
                 pendingDelete = RelatedDeleteRequest(item: item)
             }
         }
+        .xmMenuNeutralTint()
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button(role: .destructive) {
                 pendingDelete = RelatedDeleteRequest(item: item)
@@ -202,14 +204,14 @@ struct RelatedCategoryListView: View {
                 } label: {
                     Label("编辑", systemImage: "square.and.pencil")
                 }
-                .tint(Color.appTint)
+                .tint(Color.editActionFill)
             } else if case .book(let book) = item {
                 Button {
                     openBookEditor(book)
                 } label: {
                     Label("编辑资料", systemImage: "square.and.pencil")
                 }
-                .tint(Color.appTint)
+                .tint(Color.editActionFill)
             }
         }
     }

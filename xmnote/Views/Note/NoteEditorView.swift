@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer、AppState、NoteEditorViewModel、AppTaskNavigationContext、NoteTextComposerView、XMStarredAppearance 与 BookPickerView
- * [OUTPUT]: 对外提供 NoteEditorView，承载书摘新建/编辑、草稿恢复、图片额度、附图、层级章节、无冗余上下文的标签草稿操作、语义化编辑设置入口与保存动作
+ * [OUTPUT]: 对外提供 NoteEditorView，承载书摘新建/编辑、中性草稿恢复提示、图片额度、附图、层级章节、无冗余上下文的标签草稿操作、语义化编辑设置入口与保存动作
  * [POS]: Note 模块书摘编辑页壳层，对齐 Android 编辑流程并采用 iOS 原生页面组织
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -822,7 +822,7 @@ private extension NoteEditorView {
             HStack(spacing: Spacing.cozy) {
                 Image(systemName: "clock.arrow.trianglehead.counterclockwise.rotate.90")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Color.appTint)
+                    .foregroundStyle(Color.iconSecondary)
                 Text(description)
                     .font(AppTypography.footnoteMedium)
                     .foregroundStyle(Color.textSecondary)

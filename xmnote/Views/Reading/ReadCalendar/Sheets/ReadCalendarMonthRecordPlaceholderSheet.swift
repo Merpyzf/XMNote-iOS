@@ -2,7 +2,7 @@ import SwiftUI
 
 /**
  * [INPUT]: 依赖目标月份与回调事件，依赖 ReadCalendarTheme 与 DesignTokens 提供视觉语义
- * [OUTPUT]: 对外提供 ReadCalendarMonthRecordPlaceholderSheet（月度阅读记录占位弹层）
+ * [OUTPUT]: 对外提供使用中性占位图标的 ReadCalendarMonthRecordPlaceholderSheet（月度阅读记录占位弹层）
  * [POS]: ReadCalendar 业务模块 Sheet，占位承接“点击月份进入当月阅读记录页”的后续能力
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -26,7 +26,7 @@ struct ReadCalendarMonthRecordPlaceholderSheet: View {
             VStack(spacing: Spacing.cozy) {
                 Image(systemName: "book.pages")
                     .font(.system(size: Layout.iconSize, weight: .medium))
-                    .foregroundStyle(Color.appTint)
+                    .foregroundStyle(Color.iconSecondary)
 
                 Text("\(monthTitle)阅读记录")
                     .font(AppTypography.headlineSemibold)

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 NoteExcerptListItem/RelatedListItem 展示模型、XMKeywordHighlighting、XMTagLabel、DesignTokens、XMBookCover、CardContainer、LoadingGate 与 Reduce Motion 环境
- * [OUTPUT]: 对外提供带关键字高亮的 NoteExcerptListRow、RelatedListRow 与可选稳定叠层阶段过渡的 NoteListPhaseHost 等笔记二级页私有组件
+ * [OUTPUT]: 对外提供带关键字高亮的 NoteExcerptListRow、中性辅助图标的 RelatedListRow 与可选稳定叠层阶段过渡的 NoteListPhaseHost 等笔记二级页私有组件
  * [POS]: Note/Components 的二级列表视觉组件集合，复用当前 iOS 阅读排版、搜索高亮和卡片语义
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -173,7 +173,7 @@ struct RelatedListRow: View {
             HStack(spacing: Spacing.cozy) {
                 Label(content.categoryTitle, systemImage: "link")
                     .font(AppTypography.captionMedium)
-                    .foregroundStyle(Color.appTint)
+                    .foregroundStyle(Color.textSecondary)
                 Spacer(minLength: Spacing.compact)
                 Image(systemName: "chevron.right")
                     .font(AppTypography.caption)
@@ -219,7 +219,7 @@ struct RelatedListRow: View {
             VStack(alignment: .leading, spacing: Spacing.compact) {
                 Label("相关书籍", systemImage: "books.vertical")
                     .font(AppTypography.captionMedium)
-                    .foregroundStyle(Color.appTint)
+                    .foregroundStyle(Color.textSecondary)
 
                 Text(book.title)
                     .font(AppTypography.headline)

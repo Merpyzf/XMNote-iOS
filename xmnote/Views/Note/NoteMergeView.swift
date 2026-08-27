@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer 注入 NoteRepository/OCRRepository，依赖 NoteMergeViewModel、NoteTextComposerView、XMTagLabel 与页面私有图片占位外观
- * [OUTPUT]: 对外提供 NoteMergeView，覆盖正文/想法独立排序与分隔、富文本编辑、统一标签草稿选择、图片并集、元信息选择及真实事务合并
+ * [OUTPUT]: 对外提供 NoteMergeView，覆盖正文/想法独立排序与分隔、富文本编辑、统一标签草稿选择、图片并集、中性元信息菜单及真实事务合并
  * [POS]: Note 模块书摘合并页面，由 NoteRoute.mergeNotes 进入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -332,6 +332,7 @@ struct NoteMergeView: View {
                         .foregroundStyle(Color.textHint)
                 }
             }
+            .xmMenuNeutralTint()
 
             Toggle("在书摘中显示创建时间", isOn: Binding(
                 get: { draft.includeTime },

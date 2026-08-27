@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 SwiftUI 与 UIKit 的系统动态颜色能力，以及集中式 Color 构造器
- * [OUTPUT]: 对外提供 XMNote 跨模块稳定语义颜色
+ * [OUTPUT]: 对外提供 XMNote 跨模块稳定语义颜色，包含与 Android 对齐的搜索关键字命中语义
  * [POS]: Utilities/DesignSystem 的颜色语义层，只表达用途，不承载页面布局
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -56,12 +56,12 @@ extension Color {
         highContrastLight: Color.xmHex(0x6D6D72),
         highContrastDark: Color.xmHex(0xB0B0B5)
     )
-    /// 搜索关键词命中色，沿用品牌绿的色相与饱和度，并按表面亮度保证正文级可读性。
+    /// 搜索关键词命中色：标准模式对齐 Android，高对比度模式保留红色语义并增强可读性。
     static let keywordHighlight = Color.xmAdaptive(
-        light: Color.xmHex(0x1C7C47),
-        dark: Color.xmHex(0x2ECF77),
-        highContrastLight: Color.xmHex(0x166B3A),
-        highContrastDark: Color.xmHex(0x65D98D)
+        light: Color.xmHex(0xEA4335),
+        dark: Color.xmHex(0xEA4335),
+        highContrastLight: Color.xmHex(0xA01C11),
+        highContrastDark: Color.xmHex(0xF5A39C)
     )
     /// 正文与 Markdown 中可跳转链接的前景色，不承担选中、成功或装饰语义。
     static let linkForeground = Color.xmAdaptive(

@@ -89,7 +89,7 @@ Views/<Feature> ──> ViewModels / Presentation ──> Domain / Repository �
 | 间距 | `Spacing.swift` | 通用节奏使用 token；单页几何使用页面级语义常量 |
 | 圆角 | `CornerRadius.swift` | 按 inlay / block / container 角色选择，并保留 continuous 轮廓 |
 | 描边 | `StrokeWidth.swift` | `hairline` 只表达多个独立组件共享的轻量边界语义 |
-| 触控尺寸 | `InteractionMetrics.swift` | `minimumTouchTarget` 是 44pt 最小热区唯一入口 |
+| 触控尺寸 | `InteractionMetrics.swift` | `minimumTouchTarget` 是默认 44pt 热区的唯一入口；受控内联文字例外不建立更小 token |
 
 标准容器圆角的稳定映射为：纯展示领域标签复用 `inlaySmall`（4pt），标准内容卡片复用 `blockLarge`（12pt），大型设置分组由 `XMSettingsGroup` 固定消费 `containerXXL`（24pt）。这些值按基础角色命名，不追加 `tagContainer`、`contentItem`、`settingsGroup` 等组件同值别名。
 
@@ -138,7 +138,8 @@ XMSettingsPage {
 
 业务 Sheet 根内容优先使用 `XMSheetScaffold`：
 
-- 统一标题、副标题、关闭或双侧操作布局。
+- 统一标题、副标题、关闭或双侧操作布局；标题与副标题使用 `Spacing.micro`（3pt）保持同一信息组。
+- 静态副标题继续使用 `subtitle: String?`；动态或可交互副标题使用类型安全的 `titleSubtitle` 槽位，由 scaffold 统一施加副标题字体、颜色和单行限制。
 - 统一滚动容器与 `.scrollBounceBehavior(.always)`。
 - 按需提供固定内容顶栏或底栏，并通过既有 scroll-edge 能力连接安全区。
 - 槽位保留具体 `View` 泛型类型，禁止 `AnyView` 类型擦除。
@@ -163,19 +164,22 @@ XMSettingsPage {
 
 仅复用一段布局代码、只服务一个页面或需要大量参数才能覆盖差异时，保留为 `Views/<Feature>/Components` 页面私有子视图。
 
-### 5.5 交互语义与 44pt 非视觉侵入
+### 5.5 交互语义、44pt 默认基线与受控例外
 
-- 普通点击优先使用 `Button`、`Toggle`、`NavigationLink`、`Menu` 等原生语义控件，不用 `onTapGesture` 模拟按钮。
-- 图标、标签或胶囊的视觉尺寸可以小于 44pt；不得为了满足点击区直接放大图标、背景、行高、间距或卡片占位。
+- 44pt 是默认交互热区基线。主操作、导航与关闭、破坏性或不可逆操作、频繁或连续交互、独立图标按钮和表单控件必须达到 `InteractionMetrics.minimumTouchTarget`。
+- 只有副标题、状态、元数据等以信息展示为主的内联次级文字，同时满足低频、非破坏性且不是完成主任务的必要入口时，才允许保留小于 44pt 的文字自然命中范围；“低频”本身不能构成例外。
+- 内联例外仍须使用 `Button`、`NavigationLink` 等原生语义控件，保留自然的 VoiceOver label/value/hint，禁止退化为 `onTapGesture`。相邻代码必须说明业务角色、低频与非破坏性依据，以及不扩展命中范围的原因，并验证邻近空白或控件不会产生点击歧义。
+- 独立按钮、图标或主要操作不得借用内联例外缩小热区。例外不新增较小的全局点击尺寸 token，不修改 `InteractionMetrics.minimumTouchTarget`。
+- 非例外紧凑控件的图标、标签或胶囊视觉尺寸可以小于 44pt；不得为了满足点击区直接放大图标、背景、行高、间距或卡片占位。
 - SwiftUI 紧凑控件使用 `xmMinimumHitTarget(anchor:)` 只扩展 `.interaction` content shape；UIKit 紧凑按钮使用 `XMMinimumHitTargetButton` 覆写命中测试。两者共享 `InteractionMetrics.minimumTouchTarget`，不改变原有 frame、constraints、bounds 或绘制。
-- 位于屏幕或容器边缘时使用 anchor 把扩展量导向可命中区域；相邻目标扩展后重叠、祖先裁断或系统控件已经合规时不得机械接入。
+- 位于屏幕或容器边缘时使用 anchor 把扩展量导向可命中区域；相邻目标扩展后重叠、祖先裁断、系统控件已经合规或命中内联例外时不得机械接入。
 - `.frame(minWidth:minHeight:)` 只用于视觉容器本就应达到该尺寸的场景，不能作为所有 44pt 治理的默认修复。
 
 ### 5.6 组件状态、可访问性与展示入口
 
 - `component-catalog.json` 的 `stateCoverage` 从 `normal`、`pressed`、`focused`、`selected`、`disabled`、`loading`、`error`、`empty`、`editing` 等实际状态中登记；组件不需要为了表格完整而虚构无业务意义的状态。
 - 生产文本使用 Dynamic Type 同源 token；语义色解析浅色、深色与高对比度；结构运动读取 Reduce Motion 并由真实运动 owner 提供降级。
-- 可交互组件必须有自然的 VoiceOver label/value/hint、合理元素分组和至少 44pt 可命中区域；装饰图标从可访问性树隐藏。
+- 可交互组件必须有自然的 VoiceOver label/value/hint 和合理元素分组；除 5.5 节准入的内联次级文字例外外，有效热区至少达到 44pt。装饰图标从可访问性树隐藏。
 - `DesignSystemGalleryView` 是 DEBUG 组件展厅，由 `DebugCenterView` 进入；它只持有演示状态，不进入生产导航或业务数据流。
 - 展厅提供默认、深色、辅助功能字号、320pt 紧凑宽度与 768pt 规则宽度 Preview。`colorSchemeContrast` 和 `accessibilityReduceMotion` 反映系统环境与系统偏好，当前 SDK 中不是可写 Preview 环境值；高对比度与 Reduce Motion 必须在 Simulator 系统设置下做运行态验证，不建立伪环境覆盖层。
 - 目录中的 `previewPolicy` 只有三种：`required` 表示组件同文件 Preview；`hosted` 表示由展厅或专项 Debug 场景承载；`notApplicable` 仅用于纯值或内部支撑能力，并必须写明原因。
@@ -195,7 +199,7 @@ XMSettingsPage {
 | `DS007` | enforced | Domain 不依赖 SwiftUI/UIKit |
 | `DS008` | enforced | `UIComponents` 不持有 Repository、ViewModel 或业务编排 owner，只接收展示值与动作 |
 | `DS009` | enforced | 普通点击使用原生语义控件；复杂手势仅允许声明级、可失效例外 |
-| `DS010` | enforced | 44pt 交互尺寸只由 `InteractionMetrics.minimumTouchTarget` 声明，视觉尺寸归真实布局 owner |
+| `DS010` | enforced | 默认 44pt 交互尺寸只由 `InteractionMetrics.minimumTouchTarget` 声明；内联文字例外不建立更小 token，视觉尺寸归真实布局 owner |
 | `DS011` | enforced | 每个非 Vendor `UIComponents` 文件完整登记分类、层级、复用范围、状态、边界与 Preview 策略 |
 | `DSR001` | report | 字面量 SF Symbol 需要人工确认语义 owner |
 | `DSR002` | report | 字面量动画时长需要人工确认局部或公共运动语义 |
@@ -262,8 +266,9 @@ make -f Makefile.parallel-ios ai-build
 | --- | --- |
 | token / 颜色 / 排版 | changed lint、全量 audit、浅色/深色、相关 Dynamic Type 场景、专用构建 |
 | Settings 公共组件 | 四类配置页代表场景、44pt 热区、分组节奏、浅色/深色、较大动态字体 |
-| Sheet scaffold | 标题操作、滚动回弹、固定栏、安全区、Reduce Motion、专用构建 |
+| Sheet scaffold | 标题操作、静态/动态副标题 3pt 层级、滚动回弹、固定栏、安全区、Reduce Motion、专用构建 |
 | 44pt 命中基础设施 | SwiftUI/UIKit 几何测试、视觉 bounds 不变量、边缘 anchor、禁用态、运行态 A/B 点击证据 |
+| 内联次级文字例外 | 原生控件与 VoiceOver 语义、相邻业务注释、自然命中框、文字内/外 A/B 点击、邻近控件歧义检查 |
 | 组件目录或归位 | schema 审计、非 Vendor 文件全覆盖、真实生产使用范围、Preview 策略、Repository/ViewModel 反向依赖扫描 |
 | Preview / Debug 展厅 | 默认、深色、辅助功能字号、紧凑/规则宽度；高对比度与 Reduce Motion 使用系统设置运行态验证 |
 | 规则实现 | SwiftSyntax 工具测试、全量 audit、正确样例与误报回归样例 |

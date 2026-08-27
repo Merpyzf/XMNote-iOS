@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer 注入 BookGroupManagementRepositoryProtocol，依赖 BookGroupManagementViewModel 驱动分组管理状态，依赖 PersonalManagementSearchBar、系统分组 List/Toolbar 与外部 BookRoute 回调，并由页面壳层稳定承载导航命令和排序草稿
- * [OUTPUT]: 对外提供 BookGroupManagementView，以首帧稳定的顶部命令、可滚动系统搜索和单一数据容器承接分组管理、选择与排序
+ * [OUTPUT]: 对外提供 BookGroupManagementView，以中性顶部命令、可滚动系统搜索和单一数据容器承接分组管理、选择与排序
  * [POS]: Views/Personal 的书籍分组管理页面壳层，被 PersonalRoute.groupManagement 导航消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -41,7 +41,6 @@ struct BookGroupManagementView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.surfacePage.ignoresSafeArea())
-        .tint(Color.iconPrimary)
         .navigationTitle(
             navigationTitle
         )
@@ -82,6 +81,7 @@ struct BookGroupManagementView: View {
         if isReordering {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 Button("完成", action: finishReorderMode)
+                    .xmToolbarNeutralTint()
                     .disabled(viewModel?.activeWriteAction == .reorder)
                     .allowsHitTesting(isToolbarReady)
                     .accessibilityHidden(!isToolbarReady)
@@ -93,6 +93,7 @@ struct BookGroupManagementView: View {
                 Button("完成") {
                     viewModel?.exitSelectionMode()
                 }
+                .xmToolbarNeutralTint()
                 .disabled(viewModel?.activeWriteAction != nil)
                 .allowsHitTesting(isToolbarReady)
                 .accessibilityHidden(!isToolbarReady)
@@ -104,27 +105,33 @@ struct BookGroupManagementView: View {
                 } label: {
                     Image(systemName: "plus")
                 }
+                .xmToolbarNeutralTint()
                 .disabled(viewModel?.activeWriteAction != nil)
                 .allowsHitTesting(isToolbarReady)
                 .accessibilityHidden(!isToolbarReady)
                 .accessibilityLabel("添加分组")
 
                 Menu {
-                    Button("选择分组", systemImage: "checklist") {
+                    Button {
                         guard viewModel?.canEnterSelectionMode == true else { return }
                         deactivateSearch()
                         viewModel?.enterSelectionMode()
+                    } label: {
+                        XMMenuLabel("选择分组", systemImage: "checklist")
                     }
                     .disabled(viewModel?.canEnterSelectionMode != true)
 
-                    Button("调整顺序", systemImage: "arrow.up.arrow.down") {
+                    Button {
                         enterReorderMode()
+                    } label: {
+                        XMMenuLabel("调整顺序", systemImage: "arrow.up.arrow.down")
                     }
                     .disabled(viewModel?.canEnterReorder != true)
                     .accessibilityHint(viewModel?.reorderActionAccessibilityHint ?? "")
                 } label: {
                     Image(systemName: "ellipsis")
                 }
+                .xmToolbarNeutralTint()
                 .disabled(viewModel?.activeWriteAction != nil)
                 .allowsHitTesting(isToolbarReady)
                 .accessibilityHidden(!isToolbarReady)
@@ -135,13 +142,17 @@ struct BookGroupManagementView: View {
 
     private var selectionActionMenu: some View {
         Menu {
-            Button(selectionToggleTitle, systemImage: "checkmark.circle") {
+            Button {
                 toggleSelection()
+            } label: {
+                XMMenuLabel(selectionToggleTitle, systemImage: "checkmark.circle")
             }
             .disabled((viewModel?.visibleGroups.isEmpty ?? true) || viewModel?.activeWriteAction != nil)
 
-            Button("重命名", systemImage: "pencil") {
+            Button {
                 renameSelectedGroup()
+            } label: {
+                XMMenuLabel("重命名", systemImage: "pencil")
             }
             .disabled(selectedSingleGroup == nil || viewModel?.activeWriteAction != nil)
 
@@ -154,6 +165,7 @@ struct BookGroupManagementView: View {
         } label: {
             Image(systemName: "ellipsis")
         }
+        .xmToolbarNeutralTint()
         .allowsHitTesting(isToolbarReady)
         .accessibilityHidden(!isToolbarReady)
         .accessibilityLabel("批量操作")

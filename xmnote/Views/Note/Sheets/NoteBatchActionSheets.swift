@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer、NoteEditorChapterOption/NoteEditorTagOption 批量候选模型、XMStarredAppearance 与 DesignTokens
- * [OUTPUT]: 对外提供带层级/路径消歧的 NoteChapterSelectionSheet，以及支持可选批量上下文的 NoteTagSelectionSheet
+ * [OUTPUT]: 对外提供带中性层级图标与路径消歧的 NoteChapterSelectionSheet，以及支持可选批量上下文的 NoteTagSelectionSheet
  * [POS]: Note/Sheets 的批量编辑辅助页面，由 NoteExcerptListView 和 NoteMergeView 以系统 Sheet 呈现
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -49,7 +49,7 @@ struct NoteChapterSelectionSheet: View {
                             HStack(spacing: Spacing.base) {
                                 Image(systemName: "tray")
                                     .font(AppTypography.subheadline)
-                                    .foregroundStyle(Color.appTint)
+                                    .foregroundStyle(Color.iconSecondary)
                                     .frame(width: Spacing.section)
                                 Text("未分章节")
                                     .font(AppTypography.body)
@@ -175,7 +175,7 @@ private struct NoteChapterSelectionRow: View {
         HStack(spacing: Spacing.base) {
             Image(systemName: option.displayLevel == 1 ? "text.book.closed" : "text.page")
                 .font(AppTypography.subheadline)
-                .foregroundStyle(option.displayLevel == 1 ? Color.selectionAccent : Color.textSecondary)
+                .foregroundStyle(option.displayLevel == 1 ? Color.iconPrimary : Color.iconSecondary)
                 .frame(width: Spacing.section)
 
             VStack(alignment: .leading, spacing: Spacing.compact) {

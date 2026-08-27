@@ -7,7 +7,7 @@
 
 /**
  * [INPUT]: 依赖 AppState、DesktopWebSessionCoordinator、AppNavigationCoordinator、XMSettingsGroup、PersonalRoute 与阅读日历根级呈现回调
- * [OUTPUT]: 对外提供 PersonalView，以 17/15pt 设置行层级承载我的 Tab 核心入口、阅读日历独立入口、网页端入口状态与新增优先顶部更多菜单
+ * [OUTPUT]: 对外提供 PersonalView，以 17/15pt 设置行层级与页面私有 SF Symbols 光学校准承载我的 Tab 核心入口、阅读日历独立入口、网页端入口状态与新增优先顶部更多菜单
  * [POS]: Personal 模块容器壳层，承载设置列表、网页端与备份入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -16,12 +16,91 @@ import SwiftUI
 
 /// 个人中心首页，汇总设置、备份、阅读偏好与支持入口。
 struct PersonalView: View {
+    /// “我的”入口图标语义映射；仅在本页统一功能隐喻与光学重量，不扩大全局组件边界。
+    private enum PersonalEntryIcon {
+        case readCalendar
+        case readReminder
+        case desktopWeb
+        case dataImport
+        case dataBackup
+        case batchExport
+        case apiIntegration
+        case aiConfiguration
+        case tagManagement
+        case groupManagement
+        case bookSource
+        case authorManagement
+        case pressManagement
+        case helpDocumentation
+        case feedback
+        case about
+        case debugCenter
+
+        var systemName: String {
+            switch self {
+            case .readCalendar:
+                "calendar"
+            case .readReminder:
+                "bell"
+            case .desktopWeb:
+                "display"
+            case .dataImport:
+                "square.and.arrow.down"
+            case .dataBackup:
+                "externaldrive"
+            case .batchExport:
+                "square.and.arrow.up"
+            case .apiIntegration:
+                "link"
+            case .aiConfiguration:
+                "sparkles"
+            case .tagManagement:
+                "tag"
+            case .groupManagement:
+                "folder"
+            case .bookSource:
+                "books.vertical"
+            case .authorManagement:
+                "person.2"
+            case .pressManagement:
+                "building.2"
+            case .helpDocumentation:
+                "questionmark.circle"
+            case .feedback:
+                "envelope"
+            case .about:
+                "info.circle"
+            case .debugCenter:
+                "hammer"
+            }
+        }
+
+        var visualScale: CGFloat {
+            switch self {
+            case .desktopWeb, .dataBackup, .bookSource, .pressManagement:
+                0.88
+            case .apiIntegration, .aiConfiguration, .tagManagement, .authorManagement:
+                0.94
+            case .readCalendar,
+                 .readReminder,
+                 .dataImport,
+                 .batchExport,
+                 .groupManagement,
+                 .helpDocumentation,
+                 .feedback,
+                 .about,
+                 .debugCenter:
+                1
+            }
+        }
+    }
+
     private enum Layout {
         static let panelSpacing: CGFloat = Spacing.comfortable
         static let panelEdgeVerticalInset: CGFloat = Spacing.half
-        static let settingsRowIconWidth: CGFloat = 24
+        static let settingsRowIconCanvas: CGFloat = 24
         static let rowMinHeight: CGFloat = InteractionMetrics.minimumTouchTarget
-        static let rowDividerLeading: CGFloat = Spacing.contentEdge + settingsRowIconWidth + Spacing.base
+        static let rowDividerLeading: CGFloat = Spacing.contentEdge + settingsRowIconCanvas + Spacing.base
         static let topBarTrailingIconSize: CGFloat = 15
     }
 
@@ -146,10 +225,10 @@ extension PersonalView {
 
     private var readingAndDataSection: some View {
         groupedPanel {
-            actionRow("calendar", "阅读日历", action: onOpenReadCalendar)
-            settingsRow("bell", "阅读提醒", route: .readReminder)
+            actionRow(.readCalendar, "阅读日历", action: onOpenReadCalendar)
+            settingsRow(.readReminder, "阅读提醒", route: .readReminder)
             settingsRow(
-                "desktopcomputer",
+                .desktopWeb,
                 "网页端",
                 route: .desktopWeb,
                 trailingText: desktopWebStatusText,
@@ -158,11 +237,11 @@ extension PersonalView {
             )
             .animation(.smooth, value: desktopWebSessionCoordinator.state.isRunning)
             PersonalSettingsDivider(leadingInset: Layout.rowDividerLeading)
-            settingsRow("square.and.arrow.down", "书摘导入", route: .dataImport)
-            settingsRow("externaldrive", "数据备份", route: .dataBackup)
-            settingsRow("square.and.arrow.up.on.square", "批量导出", route: .batchExport)
-            settingsRow("link", "API 集成", route: .apiIntegration)
-            settingsRow("sparkles", "AI 配置", route: .aiConfiguration, isLast: true)
+            settingsRow(.dataImport, "书摘导入", route: .dataImport)
+            settingsRow(.dataBackup, "数据备份", route: .dataBackup)
+            settingsRow(.batchExport, "批量导出", route: .batchExport)
+            settingsRow(.apiIntegration, "API 集成", route: .apiIntegration)
+            settingsRow(.aiConfiguration, "AI 配置", route: .aiConfiguration, isLast: true)
         }
     }
 
@@ -170,11 +249,11 @@ extension PersonalView {
 
     private var managementSection: some View {
         groupedPanel {
-            settingsRow("tag", "标签管理", route: .tagManagement)
-            settingsRow("folder", "书籍分组", route: .groupManagement)
-            settingsRow("building.columns", "书籍来源", route: .bookSource)
-            settingsRow("person.text.rectangle", "作者管理", route: .authorManagement)
-            settingsRow("building.2", "出版社管理", route: .pressManagement, isLast: true)
+            settingsRow(.tagManagement, "标签管理", route: .tagManagement)
+            settingsRow(.groupManagement, "书籍分组", route: .groupManagement)
+            settingsRow(.bookSource, "书籍来源", route: .bookSource)
+            settingsRow(.authorManagement, "作者管理", route: .authorManagement)
+            settingsRow(.pressManagement, "出版社管理", route: .pressManagement, isLast: true)
         }
     }
 
@@ -182,14 +261,14 @@ extension PersonalView {
 
     private var supportAndAboutSection: some View {
         groupedPanel {
-            actionRow("questionmark.circle", "帮助文档") {
+            actionRow(.helpDocumentation, "帮助文档") {
                 // TODO: 打开帮助文档
             }
-            actionRow("envelope", "反馈") {
+            actionRow(.feedback, "反馈") {
                 // TODO: 发送反馈邮件
             }
             settingsRow(
-                "info.circle",
+                .about,
                 "关于应用",
                 route: .about,
                 trailingText: appVersion,
@@ -240,7 +319,7 @@ extension PersonalView {
     }
 
     private func settingsRow(
-        _ icon: String,
+        _ icon: PersonalEntryIcon,
         _ title: String,
         route: PersonalRoute,
         trailingText: String? = nil,
@@ -265,7 +344,7 @@ extension PersonalView {
     }
 
     private func actionRow(
-        _ icon: String,
+        _ icon: PersonalEntryIcon,
         _ title: String,
         isLast: Bool = false,
         action: @escaping () -> Void
@@ -286,23 +365,29 @@ extension PersonalView {
     private func debugCenterRow() -> some View {
 #if DEBUG
         NavigationLink(destination: DebugCenterView()) {
-            rowContent(icon: "hammer", title: "测试中心")
+            rowContent(icon: .debugCenter, title: "测试中心")
         }
         .buttonStyle(.plain)
 #endif
     }
 
     private func rowContent(
-        icon: String,
+        icon: PersonalEntryIcon,
         title: String,
         trailingText: String? = nil,
         trailingColor: Color = .textSecondary
     ) -> some View {
         HStack(spacing: Spacing.base) {
-            Image(systemName: icon)
+            Image(systemName: icon.systemName)
                 .font(AppTypography.body)
-                .foregroundStyle(Color.textPrimary)
-                .frame(width: Layout.settingsRowIconWidth)
+                .symbolRenderingMode(.monochrome)
+                .foregroundStyle(Color.iconSecondary)
+                .scaleEffect(icon.visualScale)
+                .frame(
+                    width: Layout.settingsRowIconCanvas,
+                    height: Layout.settingsRowIconCanvas
+                )
+                .accessibilityHidden(true)
 
             Text(title)
                 .font(SettingsTypography.rowTitle)

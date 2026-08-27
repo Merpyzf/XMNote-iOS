@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 BookGroupManagementItem、XMBookGroupCover、XMSelectionIndicator 与 DesignTokens，接收页面传入的选择态、搜索关键字、导航提示与管理动作
- * [OUTPUT]: 对外提供 BookGroupManagementRowView，以自适应分组封面、系统分组行、长按菜单和搜索高亮渲染书籍分组管理页的一项分组信息
+ * [OUTPUT]: 对外提供 BookGroupManagementRowView，以自适应分组封面、中性长按菜单和搜索高亮渲染书籍分组管理页的一项分组信息
  * [POS]: Views/Personal/Components 的书籍分组管理页面私有子视图，被 BookGroupManagementView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -26,7 +26,6 @@ struct BookGroupManagementRowView: View {
             onRename: onRename,
             onDelete: onDelete
         ))
-        .xmMenuNeutralTint()
     }
 
     @ViewBuilder
@@ -113,6 +112,7 @@ struct BookGroupManagementRowView: View {
             Button(action: onRename) {
                 XMMenuLabel("重命名分组", systemImage: "pencil")
             }
+            .xmMenuNeutralTint()
         }
 
         if let onDelete {

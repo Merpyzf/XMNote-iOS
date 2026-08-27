@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 NoteReviewViewModel、RepositoryContainer、AppNavigationCoordinator、页面私有 NoteReviewLoadingShell/NoteReviewRefreshDeckHost、NoteReviewCardView 与外部导航/设置闭包
- * [OUTPUT]: 对外提供 NoteReviewView，以显式内容状态承载同构首轮壳层、分页卡组、真实空态、持久失败与重试，以及底部一级操作、AI 助手、随机换组、标签编辑和分享流程
+ * [OUTPUT]: 对外提供 NoteReviewView，以显式内容状态承载同构首轮壳层、分页卡组、中性上下文菜单、真实空态、持久失败与重试，以及底部一级操作、AI 助手、随机换组、标签编辑和分享流程
  * [POS]: Note 模块回顾 Tab 页面入口，被 NoteContainerView 托管
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -194,6 +194,7 @@ struct NoteReviewView: View {
                 .contextMenu {
                     reviewCardContextMenu(for: item)
                 }
+                .xmMenuNeutralTint()
                 .padding(.horizontal, NoteReviewPagingLayoutSpec.iOSReviewDefault.cardHorizontalPadding)
                 .padding(.bottom, Spacing.cozy)
         }

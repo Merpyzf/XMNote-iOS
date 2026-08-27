@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖外部注入的 BookCollectionListViewModel 与 EditMode，依赖书单显示设置、分组切换保存入口、BookCollectionImportRouter、LoadingGate 与 XMScopeSelector 驱动手动书单、年度书单、删除确认、排序和稳定加载占位
- * [OUTPUT]: 对外提供 BookCollectionListView，承载首页书单 Tab 的范围切换、列表/网格集合卡片、空态、错误态、写操作反馈、系统分享导入、表单弹层与书单详情入口
+ * [OUTPUT]: 对外提供 BookCollectionListView，承载首页书单 Tab 的范围切换、列表/网格集合卡片、中性上下文操作、写入反馈、系统分享导入、表单弹层与书单详情入口
  * [POS]: Views/Book 的书单首页页面壳层，被 BookContainerView 的书单二级页消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -163,6 +163,7 @@ struct BookCollectionListView: View {
                     .contextMenu {
                         collectionContextMenu(for: item)
                     }
+                    .xmMenuNeutralTint()
                     .accessibilityIdentifier("book.collection.grid.\(item.id)")
                 }
             }
@@ -288,6 +289,7 @@ struct BookCollectionListView: View {
         .contextMenu {
             collectionContextMenu(for: item)
         }
+        .xmMenuNeutralTint()
         .modifier(BookCollectionListRowChrome())
     }
 

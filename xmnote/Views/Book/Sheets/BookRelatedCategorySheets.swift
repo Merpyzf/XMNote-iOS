@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 BookContentCategoryOption、XMSystemAlert 与设计令牌，接收书籍详情 ViewModel 提供的分类写入回调
- * [OUTPUT]: 对外提供 BookRelatedPlaceholderSheet、BookRelatedCategoryPickerSheet 与 BookRelatedCategoryManagementSheet
+ * [OUTPUT]: 对外提供 BookRelatedPlaceholderSheet、BookRelatedCategoryPickerSheet 与带中性操作菜单的 BookRelatedCategoryManagementSheet
  * [POS]: Book 模块业务 Sheet，分别承接新建相关内容的分类选择和书内/全局相关分类管理
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -305,6 +305,7 @@ struct BookRelatedCategoryManagementSheet: View {
                             .font(AppTypography.body)
                             .frame(minWidth: BookRelatedCategorySheetLayout.controlMinSize, minHeight: BookRelatedCategorySheetLayout.controlMinSize)
                     }
+                    .xmMenuNeutralTint()
                     .disabled(isWriting)
                     .accessibilityLabel("\(category.title)更多操作")
                 }

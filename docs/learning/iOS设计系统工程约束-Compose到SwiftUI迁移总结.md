@@ -275,4 +275,38 @@ Compose 侧可以对应理解为小型内嵌 Shape、内容 Card Shape 与大型
 
 `XMSettingsGroup` 同样固定消费 24pt grouped 圆角，不再允许页面注入覆盖值。这类“接口收窄”比在文档中建议统一更有效：开发者和 AI 都只有一个合规实现入口。
 
+## 12. 44pt 是默认风险基线，不是强迫布局变松的排版命令
+
+触控热区的第一性目标是降低误触和获取成本，而不是让每个可点击元素都占据相同几何尺寸。主操作、导航与关闭、破坏性操作、高频交互、独立图标和表单控件都直接影响任务完成或错误成本，因此继续执行 44pt 默认基线。
+
+副标题、状态、元数据等内联次级文字可能同时承担低频辅助入口。如果它以信息展示为主、操作非破坏性、不是完成主任务的必要入口，并且扩展热区反而会让整片标题空白响应点击，就可以保留文字自然命中范围。判断顺序必须是业务角色、操作后果、任务必要性和邻近命中关系；“低频”不能单独构成例外。
+
+SwiftUI 侧仍使用原生语义控件：
+
+```swift
+// 该文本以副标题信息展示为主，管理入口低频且非破坏性；保留文字自然命中范围，避免标题栏空白响应点击。
+Button("已选择 \(selectedCount) 本", action: openSelectedBooks)
+    .buttonStyle(.plain)
+    .accessibilityLabel("已选择 \(selectedCount) 本书")
+    .accessibilityHint("查看并管理已选书籍")
+```
+
+这里不能退化为 `onTapGesture`，也不能新增 20pt、24pt 等“小点击区域 token”。例外描述的是业务语义，不是另一套尺寸系统；一旦该入口变成主要、独立、高频或高风险操作，就应恢复 `InteractionMetrics.minimumTouchTarget`。
+
+Compose 迁移时同样先迁移业务角色，再按 Android 当前平台规范决定是否保留自然范围，不能机械复制 iOS 的 44pt 或例外尺寸：
+
+```kotlin
+Text(
+    text = "已选择 $selectedCount 本",
+    modifier = Modifier.clickable(
+        role = Role.Button,
+        onClick = onOpenSelectedBooks,
+    ),
+    style = MaterialTheme.typography.labelSmall,
+    color = MaterialTheme.colorScheme.onSurfaceVariant,
+)
+```
+
+双端共同的验收重点是语义明确、辅助技术可识别、点击文字有效、周围空白不误触、邻近控件不产生歧义；平台默认最小热区仍分别服从各自规范。
+
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

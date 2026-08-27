@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 DesignSystem、TopBarActionIcon 与 XMScrollEdgeChrome，接收标题、关闭动作及类型安全的顶部/底部/标题栏内容槽位
- * [OUTPUT]: 对外提供统一标题层级、滚动回弹、安全区边缘与可选固定栏的 XMSheetScaffold
+ * [INPUT]: 依赖 DesignSystem、TopBarActionIcon 与 XMScrollEdgeChrome，接收标题、可选动态副标题、关闭动作及类型安全的顶部/底部/标题栏内容槽位
+ * [OUTPUT]: 对外提供统一标题与副标题层级、滚动回弹、安全区边缘及可选固定栏的 XMSheetScaffold
  * [POS]: UIComponents/Sheet 的通用业务 Sheet 根骨架；Settings、Book、Tag 等模块共享，禁止 AnyView 类型擦除
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -20,6 +20,7 @@ struct XMSheetScaffold<
     Content: View,
     LeadingAction: View,
     TrailingAction: View,
+    TitleSubtitle: View,
     ContentTopBar: View,
     BottomBar: View
 >: View {
@@ -29,12 +30,14 @@ struct XMSheetScaffold<
     let content: Content
     let leadingAction: LeadingAction
     let trailingAction: TrailingAction
+    let titleSubtitle: TitleSubtitle
     let contentTopBar: ContentTopBar
     let bottomBar: BottomBar
 
     private let closeVisualSize: CGFloat
     private let scrollEdgePresentation: XMScrollEdgeChromePresentation
     private let usesCustomTitleActions: Bool
+    private let showsCustomTitleSubtitle: Bool
     private let showsContentTopBar: Bool
     private let showsBottomBar: Bool
 
@@ -47,6 +50,7 @@ struct XMSheetScaffold<
         @ViewBuilder content: () -> Content
     ) where LeadingAction == EmptyView,
             TrailingAction == EmptyView,
+            TitleSubtitle == EmptyView,
             ContentTopBar == EmptyView,
             BottomBar == EmptyView {
         self.title = title
@@ -55,11 +59,13 @@ struct XMSheetScaffold<
         self.content = content()
         self.leadingAction = EmptyView()
         self.trailingAction = EmptyView()
+        self.titleSubtitle = EmptyView()
         self.contentTopBar = EmptyView()
         self.bottomBar = EmptyView()
         self.closeVisualSize = closeVisualSize
         self.scrollEdgePresentation = .contained
         self.usesCustomTitleActions = false
+        self.showsCustomTitleSubtitle = false
         self.showsContentTopBar = false
         self.showsBottomBar = false
     }
@@ -75,6 +81,7 @@ struct XMSheetScaffold<
         @ViewBuilder content: () -> Content
     ) where LeadingAction == EmptyView,
             TrailingAction == EmptyView,
+            TitleSubtitle == EmptyView,
             ContentTopBar == EmptyView {
         self.title = title
         self.subtitle = subtitle
@@ -82,11 +89,13 @@ struct XMSheetScaffold<
         self.content = content()
         self.leadingAction = EmptyView()
         self.trailingAction = EmptyView()
+        self.titleSubtitle = EmptyView()
         self.contentTopBar = EmptyView()
         self.bottomBar = bottomBar()
         self.closeVisualSize = closeVisualSize
         self.scrollEdgePresentation = scrollEdgePresentation
         self.usesCustomTitleActions = false
+        self.showsCustomTitleSubtitle = false
         self.showsContentTopBar = false
         self.showsBottomBar = true
     }
@@ -102,6 +111,7 @@ struct XMSheetScaffold<
         @ViewBuilder content: () -> Content
     ) where LeadingAction == EmptyView,
             TrailingAction == EmptyView,
+            TitleSubtitle == EmptyView,
             BottomBar == EmptyView {
         self.title = title
         self.subtitle = subtitle
@@ -109,11 +119,13 @@ struct XMSheetScaffold<
         self.content = content()
         self.leadingAction = EmptyView()
         self.trailingAction = EmptyView()
+        self.titleSubtitle = EmptyView()
         self.contentTopBar = contentTopBar()
         self.bottomBar = EmptyView()
         self.closeVisualSize = closeVisualSize
         self.scrollEdgePresentation = scrollEdgePresentation
         self.usesCustomTitleActions = false
+        self.showsCustomTitleSubtitle = false
         self.showsContentTopBar = true
         self.showsBottomBar = false
     }
@@ -128,18 +140,50 @@ struct XMSheetScaffold<
         @ViewBuilder contentTopBar: () -> ContentTopBar,
         @ViewBuilder bottomBar: () -> BottomBar,
         @ViewBuilder content: () -> Content
-    ) where LeadingAction == EmptyView, TrailingAction == EmptyView {
+    ) where LeadingAction == EmptyView,
+            TrailingAction == EmptyView,
+            TitleSubtitle == EmptyView {
         self.title = title
         self.subtitle = subtitle
         self.onClose = onClose
         self.content = content()
         self.leadingAction = EmptyView()
         self.trailingAction = EmptyView()
+        self.titleSubtitle = EmptyView()
         self.contentTopBar = contentTopBar()
         self.bottomBar = bottomBar()
         self.closeVisualSize = closeVisualSize
         self.scrollEdgePresentation = scrollEdgePresentation
         self.usesCustomTitleActions = false
+        self.showsCustomTitleSubtitle = false
+        self.showsContentTopBar = true
+        self.showsBottomBar = true
+    }
+
+    /// 注入动态副标题、固定内容顶部栏与底部栏，让业务交互留在标准标题视觉层级内。
+    init(
+        title: String,
+        onClose: @escaping () -> Void,
+        closeVisualSize: CGFloat = XMSheetScaffoldLayout.closeVisualSize,
+        scrollEdgePresentation: XMScrollEdgeChromePresentation = .overlaySoft,
+        @ViewBuilder titleSubtitle: () -> TitleSubtitle,
+        @ViewBuilder contentTopBar: () -> ContentTopBar,
+        @ViewBuilder bottomBar: () -> BottomBar,
+        @ViewBuilder content: () -> Content
+    ) where LeadingAction == EmptyView, TrailingAction == EmptyView {
+        self.title = title
+        self.subtitle = nil
+        self.onClose = onClose
+        self.content = content()
+        self.leadingAction = EmptyView()
+        self.trailingAction = EmptyView()
+        self.titleSubtitle = titleSubtitle()
+        self.contentTopBar = contentTopBar()
+        self.bottomBar = bottomBar()
+        self.closeVisualSize = closeVisualSize
+        self.scrollEdgePresentation = scrollEdgePresentation
+        self.usesCustomTitleActions = false
+        self.showsCustomTitleSubtitle = true
         self.showsContentTopBar = true
         self.showsBottomBar = true
     }
@@ -152,18 +196,20 @@ struct XMSheetScaffold<
         @ViewBuilder leadingAction: () -> LeadingAction,
         @ViewBuilder trailingAction: () -> TrailingAction,
         @ViewBuilder content: () -> Content
-    ) where ContentTopBar == EmptyView, BottomBar == EmptyView {
+    ) where TitleSubtitle == EmptyView, ContentTopBar == EmptyView, BottomBar == EmptyView {
         self.title = title
         self.subtitle = subtitle
         self.onClose = onClose
         self.content = content()
         self.leadingAction = leadingAction()
         self.trailingAction = trailingAction()
+        self.titleSubtitle = EmptyView()
         self.contentTopBar = EmptyView()
         self.bottomBar = EmptyView()
         self.closeVisualSize = XMSheetScaffoldLayout.closeVisualSize
         self.scrollEdgePresentation = .contained
         self.usesCustomTitleActions = true
+        self.showsCustomTitleSubtitle = false
         self.showsContentTopBar = false
         self.showsBottomBar = false
     }
@@ -229,7 +275,12 @@ struct XMSheetScaffold<
                     .foregroundStyle(Color.textPrimary)
                     .lineLimit(1)
 
-                if let subtitle, !subtitle.isEmpty {
+                if showsCustomTitleSubtitle {
+                    titleSubtitle
+                        .font(AppTypography.caption2)
+                        .foregroundStyle(Color.textSecondary)
+                        .lineLimit(1)
+                } else if let subtitle, !subtitle.isEmpty {
                     Text(subtitle)
                         .font(AppTypography.caption2)
                         .foregroundStyle(Color.textSecondary)
@@ -314,5 +365,34 @@ struct XMSheetScaffold<
         }
         .padding(.horizontal, Spacing.screenEdge)
         .padding(.bottom, Spacing.contentEdge)
+    }
+}
+
+#Preview("可交互动态副标题") {
+    XMSheetScaffold(
+        title: "选择书籍",
+        onClose: { },
+        titleSubtitle: {
+            // 预览复现以信息展示为主、低频且非破坏性的副标题入口；保留文字自然命中范围，避免标题栏空白响应点击。
+            Button("已选择 1 本") { }
+                .buttonStyle(.plain)
+                .accessibilityLabel("已选择 1 本书")
+                .accessibilityHint("查看并管理已选书籍")
+        },
+        contentTopBar: {
+            Text("固定搜索区域")
+                .font(AppTypography.body)
+                .frame(maxWidth: .infinity)
+                .padding(.bottom, Spacing.section)
+        },
+        bottomBar: {
+            XMPrimaryActionButton("完成") { }
+                .padding(.horizontal, Spacing.screenEdge)
+                .padding(.bottom, Spacing.base)
+        }
+    ) {
+        Text("滚动内容")
+            .font(AppTypography.body)
+            .frame(maxWidth: .infinity, minHeight: 320)
     }
 }

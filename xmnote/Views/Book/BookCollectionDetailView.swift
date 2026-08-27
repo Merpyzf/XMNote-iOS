@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer、AppNavigationCoordinator 与 BookCollectionDetailViewModel，注入书架与封面上传仓储
- * [OUTPUT]: 对外提供 BookCollectionDetailView，承载书单详情、顶部添加、自动同步、导出分享、书籍行操作、元信息与收藏理由/年度点评编辑
+ * [OUTPUT]: 对外提供 BookCollectionDetailView，承载书单详情、中性顶部操作、自动同步、导出分享、书籍行操作、元信息与收藏理由/年度点评编辑
  * [POS]: Views/Book 的书单详情页面壳层，被 BookRoute.collectionDetail 导航目标消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -88,6 +88,7 @@ private struct BookCollectionDetailContentView: View {
                     Button(action: presentBookPicker) {
                         Image(systemName: "plus")
                     }
+                    .xmToolbarNeutralTint()
                     .disabled(!canUseAddBookButton)
                     .accessibilityLabel("添加书籍")
                     .accessibilityIdentifier("book.collection.detail.add")
@@ -103,6 +104,7 @@ private struct BookCollectionDetailContentView: View {
                             .foregroundStyle(Color.textPrimary)
                             .accessibilityLabel("书单更多操作")
                     }
+                    .xmToolbarNeutralTint()
                     .accessibilityIdentifier("book.collection.detail.more")
                 }
             }
