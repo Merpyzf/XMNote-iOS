@@ -1,7 +1,7 @@
 #if DEBUG
 /**
- * [INPUT]: 依赖 BookSelectionTestViewModel 提供业务映射与固定仓储替身，依赖 BookPickerView 承接统一书籍选择体验
- * [OUTPUT]: 对外提供 BookSelectionTestView，集中展示业务场景矩阵、系统搜索交互与选择结果预览
+ * [INPUT]: 依赖 BookSelectionTestViewModel 提供业务映射、包含异步模拟预选的 Sheet 请求与固定仓储替身，依赖 BookPickerView 承接两种选择体验
+ * [OUTPUT]: 对外提供 BookSelectionTestView，集中展示 Sheet 样式对比、确定性异步确认模拟、业务场景矩阵与结果预览
  * [POS]: Debug 模块书籍选择测试中心，用固定数据回归验证统一 BookPicker，不依赖真实书架和外部网络
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -15,6 +15,7 @@ struct BookSelectionTestView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.double) {
                 overviewSection
+                sheetStyleComparisonSection
 
                 if let bootstrapErrorMessage = viewModel.bootstrapErrorMessage {
                     bootstrapErrorSection(bootstrapErrorMessage)
@@ -33,20 +34,67 @@ struct BookSelectionTestView: View {
         .navigationBarTitleDisplayMode(.inline)
         .scrollBounceBehavior(.always)
         .sheet(
-            item: presentedScenarioBinding,
+            item: presentedSheetRequestBinding,
             onDismiss: {
-                viewModel.clearPresentedScenario()
+                viewModel.clearPresentedSheetRequest()
             }
-        ) { scenario in
+        ) { request in
+            let scenario = request.scenario
             let repository = viewModel.fixtureRepository(for: scenario)
             BookPickerView(
                 configuration: viewModel.configuration(for: scenario),
                 bookRepository: repository,
                 searchRepository: repository,
+                sheetPresentationStyle: request.sheetPresentationStyle,
+                preselectedRemoteResults: request.preselectedRemoteResults,
                 onComplete: { result in
                     viewModel.record(result, for: scenario)
                 }
             )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
+    }
+
+    private var sheetStyleComparisonSection: some View {
+        CardContainer {
+            VStack(alignment: .leading, spacing: Spacing.base) {
+                VStack(alignment: .leading, spacing: Spacing.half) {
+                    Text("Sheet 展示样式")
+                        .font(AppTypography.headlineSemibold)
+                        .foregroundStyle(Color.textPrimary)
+
+                    Text("使用同一份场景配置和固定数据，对比现有底部主按钮与 Apple 顶部成对操作。")
+                        .font(AppTypography.subheadline)
+                        .foregroundStyle(Color.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Picker("Sheet 展示样式", selection: sheetPresentationStyleBinding) {
+                    ForEach(BookPickerSheetPresentationStyle.allCases) { style in
+                        Text(style.debugTitle).tag(style)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("debug.book-selection.sheet-style")
+
+                Text(viewModel.selectedSheetPresentationStyle.debugSummary)
+                    .font(AppTypography.subheadline)
+                    .foregroundStyle(Color.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Button(action: viewModel.openAsynchronousConfirmationComparison) {
+                    Label("打开异步确认样例", systemImage: "hourglass")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .tint(Color.appTint)
+                .disabled(viewModel.asynchronousConfirmationScenario == nil)
+                .accessibilityHint("打开已预选本地与在线书籍的固定场景，确认后必然显示加载状态")
+                .accessibilityIdentifier("debug.book-selection.async-comparison")
+            }
+            .padding(Spacing.contentEdge)
         }
     }
 
@@ -219,10 +267,17 @@ struct BookSelectionTestView: View {
         .scrollBounceBehavior(.always)
     }
 
-    private var presentedScenarioBinding: Binding<BookSelectionTestScenario?> {
+    private var sheetPresentationStyleBinding: Binding<BookPickerSheetPresentationStyle> {
         Binding(
-            get: { viewModel.presentedScenario },
-            set: { viewModel.presentedScenario = $0 }
+            get: { viewModel.selectedSheetPresentationStyle },
+            set: { viewModel.selectedSheetPresentationStyle = $0 }
+        )
+    }
+
+    private var presentedSheetRequestBinding: Binding<BookSelectionSheetPresentationRequest?> {
+        Binding(
+            get: { viewModel.presentedSheetRequest },
+            set: { viewModel.presentedSheetRequest = $0 }
         )
     }
 }

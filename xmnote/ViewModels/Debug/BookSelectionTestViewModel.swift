@@ -1,7 +1,7 @@
 #if DEBUG
 /**
- * [INPUT]: 依赖 Foundation/Observation 维护业务场景注册表、组件状态矩阵、固定本地/在线仓储替身与结果预览
- * [OUTPUT]: 对外提供 BookSelectionTestViewModel、BookSelectionFixtureRepository 及场景/分组/结果预览模型，统一驱动书籍选择测试中心
+ * [INPUT]: 依赖 Foundation/Observation 维护业务场景注册表、Sheet 展示样式、固定本地/在线预选、仓储替身与结果预览
+ * [OUTPUT]: 对外提供 BookSelectionTestViewModel、包含异步模拟初始选择的 BookSelectionSheetPresentationRequest、固定仓储及场景/结果预览模型，统一驱动书籍选择测试中心
  * [POS]: Debug 模块书籍选择测试页状态编排，集中收口业务映射、固定测试数据、运行配置与结果消费预览
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -66,6 +66,26 @@ enum BookSelectionFixture: Hashable {
     case emptyLibrary
     case onlineFailure
     case slowRemoteResolution
+}
+
+extension BookPickerSheetPresentationStyle {
+    var debugTitle: String {
+        switch self {
+        case .currentStandard:
+            return "当前标准"
+        case .appleRecommended:
+            return "Apple 推荐"
+        }
+    }
+
+    var debugSummary: String {
+        switch self {
+        case .currentStandard:
+            return "自定义标题栏与底部全宽确认按钮，保持现有生产书籍选择体验。"
+        case .appleRecommended:
+            return "系统工具栏前导关闭、尾随品牌色确认，不在底部重复放置长按钮。"
+        }
+    }
 }
 
 enum BookSelectionScenarioConsumer: Hashable {
@@ -182,6 +202,18 @@ struct BookSelectionTestScenario: Identifiable, Hashable {
     let runtimeHint: String?
 }
 
+/// 绑定一次测试 Sheet 的业务场景和展示样式，避免呈现期间切换选择器导致当前 Sheet 换壳。
+struct BookSelectionSheetPresentationRequest: Identifiable, Hashable {
+    let scenario: BookSelectionTestScenario
+    let sheetPresentationStyle: BookPickerSheetPresentationStyle
+    let preselectedRemoteResults: [BookSearchResult]
+
+    var id: String {
+        let remoteSelectionIdentity = preselectedRemoteResults.map(\.id).joined(separator: ",")
+        return "\(scenario.id)-\(sheetPresentationStyle.rawValue)-\(remoteSelectionIdentity)"
+    }
+}
+
 struct BookSelectionScenarioPreview: Hashable {
     let title: String
     let message: String
@@ -190,11 +222,14 @@ struct BookSelectionScenarioPreview: Hashable {
 
 @Observable
 final class BookSelectionTestViewModel {
-    var presentedScenario: BookSelectionTestScenario?
+    var selectedSheetPresentationStyle: BookPickerSheetPresentationStyle = .appleRecommended
+    var presentedSheetRequest: BookSelectionSheetPresentationRequest?
     var sampleLocalBooks: [BookPickerBook]
     var isLoadingSampleLocalBooks = false
     var bootstrapErrorMessage: String?
     private var previewsByScenarioID: [String: BookSelectionScenarioPreview] = [:]
+
+    private static let asynchronousConfirmationScenarioID = "mixed-resolution"
 
     init() {
         sampleLocalBooks = BookSelectionFixtureCatalog.localBooks
@@ -457,12 +492,12 @@ final class BookSelectionTestViewModel {
             group: .componentStates,
             capabilityTags: ["本地+在线", "混合多选", "在线解析中"],
             configurationSpec: .mixedDirectMultiple(
-                title: "完成",
+                title: "选择书籍",
                 preselectionStrategy: .firstLocalBooks(2),
                 fixture: .slowRemoteResolution
             ),
             consumer: .mixedMultiple(actionLabel: "混合选择已提交"),
-            runtimeHint: "切换到在线后选择固定结果再提交，可观察“正在整理…”按钮状态；管理远端项不会触发解析。"
+            runtimeHint: "通过顶部快捷入口打开时会固定预选本地与在线结果；确认后必然进入 2.5 秒解析，可观察确认按钮原地切换为菊花。"
         ),
         BookSelectionTestScenario(
             id: "collection-unavailable",
@@ -539,12 +574,31 @@ final class BookSelectionTestViewModel {
         Self.scenarios.filter { $0.group == group }
     }
 
+    /// 按当前选择的 Sheet 展示样式打开业务场景，并冻结这次呈现的样式值。
     func open(_ scenario: BookSelectionTestScenario) {
-        presentedScenario = scenario
+        presentedSheetRequest = BookSelectionSheetPresentationRequest(
+            scenario: scenario,
+            sheetPresentationStyle: selectedSheetPresentationStyle,
+            preselectedRemoteResults: []
+        )
     }
 
-    func clearPresentedScenario() {
-        presentedScenario = nil
+    /// 打开带固定延迟远端解析的多选场景，用于观察顶部确认按钮的异步反馈。
+    func openAsynchronousConfirmationComparison() {
+        guard let asynchronousConfirmationScenario,
+              let remoteResult = BookSelectionFixtureCatalog.remoteResults.first else {
+            return
+        }
+        presentedSheetRequest = BookSelectionSheetPresentationRequest(
+            scenario: asynchronousConfirmationScenario,
+            sheetPresentationStyle: selectedSheetPresentationStyle,
+            preselectedRemoteResults: [remoteResult]
+        )
+    }
+
+    /// 清理已结束的 Sheet 请求，保证下一次呈现创建独立仓储和选择会话。
+    func clearPresentedSheetRequest() {
+        presentedSheetRequest = nil
     }
 
     /// 收口某个场景最近一次运行结果，并生成对应的消费预览面板。
@@ -554,6 +608,10 @@ final class BookSelectionTestViewModel {
 
     func preview(for scenario: BookSelectionTestScenario) -> BookSelectionScenarioPreview {
         previewsByScenarioID[scenario.id] ?? placeholderPreview(for: scenario)
+    }
+
+    var asynchronousConfirmationScenario: BookSelectionTestScenario? {
+        Self.scenarios.first { $0.id == Self.asynchronousConfirmationScenarioID }
     }
 
     var localBookSummary: String {
@@ -1174,7 +1232,7 @@ final class BookSelectionFixtureRepository: BookPickerRepositoryProtocol, BookSe
 
     func prepareSeed(for result: BookSearchResult) async throws -> BookEditorSeed {
         if fixture == .slowRemoteResolution {
-            try await Task.sleep(nanoseconds: 1_200_000_000)
+            try await Task.sleep(nanoseconds: 2_500_000_000)
             try Task.checkCancellation()
         }
         if let seed = result.seed {
