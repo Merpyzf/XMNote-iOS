@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 GRDB Database、RoomCanonicalSchemaV40...V46
+ * [INPUT]: 依赖 GRDB Database、RoomCanonicalSchemaV40...V47
  * [OUTPUT]: 对外提供 RoomCanonicalSchemaCompatibility，按备份库 user_version 分派 Room 物理 schema 与外键校验
  * [POS]: Database/SchemaContract 的跨端恢复兼容入口，被备份恢复闸门与 GRDB 迁移标记流程调用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -10,7 +10,7 @@ import GRDB
 
 /// Android Room 备份恢复兼容层，统一按 staging 库 `user_version` 分派到对应 Room schema 合同。
 nonisolated enum RoomCanonicalSchemaCompatibility {
-    nonisolated static let maximumRestorableDatabaseVersion = RoomCanonicalSchemaV46.databaseVersion
+    nonisolated static let maximumRestorableDatabaseVersion = RoomCanonicalSchemaV47.databaseVersion
 
     /// 按数据库 `PRAGMA user_version` 校验 Room 物理结构；只读校验，不修复、不改业务表。
     nonisolated static func validatePhysicalSchema(_ db: Database) throws {
@@ -19,7 +19,9 @@ nonisolated enum RoomCanonicalSchemaCompatibility {
             throw RoomCanonicalSchemaError.versionMismatch(userVersion)
         }
 
-        if userVersion >= RoomCanonicalSchemaV46.databaseVersion {
+        if userVersion >= RoomCanonicalSchemaV47.databaseVersion {
+            try RoomCanonicalSchemaV47.validatePhysicalSchema(db)
+        } else if userVersion >= RoomCanonicalSchemaV46.databaseVersion {
             try RoomCanonicalSchemaV46.validatePhysicalSchema(db)
         } else if userVersion >= RoomCanonicalSchemaV45.databaseVersion {
             try RoomCanonicalSchemaV45.validatePhysicalSchema(db)
@@ -43,7 +45,9 @@ nonisolated enum RoomCanonicalSchemaCompatibility {
             throw RoomCanonicalSchemaError.versionMismatch(userVersion)
         }
 
-        if userVersion >= RoomCanonicalSchemaV46.databaseVersion {
+        if userVersion >= RoomCanonicalSchemaV47.databaseVersion {
+            try RoomCanonicalSchemaV47.assertForeignKeyIntegrity(db)
+        } else if userVersion >= RoomCanonicalSchemaV46.databaseVersion {
             try RoomCanonicalSchemaV46.assertForeignKeyIntegrity(db)
         } else if userVersion >= RoomCanonicalSchemaV45.databaseVersion {
             try RoomCanonicalSchemaV45.assertForeignKeyIntegrity(db)
