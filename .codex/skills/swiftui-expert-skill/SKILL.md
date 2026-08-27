@@ -8,6 +8,8 @@ description: Write, review, or improve SwiftUI code for XMNote using Xcode 26/iO
 ## Overview
 Use this skill to build, review, or improve SwiftUI features with correct state management, optimal view composition, and iOS 26+ Liquid Glass styling. Prioritize native APIs, Apple design guidance, and performance-conscious patterns. This skill focuses on facts and best practices without enforcing specific architectural patterns.
 
+For XMNote interface work, use `xmnote-design-system` to decide the live visual language, component ownership, design-system admission, and evidence gates. This skill owns SwiftUI implementation facts and must not introduce a competing product design language.
+
 XMNote currently targets Xcode 26 / iOS 26.1. Treat Xcode 27 guidance as either source-compatible SwiftUI practice or a future SDK reference; do not generate SDK 27-only APIs unless the user explicitly asks for Xcode 27 / SDK 27 work or an SDK 27 migration error.
 
 ## Workflow Decision Tree

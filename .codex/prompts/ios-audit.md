@@ -3,7 +3,7 @@ description: 对 XMNote 的 iOS/SwiftUI 界面做设计与体验审计，重点�
 argument-hint: "<功能名、页面名或文件路径，可选>"
 ---
 
-Use `impeccable-ios-design` and `swiftui-expert-skill`.
+Use `xmnote-design-system` and `swiftui-expert-skill`.
 
 对 `$ARGUMENTS` 指定的页面、组件或模块进行 iOS 设计审计。
 

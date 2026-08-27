@@ -3,7 +3,7 @@ description: 将 XMNote 的某个 iOS/SwiftUI 页面或组件对齐到现有设�
 argument-hint: "<功能名、页面名或文件路径，可选>"
 ---
 
-Use `impeccable-ios-design` and `swiftui-expert-skill`.
+Use `xmnote-design-system` and `swiftui-expert-skill`.
 
 对 `$ARGUMENTS` 对应的 SwiftUI 界面做系统化对齐，而不是局部涂抹。
 

@@ -120,7 +120,7 @@ description: 为 XMNote 设计、实现或评审 iOS/SwiftUI 动效，覆盖手�
 
 ## 与其他 XMNote Skill 的边界
 
-- 使用 `impeccable-ios-design` 判断整个界面的信息层级、字体、颜色、材质、布局和平台表达是否成立。
+- 使用 `xmnote-design-system` 判断整个界面的设计真相、信息层级、字体、颜色、材质、布局、平台表达与公共能力准入是否成立。
 - 使用 `ios-motion-design` 判断状态变化为什么运动、如何运动以及如何验收。
 - 使用 `swiftui-expert-skill` 校准 SwiftUI API、状态管理、性能、并发和可访问性实现。
 - 进行完整 SwiftUI UI 改造时按任务范围组合使用；不要让任一 skill 越权替代另一个 owner。

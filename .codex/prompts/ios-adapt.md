@@ -3,7 +3,7 @@ description: 让 XMNote 的 iOS/SwiftUI 界面适配不同 iPhone 尺寸、方�
 argument-hint: "<功能名、页面名或文件路径，可选>"
 ---
 
-Use `impeccable-ios-design` and `swiftui-expert-skill`.
+Use `xmnote-design-system` and `swiftui-expert-skill`.
 
 对 `$ARGUMENTS` 对应界面做 iOS 上下文适配。
 

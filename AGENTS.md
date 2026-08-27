@@ -1,6 +1,6 @@
 # Repository Guidelines
 
-本文件是本仓库唯一执行规范，目标是帮助协作者稳定完成 Android → iOS 重构交付。
+本文件是本仓库统一协作入口，目标是帮助协作者稳定完成 Android → iOS 重构交付；专项规则按本文明确的 Skill 路由执行。
 根目录 `CLAUDE.md` 当前不作为执行真相源；仅为兼容现有 L3 协议语句，仓库仍保留 `[PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md` 这句固定文案。
 
 ## 1. 协作原则与优先级
@@ -28,7 +28,7 @@
 - 本仓库是 Android → iOS 迁移项目，优先做“业务意图对齐”，禁止机械翻译实现。
 - Android 参考工程路径：`/Users/wangke/Workspace/AndroidProjects/XMNote`。
 - 迁移对齐边界（强制）：Android 或其他平台经验只能帮助理解业务意图，不能直接当作当前平台事实；涉及平台行为判断时，必须回到 iOS 端实际代码、最小实验或官方文档。
-- iOS 设计真相源（强制）：涉及迁移、新页面或组件扩展时，以当前 iOS 项目已有生产页面、导航模式、设计令牌与公共组件为视觉和交互真相源；Android 界面仅用于理解信息结构与业务意图，未经用户明确批准禁止自行引入新的视觉语言。
+- iOS 设计系统（强制）：涉及任何 iOS/SwiftUI/UIKit 界面的新增、修改、迁移、重构、适配、抛光或审查，必须使用项目级 `$xmnote-design-system`；设计真相源、组件归位、令牌、交互、文案、视觉准入及验证均以该 Skill 为唯一入口。
 - 数据库对齐铁律（强制）：凡属于 Android → iOS 功能对齐/迁移需求，iOS 端数据库实现必须与 Android 端严格一致；覆盖范围至少包括 schema、migration 版本与执行顺序、seed 数据、外键与级联策略、事务边界、冲突策略、读写 SQL 条件（含 `is_deleted` 语义）。
 - 偏离审批（强制）：如确需偏离 Android 数据库实现，必须先提交双端对照（Android/iOS 代码路径、行为差异、风险评估、回滚方案），并获得用户明确确认后方可落地。
 - 全局硬删除铁律（用户已明确批准的跨端偏离，强制）：用户删除、批量删除以及业务关系的移除/替换必须在事务内执行物理 `DELETE`；除下一条列明的兼容例外外，禁止业务代码新增 `is_deleted = 1` 写入或创建 tombstone。`is_deleted` 字段与读取过滤仅为 Android Room v44 物理 schema、旧备份和恢复前兼容保留。
@@ -39,11 +39,7 @@
   - 已知符号：`choose_technology -> get_documentation`
   - 未知符号但技术栈明确：`choose_technology -> search_symbols -> get_documentation`
   - 技术栈不明确：`discover_technologies -> choose_technology -> search_symbols -> get_documentation`
-- iOS26 参考入口：涉及液态玻璃与 iOS26 新特性时，优先查阅 `docs/learning/iOS26液态玻璃与高相关新特性开发参考.md`。
 - 页面状态参考入口：涉及页面状态恢复、导航路径恢复、scene 级状态持久化时，优先查阅 `docs/architecture/页面状态基建与开发模式.md`。
-- 加载状态参考入口：涉及加载态策略、读写反馈分级、Loading 门闩接入时，优先查阅 `docs/architecture/加载状态反馈基建设计.md`。
-- 通用状态展示参考入口：涉及空态、无搜索结果、无内容失败、卡片状态或保留内容时的局部错误提示，优先查阅 `docs/architecture/通用状态展示设计规范.md`。
-- 消息提示参考入口：涉及 Toast、Banner、Alert、Undo、删除反馈、手动排序反馈时，优先查阅 `docs/architecture/消息提示设计规范.md`。
 
 ## 3. 开发阶段与收口阶段
 ### 开发阶段
@@ -60,10 +56,7 @@
   - `docs/feature/功能名/需求文档.md`
   - `docs/feature/功能名/设计文档.md`
   - `docs/learning/` 下的学习总结
-  - `docs/component-guides/` 下的重要 UI 组件使用文档
   - `docs/architecture/术语对照表.md`
-  - `docs/architecture/UI组件文档清单.md`
-  - `docs/architecture/UI核心组件白名单.md`
 - 收口阶段必须执行文档闸门与必要构建校验。
 
 ### 命令与审批边界
@@ -83,107 +76,7 @@
 - 任务分支、共享 Package 下载缓存和 Xcode CAS 始终保留；禁止自动归档、签名、上传或部署到真实设备。
 - 交付时报告 worktree、分支、Simulator 名称与 UDID、执行命令、`.xcresult`/截图路径、依赖锁或工程设置变化及未验证事项。
 
-## 4. 架构 / UI / 编码硬约束
-### 目录与组件归位
-- 页面壳层（`*View` 页面入口/容器）唯一归属目录：`xmnote/Views/<Feature>/`。
-- ViewModel（`*ViewModel`）唯一归属目录：`xmnote/ViewModels/<Feature>/`；`xmnote/Views/**` 禁止放置 `*ViewModel.swift`。
-- 跨模块复用 UI 组件唯一归属目录：`xmnote/UIComponents`。
-- `xmnote/Views/<Feature>/Components` 仅允许页面私有子视图，不得承载跨模块公共组件。
-- 业务 Sheet 必须放在 `xmnote/Views/<Feature>/Sheets/`。
-- 禁止在 `xmnote/Utilities`、`xmnote/Services` 中新增跨模块公共组件。
-- `xmnote/RichTextEditor` 属于功能模块，不整体迁入 `UIComponents`；仅纯展示且跨页面复用的子组件允许抽取到 `UIComponents`。
-- 新增组件前必须先扫描现有实现可复用性；若已有可复用组件，优先复用，仅在跨模块复用成立时才迁入 `xmnote/UIComponents`。
-
-### UI 与交互
-- 遵循 iOS Human Interface Guidelines，保证业务一致，但采用 iOS 原生表达。
-
-#### 设计系统工程入口（强制）
-- 设计系统架构、依赖方向、组件边界与例外流程以 `docs/architecture/iOS设计系统工程规范.md` 为权威说明；令牌真相源位于 `xmnote/Utilities/DesignSystem/`，公共组件真相源位于 `xmnote/UIComponents/`，机器目录位于 `scripts/design-system/component-catalog.json`。
-- 修改生产 UI 前，先执行 `python3 scripts/design-system/ds.py context --paths <相关 Swift 路径>` 获取当前规则与正确入口；查找公共组件使用 `python3 scripts/design-system/ds.py catalog [--symbol <名称>]`，禁止仅凭文件名猜测或新建同类实现。
-- 开发中执行 `python3 scripts/design-system/ds.py lint --changed`；规则不清楚时执行 `python3 scripts/design-system/ds.py explain <规则ID>`；收口执行 `python3 scripts/design-system/ds.py audit`。`Makefile.parallel-ios` 的 `ai-build` 与 Git pre-commit 已接入变更范围检查，不得绕过。
-- `DS001`–`DS011` 为阻断规则；`DSR001`–`DSR003` 为需结合上下文判断的观察项。当前 enforced 基线必须保持 0；禁止用扩大排除范围、降级规则或写入新 baseline 的方式消除失败。规则误报必须以最小复现补充工具测试后修正规则。
-- 配置类页面使用 `XMSettingsPage + XMSettingsSection + XMSettingsGroup` 组合，已证明复用的行仅使用 `XMSettingsToggleRow` 与 `XMSettingsValueMenuRow`；业务差异保留在页面私有组合中，禁止新增参数膨胀的万能设置行。
-- 通用业务 Sheet 使用 `XMSheetScaffold`；标题栏、滚动回弹、固定顶栏/底栏由 scaffold 统一，业务状态与业务控件仍由功能模块持有，禁止 `AnyView` 类型擦除。
-- 新增全局 token 或跨模块组件前，必须证明至少两个独立生产场景具有相同语义、相同根因与相同复用方式；单页差异优先使用页面级组合常量或私有子视图。
-
-#### 产品文案与标点（强制）
-- 规范依据：组件语义与写作原则以 Apple Human Interface Guidelines 的 [Writing](https://developer.apple.com/design/human-interface-guidelines/writing)、[Buttons](https://developer.apple.com/design/human-interface-guidelines/buttons)、[Alerts](https://developer.apple.com/design/human-interface-guidelines/alerts)、[Notifications](https://developer.apple.com/design/human-interface-guidelines/notifications) 为平台基线，简体中文标点以现行 [GB/T 15834-2011](https://openstd.samr.gov.cn/bzgk/std/newGbInfo?hcno=22EA6D162E4110E752259661E1A0D0A8) 为语言基线；组件专项规则优先于通用短文案规则。
-- 适用范围：所有用户可见文本均须遵守本节，包括生产与 Debug 界面、字符串目录、可访问性文案，以及 Domain、Repository、Service 中最终会展示给用户的错误或状态信息。
-- 排除范围：代码注释、日志、断言、协议值、URL、文件名与扩展名、代码或命令、用户输入内容、外部原文和仅用于展示排版能力的样例正文不得机械套用本节规则。
-- 无句末标点场景：按钮、菜单项、导航标题、分区标题、字段标签、placeholder、选项、角标与短状态标签不加句末标点；单句且简短、独立展示的辅助说明、设置描述、空状态、Toast、Banner、行内提示与 Sheet 补充说明不加结尾 `。` 或 `.`。
-- Alert 文案：标题为片语时不加句末标点，标题为问句时保留 `？`；补充消息必须使用完整句子和恰当的句末标点。按钮标题使用简短、结果明确的动作词，不加句末标点。
-- 通知文案：通知标题简短且不加句末标点；通知正文使用完整句子和恰当标点。多句说明、长段落、法律或风险说明、App Intent 完整描述同样保持完整书面标点。
-- 中文符号：中文语境使用全角 `，。；：？！“”‘’（）`，中文标点前后不加空格；代码、URL、时间、小数、版本号及其他内部语法保留对应 ASCII 标点，不因周围存在中文而改写其内部结构。
-- 省略号：进行中状态统一使用单个 `…`，禁止使用 `...`；正文中的语义省略按中文规则使用 `……`。不得用省略号代替可明确表达的操作或状态。
-- 引号、书名号与冒号：中文界面术语使用 `“”`，书名使用 `《》`；中文说明关系使用 `：`。标签和值已由布局分隔时不机械追加冒号，禁止在同一中文语义单元中混用全角与半角标点。
-- 本地化边界：日期、时间、数字与单位优先使用本地化格式化 API；标点应随完整可本地化语句进入字符串目录，禁止在调用处拼接跨语言标点。修改源文案键时必须同步更新 `Localizable.xcstrings` 并保留现有元数据。
-- 可访问性文案：片语型 label 不加句末标点；包含多个信息单元的 announcement 或完整说明使用自然停顿与完整标点，确保 VoiceOver 朗读语义清楚。
-- 人工检查清单：新增或修改文案时，依次确认展示组件、片语或完整句子、语言环境、本地化归属与同类组件既有风格；提交前检索 Swift 与字符串目录中的句末标点、`...`、中英文冒号和引号候选，逐项按 UI 上下文判断，禁止全局机械替换。
-
-#### 滚动回弹与系统边缘效果
-- 全轴回弹约束（强制）：应用自有的 SwiftUI `ScrollView`、`List`、`Form` 等滚动容器，无论内容是否超过一屏，都必须继承全局或显式使用 `.scrollBounceBehavior(.always)`；禁止使用 `.basedOnSize`。
-- UIKit 回弹约束（强制）：应用自有的 UIKit 滚动容器必须按实际滚动轴设置 `alwaysBounceVertical = true` 或 `alwaysBounceHorizontal = true`，禁止显式关闭有效轴向的 `bounces` / `alwaysBounce…`。
-- 例外边界：图片缩放画布、明确禁用滚动的静态骨架视图与第三方 Vendor 组件不按列表处理，不得为了满足本规范改变其缩放或静态展示物理。
-- 系统边缘效果约束（强制）：顶部与底部渐进模糊必须依赖 iOS 原生 scroll-edge effect，可使用系统自动策略或 `.scrollEdgeEffectStyle(...)` 明确语义；禁止用自定义 blur、gradient、material 遮罩模拟，禁止额外添加 toolbar 常驻背景干扰系统效果。
-- 主滚动视图识别约束（强制）：需要系统 scroll-edge effect 的页面，内容状态下的主滚动容器必须保持为页面根内容的直接滚动主体；固定反馈优先通过 `safeAreaBar` 等系统安全区 API 接入，禁止用额外布局容器隔断系统对主滚动视图的识别。
-
-#### 导航 API 选择
-- 导航实现前必须先判定页面关系，再选择 API：当前 Tab 内继续深入，用该 Tab 的 `NavigationStack + route enum + NavigationPath`；需要覆盖 `TabView` 且返回时保留底层现场，用根视图 `.fullScreenCover(item:)`，cover 内如需二级跳转再放独立 `NavigationStack`；只为当前页面补充参数、选择、确认或短信息展示，才用 `sheet` / `popover` / `alert`。
-- 判定口诀：属于当前 Tab 浏览路径就 push；必须保住底层现场就 cover；只是辅助当前任务就 sheet/popover/alert。三者都不匹配时，先重审交互关系，禁止直接自造 overlay/navigation 动画系统。
-
-- 返回按钮复用约束（强制）：顶部 `leading` 返回按钮统一使用 `TopBarBackButton`；禁止在页面内手写 `Button + chevron.left` 作为导航返回入口。
-- 顶部图标职责约束（强制）：`TopBarActionIcon` 只用于普通顶部 action icon，不承载返回语义。
-- 导航栏玻璃禁令（强制）：已处于系统导航栏上下文的按钮，禁止再显式增加 `.glassEffect(...)`、`.buttonStyle(.glass)`、`.buttonStyle(.glassProminent)` 或等价 glass/material 包装。
-- 弹窗实现约束（强制）：生产路径中心弹窗统一使用 `XMSystemAlert`（UIKit `UIAlertController` 桥接），禁止新增 SwiftUI `.alert` 作为中心弹窗实现。
-- 弹窗按钮颜色规范（强制）：仅 warning/destructive 操作使用警告语义颜色，其余按钮必须使用系统默认语义颜色，禁止使用品牌色按钮。
-- 弹出菜单颜色规范（强制）：上下文菜单、长按菜单、更多菜单等各类弹出菜单应克制使用品牌色；普通操作使用系统默认色或 `menuActionForeground` 等中性色，只有删除、警告等具有明确语义的操作才使用对应的语义色，禁止用品牌色强调普通菜单项的可点击性。
-- 书籍封面渲染约束（强制）：所有书籍封面渲染必须使用 `XMBookCover`（`xmnote/UIComponents/Foundation/XMBookCover.swift`），禁止手写重复封面渲染组合。
-
-#### 通用状态展示
-- 状态组件唯一归属（强制）：跨模块状态展示统一位于 `xmnote/UIComponents/Feedback/StatePresentation/`；该目录只是 Feedback 内源码分组，不得另建 Swift Package、Framework 或 Target。
-- 完整状态入口（强制）：页面、Sheet 与列表背景的 instruction、empty、noResults、failure 统一使用 `XMContentStateView`；`StatePresentation/` 外禁止直接构造 `ContentUnavailableView`，禁止重新引入 `EmptyStateView` 或页面私有通用空态样式。
-- 紧凑与 Inline 边界（强制）：卡片、分区和局部容器使用 `XMCompactStateView`；已有可信内容的刷新、分页或写入失败必须保留内容并使用 `XMInlineStatusBanner`，禁止覆盖为阻断失败页。
-- 状态映射（强制）：数据尚未返回使用 placeholder/loading；数据源确认为空使用 `.empty`；搜索或筛选无匹配使用 `.noResults`；无可用内容且加载失败使用 `.failure`；等待用户前置选择使用 `.instruction`。
-- 抽象边界（强制）：通用状态组件只承接展示语义，不持有 Repository、ViewModel 或全局业务状态机；根启动失败、业务骨架、上传/导入百分比、扫描、AI 流式状态和领域时间线可以保留业务实现。
-- 容器适配（强制）：UIKit 列表背景、UICollectionView cell 和页面私有 StateHost 可以保留布局、生命周期和状态映射，但通用图标、文字、间距、颜色与动作视觉必须委托给 StatePresentation 组件族。
-- 状态组件扩展决策（强制）：现有组件与新 UI 不完全贴合时，依次判断：文案、图标或业务映射差异继续配置现有组件；相同容器结构下被多个场景稳定复用的视觉差异优先扩展现有 `Style`；只有至少两个独立生产源码文件证明相同语义、相同结构需求和相同修复模式时，才允许新增高抽象层级的公共状态组件；单一工作流或领域结构继续保留页面私有实现。
-- 新公共状态组件合同（强制）：新组件必须位于 `StatePresentation/`，采用可被闸门发现的通用命名（`XM…StateView` 或 `XM…StatusBanner`），只依赖设计令牌和展示语义，不得依赖业务模型、Repository、ViewModel 或网络状态；适用时复用 `XMStateRole`、`XMStateAction`，不得为单一业务扩大全局角色。
-- 新公共状态组件登记（强制）：新增组件必须同步加入测试中心 `StatePresentationCatalogView`，登记术语表、UI 组件文档清单和组件指南，并在指南中列出两个真实生产消费路径；`scripts/verify_state_presentations.sh` 必须通过。确属容器或领域例外时，仍须登记精确路径、类型和原因。
-
-- 结构性 UI 变化必须带过渡动画，优先 `.snappy`、`.smooth`、`.spring`。
-- 异步操作必须提供可感知反馈，避免点击无响应。
-- 加载反馈分级（强制）：读取类加载采用“延迟显示 + 最短驻留”策略，默认阈值 `delay=150ms`、`minimumVisible=200ms`；写操作反馈必须即时显示并禁用重复触发入口。
-- 加载组件边界（强制）：生产页面读取加载统一使用 `LoadingGate + LoadingStateView` 或 `LoadPhaseHost`；禁止新增裸 `ProgressView` 作为读取加载主态。
-- 成功反馈优先通过界面状态变化表达，禁止默认新增“已完成/已更新”类轻提示。
-- 失败、不可执行、需要用户决策的操作必须给出可感知反馈。
-- 手动排序成功不弹成功提示；失败必须回滚或解释，搜索/筛选/非手动排序等不可排序场景必须前置阻断。
-- 底部沉浸滚动约束（强制）：涉及 `ScrollView`、`safeArea` 与底部导航/手势区时，内容在底部圆角区域必须平滑过渡，禁止生硬裁切。
-
-### 字体与设计令牌
-- 生产文本统一走 `xmnote/Utilities/DesignSystem/AppTypography.swift` 中的 `AppTypography` 或页面级组合 token；`SemanticTypography` 与 `BrandTypography` 仅作为底层排版基础设施存在，不作为页面层默认入口。
-- 生产路径禁止直接新增 `.font(.system(size: ...))`、`UIFont.systemFont(ofSize:)`、`UIFont.boldSystemFont(ofSize:)` 等固定字号写法；禁止在页面层随手 `.weight(...)` 或散落 `lineSpacing(...)` 魔法数字。
-- 新增文本前先判定对象是 `生产文本 / 品牌数字与品牌标题 / 图标或装饰 glyph`；生产文本优先使用 `AppTypography`，品牌强调位使用 `AppTypography.brandDisplay(...)` 与相关裁切能力，书架首页优先使用 `BookshelfTypography`，书摘列表优先使用 `NoteExcerptTypography`。
-- 文字层级必须遵循以下已定稿 token，不得因单个功能迭代随意改变字号、字重、行距或使用场景：
-
-  | Token | 字号 | 字重 | 行距/行高 | 使用场景 |
-  | --- | --- | --- | --- | --- |
-  | `BookshelfTypography.topSelected` | 20pt | semibold | SwiftUI `title3` 默认动态行高 | 首页顶部选中 tab |
-  | `BookshelfTypography.topUnselected` | 18pt | medium | SwiftUI `title3` 默认动态行高 | 首页顶部未选中 tab |
-  | `BookshelfTypography.searchField` | 15pt | regular | SwiftUI `body` 默认动态行高 | 首页搜索输入、placeholder 与取消按钮 |
-  | `BookshelfTypography.gridTitle` | 12pt | medium | SwiftUI `caption` 默认动态行高 | 书架网格书名、聚合卡标题 |
-  | `BookshelfTypography.gridSubtitle` | 11pt | regular | SwiftUI `caption2` 默认动态行高 | 书架作者、副标题、列表次级说明 |
-  | `NoteExcerptTypography.body` | 15pt | regular | `lineSpacing = 7pt` | 书摘正文预览，默认第一阅读层级 |
-  | `NoteExcerptTypography.idea` | 13pt | regular | `lineSpacing = 4pt` | 书摘想法、引用说明、正文的补充层 |
-  | `NoteExcerptTypography.footer` | 11pt | regular | SwiftUI `caption2` 默认动态行高 | 书摘时间、来源等辅助信息，颜色优先 `Color.textSecondary` |
-
-- 首页文本层级规则：顶部 tab 必须弱于页面品牌/主标题但强于搜索与书架网格；搜索文案不得回退到 17pt `AppTypography.body`；书名保持 12pt medium，长标题优先通过现有截断、换行或跑马灯能力处理，不通过放大字号制造层级。
-- 书摘列表文本层级规则：正文是第一阅读层级，保持 15pt regular 并通过 7pt 行距形成稳定阅读节奏；想法区低于正文一层；footer 必须可读但不抢正文，主要辅助信息禁止使用过淡的 `.tertiary`。
-- 标题、正文、辅助信息、按钮文案边界：标题优先使用页面专用 token 或 `AppTypography.headline/title*`，不得为了强调直接加粗或放大；正文优先使用 `AppTypography.body/callout/subheadline` 或专用阅读 token，长文本必须同时明确行距与截断策略；辅助信息优先 11-12pt 并使用 `Color.textSecondary` / `Color.textHint` 等语义色；按钮文案使用所在页面 token，普通按钮不得默认使用品牌展示字体或自定义固定字号。
-- 涉及文本宽度、行高、baseline、截断测量时，测量字体必须与渲染字体同源；例如书架标题跑马灯必须同步使用 `BookshelfTypography.gridTitle` 与对应 UIKit 测量字体。
-- 跨组件重复出现的文本层级必须沉淀到 `DesignSystem/AppTypography.swift` 的 `AppTypography` 或其组合 token；禁止散落魔法数字。
-- 后续新增页面或功能必须优先复用现有设计 token；如确需新增文本样式，必须在代码变更说明中写明新增原因、目标场景、与现有 token 的差异，并保持字号、字重、行距和阅读舒适度与当前文字系统一致。
-
-### 编码与注释
+## 4. 编码与注释
 - Swift/SwiftUI，4 空格缩进；优先小函数与单一职责。
 - 类型 `PascalCase`，属性/方法 `camelCase`，布尔值使用 `is/has/should` 前缀。
 - 文件名与主类型名一致；View 用 `View` 后缀，ViewModel 用 `ViewModel` 后缀，数据实体用 `Record` 后缀。
@@ -206,16 +99,12 @@
   - 双端代码证据（文件路径 + 行号）
 - 对未对齐项必须给出评估结论：属于“功能优化”还是“设计倒退”；并给出 Android 端反向优化建议。
 
-### 学习与组件文档
+### 学习文档
 - 每完成一个功能开发并收到“任务已完成”信号后，必须补充本次涉及的 iOS 知识点总结，并给出面向 Android Compose 开发者的学习示例；学习文档统一存放在 `docs/learning/`。
-- 重要 UI 组件（`docs/architecture/UI核心组件白名单.md` 白名单组件 + `xmnote/UIComponents` 下新增/重大重构组件）在收口阶段必须新增或更新使用文档，并登记到 `docs/architecture/UI组件文档清单.md`。
 
 ### 术语与最小 GEB
 - 术语总表：`docs/architecture/术语对照表.md`。
 - 新增/重命名核心类（如 `*Repository`、`*ViewModel`、`*Service`、`*Client`、`*Manager`、`*Container`、`*Payload`、`*Input`）必须更新术语表。
-- `xmnote/UIComponents` 下新增跨模块复用 UI 组件必须更新术语表（类别：`UI-复用`）。
-- `xmnote/Views/<Feature>/Components` 下页面私有子视图必须更新术语表（类别：`UI-页面私有`）。
-- 白名单内新增/调整核心页面组件必须同步更新白名单与术语表（类别：`UI-核心页面`）。
 - 最小 GEB 规则：
   - L1：项目级治理文档
   - L2：模块级 `CLAUDE.md`
@@ -265,14 +154,7 @@
 - 提交前必须先执行 `git status --short` 与 `git diff --stat` 自检；发现无关改动时需先和用户确认是否纳入本次提交。
 
 ### 提交前 / 收口后必须执行的脚本
-- `python3 scripts/design-system/ds.py audit`
-- `make -f Makefile.parallel-ios ai-ui-lint-test`
 - `bash scripts/verify_glossary.sh`
-- `bash scripts/verify_ui_glossary_scope.sh`
-- `bash scripts/verify_view_component_boundaries.sh`
 - `bash scripts/verify_l3_protocol_headers.sh`
 - `bash scripts/verify_arch_docs_sync.sh`
-- `bash scripts/verify_component_guides.sh`
-- `bash scripts/verify_state_presentations.sh`
-- `bash scripts/verify_scroll_ux.sh`
 - `bash scripts/verify_ai_bug_knowledge.sh`

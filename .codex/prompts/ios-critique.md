@@ -3,7 +3,7 @@ description: 以产品经理与高水准移动端设计师视角，评估 XMNote
 argument-hint: "<功能名、页面名或文件路径，可选>"
 ---
 
-Use `impeccable-ios-design` and `swiftui-expert-skill`.
+Use `xmnote-design-system` and `swiftui-expert-skill`.
 
 从“产品经理 + 资深 iOS 产品设计师”的视角，评审 `$ARGUMENTS` 对应界面。
 

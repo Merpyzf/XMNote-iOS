@@ -3,7 +3,7 @@ description: 为 XMNote 的 iOS/SwiftUI 界面补充有业务意义的结构动�
 argument-hint: "<功能名、页面名或文件路径，可选>"
 ---
 
-Use `impeccable-ios-design`, `ios-motion-design`, and `swiftui-expert-skill`.
+Use `xmnote-design-system`, `ios-motion-design`, and `swiftui-expert-skill`.
 
 对 `$ARGUMENTS` 对应界面补充或修正动画与交互反馈。
 

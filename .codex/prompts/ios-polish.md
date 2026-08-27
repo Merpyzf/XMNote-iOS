@@ -3,7 +3,7 @@ description: 对 XMNote 的 iOS/SwiftUI 界面做最后一轮细节抛光，聚�
 argument-hint: "<功能名、页面名或文件路径，可选>"
 ---
 
-Use `impeccable-ios-design` and `swiftui-expert-skill`.
+Use `xmnote-design-system` and `swiftui-expert-skill`.
 
 对 `$ARGUMENTS` 对应界面做发布前抛光。
 

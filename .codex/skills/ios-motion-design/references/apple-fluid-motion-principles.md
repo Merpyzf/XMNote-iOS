@@ -73,7 +73,7 @@
 - **Craft**：检查落点、速度接缝、中断、性能和无障碍细节。
 - **Delight**：把愉悦感视为正确响应、清晰关系和细节一致的结果，不在末尾追加装饰。
 
-字体、颜色、材质、整体信息层级与 Liquid Glass 归 `impeccable-ios-design`；SwiftUI API 与性能事实归 `swiftui-expert-skill`。
+设计真相、字体、颜色、材质、整体信息层级、公共能力准入与 Liquid Glass 归 `xmnote-design-system`；SwiftUI API 与性能事实归 `swiftui-expert-skill`。
 
 ## 上游启发与迁移边界
 
