@@ -6,7 +6,7 @@
 //
 
 /**
- * [INPUT]: 依赖 AppState、DesktopWebSessionCoordinator、AppNavigationCoordinator、XMSettingsGroup、PersonalRoute 与阅读日历根级呈现回调
+ * [INPUT]: 依赖 AppState、DesktopWebSessionCoordinator、AppNavigationCoordinator、XMSettingsGroup、PersonalRoute、DebugRoute 与阅读日历根级呈现回调
  * [OUTPUT]: 对外提供 PersonalView，以 17/15pt 设置行层级与页面私有 SF Symbols 光学校准承载我的 Tab 核心入口、阅读日历独立入口、网页端入口状态与新增优先顶部更多菜单
  * [POS]: Personal 模块容器壳层，承载设置列表、网页端与备份入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -111,19 +111,16 @@ struct PersonalView: View {
     let onAddBook: () -> Void
     let onAddNote: () -> Void
     let onOpenReadCalendar: () -> Void
-    let onOpenDebugCenter: (() -> Void)?
 
-    /// 注入新增书籍、笔记、阅读日历与调试入口回调，连接个人页跨层级动作。
+    /// 注入新增书籍、笔记与阅读日历回调，连接个人页跨层级动作。
     init(
         onAddBook: @escaping () -> Void = {},
         onAddNote: @escaping () -> Void = {},
-        onOpenReadCalendar: @escaping () -> Void = {},
-        onOpenDebugCenter: (() -> Void)? = nil
+        onOpenReadCalendar: @escaping () -> Void = {}
     ) {
         self.onAddBook = onAddBook
         self.onAddNote = onAddNote
         self.onOpenReadCalendar = onOpenReadCalendar
-        self.onOpenDebugCenter = onOpenDebugCenter
     }
 
     var body: some View {
@@ -150,7 +147,6 @@ struct PersonalView: View {
                     AddMenuCircleButton(
                         onAddBook: onAddBook,
                         onAddNote: onAddNote,
-                        onOpenDebugCenter: onOpenDebugCenter,
                         usesGlassStyle: true,
                         presentation: .pillSegment
                     )
@@ -364,7 +360,7 @@ extension PersonalView {
     @ViewBuilder
     private func debugCenterRow() -> some View {
 #if DEBUG
-        NavigationLink(destination: DebugCenterView()) {
+        NavigationLink(value: AppRoute.debug(.debugCenter)) {
             rowContent(icon: .debugCenter, title: "测试中心")
         }
         .buttonStyle(.plain)

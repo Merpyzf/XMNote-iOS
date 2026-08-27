@@ -47,7 +47,6 @@ struct BookContainerView: View {
     @State private var didBootstrapFromScene = false
     let onAddBook: () -> Void
     let onAddNote: () -> Void
-    let onOpenDebugCenter: (() -> Void)?
     let onOpenBookRoute: (BookRoute) -> Void
     let onOpenNoteRoute: (NoteRoute) -> Void
     let onOpenTagManagement: () -> Void
@@ -60,7 +59,6 @@ struct BookContainerView: View {
     init(
         onAddBook: @escaping () -> Void = {},
         onAddNote: @escaping () -> Void = {},
-        onOpenDebugCenter: (() -> Void)? = nil,
         onOpenBookRoute: @escaping (BookRoute) -> Void = { _ in },
         onOpenNoteRoute: @escaping (NoteRoute) -> Void = { _ in },
         onOpenTagManagement: @escaping () -> Void = {},
@@ -71,7 +69,6 @@ struct BookContainerView: View {
     ) {
         self.onAddBook = onAddBook
         self.onAddNote = onAddNote
-        self.onOpenDebugCenter = onOpenDebugCenter
         self.onOpenBookRoute = onOpenBookRoute
         self.onOpenNoteRoute = onOpenNoteRoute
         self.onOpenTagManagement = onOpenTagManagement
@@ -89,7 +86,6 @@ struct BookContainerView: View {
                     selectedSubTab: $selectedSubTab,
                     onAddBook: onAddBook,
                     onAddNote: onAddNote,
-                    onOpenDebugCenter: onOpenDebugCenter,
                     onOpenBookRoute: onOpenBookRoute,
                     onOpenNoteRoute: onOpenNoteRoute,
                     onOpenTagManagement: onOpenTagManagement,
@@ -151,7 +147,6 @@ private struct BookContentView: View {
     @State private var browseSearch = BookshelfSearchDrawerState()
     let onAddBook: () -> Void
     let onAddNote: () -> Void
-    let onOpenDebugCenter: (() -> Void)?
     let onOpenBookRoute: (BookRoute) -> Void
     let onOpenNoteRoute: (NoteRoute) -> Void
     let onOpenTagManagement: () -> Void
@@ -412,7 +407,6 @@ private struct BookContentView: View {
             AddMenuCircleButton(
                 onAddBook: onAddBook,
                 onAddNote: onAddNote,
-                onOpenDebugCenter: onOpenDebugCenter,
                 usesGlassStyle: true
             )
             .transaction { transaction in

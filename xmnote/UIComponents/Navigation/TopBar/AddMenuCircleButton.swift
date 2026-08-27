@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 xmnote/Utilities/DesignSystem/SemanticColors.swift 的语义色令牌，依赖 XMMenuLabel 与顶部 action 展示样式扩展
- * [OUTPUT]: 对外提供 AddMenuCircleButton 顶部添加菜单组件
+ * [INPUT]: 依赖 xmnote/Utilities/DesignSystem/SemanticColors.swift 的语义色令牌，依赖 XMMenuLabel 与顶部 action 展示样式扩展，接收新增书籍/书摘动作
+ * [OUTPUT]: 对外提供仅承载新增业务的 AddMenuCircleButton 顶部添加菜单组件
  * [POS]: UIComponents/Navigation/TopBar 的业务操作入口组件，被主页面顶部导航栏复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -11,7 +11,6 @@ import SwiftUI
 struct AddMenuCircleButton: View {
     let onAddBook: () -> Void
     let onAddNote: () -> Void
-    let onOpenDebugCenter: (() -> Void)?
     /// 兼容旧玻璃样式调用参数，当前视觉统一由 topBarActionButtonStyle 承接。
     let usesGlassStyle: Bool
     let presentation: TopBarActionPresentation
@@ -21,14 +20,12 @@ struct AddMenuCircleButton: View {
     init(
         onAddBook: @escaping () -> Void,
         onAddNote: @escaping () -> Void,
-        onOpenDebugCenter: (() -> Void)? = nil,
         usesGlassStyle: Bool = false,
         presentation: TopBarActionPresentation = .standalone,
         iconSize: CGFloat = 14
     ) {
         self.onAddBook = onAddBook
         self.onAddNote = onAddNote
-        self.onOpenDebugCenter = onOpenDebugCenter
         self.usesGlassStyle = usesGlassStyle
         self.presentation = presentation
         self.iconSize = iconSize
@@ -42,16 +39,6 @@ struct AddMenuCircleButton: View {
             Button(action: onAddNote) {
                 XMMenuLabel("添加书摘", systemImage: "square.and.pencil")
             }
-            #if DEBUG
-            if let onOpenDebugCenter {
-                Divider()
-                Button {
-                    onOpenDebugCenter()
-                } label: {
-                    XMMenuLabel("测试中心", systemImage: "hammer")
-                }
-            }
-            #endif
         } label: {
             TopBarActionIcon(
                 systemName: "plus",
