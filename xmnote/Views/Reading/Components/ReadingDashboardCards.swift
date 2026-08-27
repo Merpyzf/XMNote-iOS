@@ -240,6 +240,9 @@ private struct ReadingTrendOverviewColumn: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(.horizontal, layout.horizontalPadding)
         .padding(.vertical, layout.verticalPadding)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(metric.title)
+        .accessibilityValue(ReadingDashboardFormatting.metricAccessibilitySummary(metric: metric))
     }
 }
 
@@ -275,6 +278,9 @@ private struct ReadingTrendPendingColumn: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(.horizontal, layout.horizontalPadding)
         .padding(.vertical, layout.verticalPadding)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue("数据加载中")
     }
 }
 
@@ -395,7 +401,7 @@ private struct ReadingTrendMiniBarChart: View {
 
     var body: some View {
         HStack(alignment: .bottom, spacing: spacing) {
-            ForEach(Array(displayedRatios.enumerated()), id: \.offset) { index, ratio in
+            ForEach(Array(displayedRatios.enumerated()), id: \.offset) { _, ratio in
                 ZStack(alignment: .bottom) {
                     verticalBarShape
                         .fill(ReadingDashboardChartAppearance.barTrack)
@@ -407,9 +413,6 @@ private struct ReadingTrendMiniBarChart: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: chartHeight, alignment: .bottom)
-                .accessibilityLabel(points?[index].label ?? "")
-                .accessibilityValue(points?[index].value == 0 ? "0" : "\(points?[index].value ?? 0)")
-                .accessibilityHidden(points == nil)
             }
         }
         .frame(height: chartHeight)
@@ -428,6 +431,7 @@ private struct ReadingTrendMiniBarChart: View {
                 .padding(.horizontal, AxisStyle.horizontalInset)
         }
         .animation(.smooth(duration: 0.45), value: displayedRatios)
+        .accessibilityHidden(true)
     }
 }
 
@@ -1515,6 +1519,11 @@ struct ReadingYearSummaryCard: View {
                         .frame(
                             width: ReadingYearSummaryCardLayout.actionVisualSize,
                             height: ReadingYearSummaryCardLayout.actionVisualSize
+                        )
+                        .frame(
+                            width: ReadingYearSummaryCardLayout.actionHitSize,
+                            height: ReadingYearSummaryCardLayout.actionHitSize,
+                            alignment: .leading
                         )
                         .contentShape(Rectangle())
                 }

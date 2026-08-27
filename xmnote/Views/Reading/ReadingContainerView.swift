@@ -27,11 +27,11 @@ enum ReadingSubTab: String, CaseIterable, Codable {
 struct ReadingContainerView: View {
     @Environment(RepositoryContainer.self) private var repositories
     @Environment(SceneStateStore.self) private var sceneStateStore
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var selectedSubTab: ReadingSubTab = .reading
     @State private var timelineViewModel: TimelineViewModel?
     @State private var subtabBootstrapCoordinator = SubtabBootstrapCoordinator<ReadingSubTab>()
     @State private var didBootstrapFromScene = false
-    private let topBarHeight: CGFloat = 56
     let onAddBook: () -> Void
     let onAddNote: () -> Void
     let onOpenDebugCenter: (() -> Void)?
@@ -68,7 +68,7 @@ struct ReadingContainerView: View {
 
             segmentedContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .padding(.top, topBarHeight)
+                .padding(.top, PrimaryTopBarLayout.minimumHeight(for: dynamicTypeSize))
 
             HomeTopHeaderGradient()
                 .allowsHitTesting(false)

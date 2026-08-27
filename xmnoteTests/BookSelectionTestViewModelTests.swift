@@ -43,6 +43,8 @@ struct BookSelectionTestViewModelTests {
             case .onlineDirectSelection:
                 #expect(configuration.scope == .online)
                 #expect(configuration.onlineSelectionPolicy == .returnRemoteSelection)
+            case .componentStates:
+                #expect(!configuration.title.isEmpty)
             }
         }
     }

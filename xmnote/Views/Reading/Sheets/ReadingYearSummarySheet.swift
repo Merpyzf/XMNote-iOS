@@ -15,46 +15,42 @@ struct ReadingYearSummarySheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
+        XMSheetScaffold(
+            title: "\(summary.year) 年已读",
+            onClose: { dismiss() },
+            leadingAction: {
+                Button("关闭") { dismiss() }
+            },
+            trailingAction: {
+                Button("调整目标", action: onEditGoal)
+            }
+        ) {
             Group {
                 if summary.books.isEmpty {
-                    XMContentStateView(
+                    XMCompactStateView(
                         role: .empty,
                         title: "这一年还没有已读书籍",
                         systemImage: "books.vertical"
                     )
+                    .frame(maxWidth: .infinity, minHeight: 240)
                 } else {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: Spacing.base) {
-                            summaryHeader
+                    VStack(alignment: .leading, spacing: Spacing.base) {
+                        summaryHeader
 
-                            ForEach(summary.books) { book in
-                                Button {
-                                    dismiss()
-                                    onBookTap(book.id)
-                                } label: {
-                                    yearBookRow(book)
-                                }
-                                .buttonStyle(.plain)
+                        ForEach(summary.books) { book in
+                            Button {
+                                dismiss()
+                                onBookTap(book.id)
+                            } label: {
+                                yearBookRow(book)
                             }
+                            .buttonStyle(.plain)
                         }
-                        .padding(.horizontal, Spacing.screenEdge)
-                        .padding(.top, Spacing.base)
-                        .padding(.bottom, Spacing.section)
                     }
                 }
             }
-            .background(Color.surfacePage)
-            .navigationTitle("\(summary.year) 年已读")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("关闭") { dismiss() }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("调整目标", action: onEditGoal)
-                }
-            }
+            .padding(.horizontal, Spacing.screenEdge)
+            .padding(.bottom, Spacing.section)
         }
     }
 

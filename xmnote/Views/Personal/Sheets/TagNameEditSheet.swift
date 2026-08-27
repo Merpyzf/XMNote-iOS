@@ -23,7 +23,18 @@ struct TagNameEditSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
+        XMSheetScaffold(
+            title: edit.title,
+            onClose: { viewModel.dismissNameEdit() },
+            leadingAction: {
+                Button("取消") { viewModel.dismissNameEdit() }
+                    .disabled(isWriting)
+            },
+            trailingAction: {
+                Button("保存") { viewModel.submitNameEdit() }
+                    .disabled(!viewModel.canSubmitNameEdit || isWriting)
+            }
+        ) {
             VStack(spacing: Spacing.section) {
                 CardContainer(cornerRadius: CornerRadius.containerMedium, showsBorder: false) {
                     VStack(alignment: .leading, spacing: Spacing.base) {
@@ -66,32 +77,12 @@ struct TagNameEditSheet: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                Spacer(minLength: Spacing.none)
             }
             .padding(.horizontal, Spacing.screenEdge)
-            .padding(.top, Spacing.section)
-            .background(Color.surfaceSheet.ignoresSafeArea())
-            .navigationTitle(edit.title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("取消") {
-                        viewModel.dismissNameEdit()
-                    }
-                    .disabled(isWriting)
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("保存") {
-                        viewModel.submitNameEdit()
-                    }
-                    .disabled(!viewModel.canSubmitNameEdit || isWriting)
-                }
-            }
-            .interactiveDismissDisabled(isWriting)
-            .onAppear {
-                isNameFocused = true
-            }
+            .padding(.bottom, Spacing.contentEdge)
         }
+        .interactiveDismissDisabled(isWriting)
+        .onAppear { isNameFocused = true }
         .presentationDetents([.height(300), .medium])
         .presentationDragIndicator(.visible)
     }

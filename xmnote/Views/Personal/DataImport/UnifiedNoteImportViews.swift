@@ -382,18 +382,27 @@ struct UnifiedNoteImportPreviewView: View {
             Button {
                 model.toggle(book.id)
             } label: {
-                Image(systemName: book.isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.title2)
+                XMSelectionIndicator(
+                    style: .checkbox,
+                    isSelected: book.isSelected,
+                    font: AppTypography.title2,
+                    showsUnselectedBase: true
+                )
+                .frame(
+                    width: InteractionMetrics.minimumTouchTarget,
+                    height: InteractionMetrics.minimumTouchTarget
+                )
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(book.isSelected ? "取消选择《\(book.draft.name)》" : "选择《\(book.draft.name)》")
+            .accessibilityAddTraits(book.isSelected ? .isSelected : [])
 
-            AsyncImage(url: URL(string: book.draft.cover)) { image in
-                image.resizable().scaledToFill()
-            } placeholder: {
-                Color.surfaceNested
-            }
-            .frame(width: 48, height: 68)
-            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.inlaySmall))
+            XMBookCover.fixedWidth(
+                48,
+                urlString: book.draft.cover,
+                cornerRadius: CornerRadius.inlaySmall,
+                placeholderIconSize: .small
+            )
 
             VStack(alignment: .leading, spacing: Spacing.compact) {
                 Text(book.draft.name)
@@ -464,7 +473,22 @@ private struct UnifiedNoteImportContentView: View {
                 Section { HStack { Button("全选") { selectAll(true) }; Spacer(); Button("取消全选") { selectAll(false) } } } header: { Text("书摘") }
                 ForEach(book.draft.notes.indices, id: \.self) { index in
                     HStack(alignment: .top) {
-                        Button { toggle(index) } label: { Image(systemName: book.selectedNotes.contains(index) ? "checkmark.circle.fill" : "circle") }.buttonStyle(.plain)
+                        let isSelected = book.selectedNotes.contains(index)
+                        Button { toggle(index) } label: {
+                            XMSelectionIndicator(
+                                style: .checkbox,
+                                isSelected: isSelected,
+                                font: AppTypography.title2,
+                                showsUnselectedBase: true
+                            )
+                            .frame(
+                                width: InteractionMetrics.minimumTouchTarget,
+                                height: InteractionMetrics.minimumTouchTarget
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(isSelected ? "取消选择书摘" : "选择书摘")
+                        .accessibilityAddTraits(isSelected ? .isSelected : [])
                         VStack(alignment: .leading) {
                             Text(book.draft.notes[index].content)
                             if !book.draft.notes[index].idea.isEmpty { Text(book.draft.notes[index].idea).font(AppTypography.caption).foregroundStyle(Color.textSecondary) }

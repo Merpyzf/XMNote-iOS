@@ -18,6 +18,7 @@ struct DailyReadingView: View {
 
     @Environment(RepositoryContainer.self) private var repositories
     @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
+    @Environment(XMToastCenter.self) private var toastCenter
     @Environment(\.openURL) private var openURL
     @Environment(\.colorScheme) private var colorScheme
     @State private var viewModel: DailyReadingViewModel
@@ -29,7 +30,6 @@ struct DailyReadingView: View {
     @State private var tagEditSession: DailyReadingTagEditSession?
     @State private var relatedBookDraft: RelatedBookRelationDraft?
     @State private var generatedShareFile: NoteReviewGeneratedShareFile?
-    @State private var toastCenter = XMToastCenter()
     @State private var observationRevision = 0
 
     /// 注入目标日期与跨模块导航回调，页面自行读取当天完整轨迹。
@@ -129,7 +129,6 @@ struct DailyReadingView: View {
         .xmSystemAlert(item: $pendingDelete) { record in
             deleteDescriptor(for: record)
         }
-        .xmToastHost(center: toastCenter)
         .task {
             syncLoadingGate()
             await viewModel.loadIfNeeded(using: repositories.readCalendarRepository)

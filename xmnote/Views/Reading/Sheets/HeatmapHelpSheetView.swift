@@ -1,61 +1,28 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 DesignTokens/Spacing 设计令牌、xmMinimumHitTarget、HeatmapLevel、ReadingStatusPresentation 与 HeatmapChart.legend
+ * [INPUT]: 依赖 XMSheetScaffold、DesignTokens/Spacing、HeatmapLevel、ReadingStatusPresentation 与 HeatmapChart.legend
  * [OUTPUT]: 对外提供 HeatmapHelpSheetView（热力图说明弹层）
  * [POS]: 在读页热力图小组件的帮助说明面板，纯展示职责（文案 + 图例），零回调信息卡片
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
-
-/// 帮助弹层局部几何量，避免标题进入右上关闭按钮的视觉槽位。
-private enum HeatmapHelpSheetLayout {
-    static let titleTrailingClearance: CGFloat = 44
-}
 
 /// HeatmapHelpSheetView 展示热力图阅读规则和图例，承接首页热力图右上角说明入口。
 struct HeatmapHelpSheetView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
+        XMSheetScaffold(
+            title: "热力图说明",
+            onClose: { dismiss() }
+        ) {
             VStack(alignment: .leading, spacing: Spacing.double) {
-                titleSection
-                    .padding(.trailing, HeatmapHelpSheetLayout.titleTrailingClearance)
                 descriptionSection
                 legendSection
             }
-            .padding(Spacing.double)
-            .background(
-                GeometryReader { proxy in
-                    Color.clear.preference(key: SheetHeightKey.self, value: proxy.size.height)
-                }
-            )
-
-            closeButton
+            .padding(.horizontal, Spacing.screenEdge)
+            .padding(.bottom, Spacing.contentEdge)
         }
-    }
-
-    // MARK: - Close Button
-
-    private var closeButton: some View {
-        Button { dismiss() } label: {
-            Image(systemName: "xmark")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(.secondary)
-                .frame(width: 28, height: 28)
-                .xmMinimumHitTarget(anchor: .topTrailing)
-        }
-        .buttonStyle(.plain)
-        .glassEffect(.regular.interactive(), in: .circle)
-        .padding(.top, Spacing.double)
-        .padding(.trailing, Spacing.double)
-    }
-
-    // MARK: - Title
-
-    private var titleSection: some View {
-        Text("热力图说明")
-            .font(AppTypography.title3Semibold)
     }
 
     // MARK: - Description
@@ -105,16 +72,5 @@ struct HeatmapHelpSheetView: View {
                 .font(AppTypography.subheadline)
                 .foregroundStyle(Color.textSecondary)
         }
-    }
-}
-
-// MARK: - Sheet 高度测量
-
-/// 热力图说明弹层高度偏好键，用于把内容高度回传给外层 Sheet。
-struct SheetHeightKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    /// 合并多次高度上报，取最大值避免内容被截断。
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
     }
 }

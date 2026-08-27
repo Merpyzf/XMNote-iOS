@@ -519,7 +519,22 @@ struct BookshelfBatchSourceSheet: View {
         XMSheetScaffold(
             title: "设置来源",
             subtitle: "已选\(selectedCount)本",
-            onClose: { dismiss() }
+            onClose: { dismiss() },
+            bottomBar: {
+                Button {
+                    submitSelection()
+                } label: {
+                    Text("完成")
+                        .font(AppTypography.bodyMedium)
+                        .frame(maxWidth: .infinity)
+                        .frame(minHeight: InteractionMetrics.minimumTouchTarget)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color.primaryActionFill)
+                .disabled(selectedID == nil || isCreating)
+                .padding(.horizontal, Spacing.screenEdge)
+                .padding(.vertical, Spacing.cozy)
+            }
         ) {
             VStack(spacing: Spacing.comfortable) {
                 XMSettingsGroup {
@@ -589,16 +604,6 @@ struct BookshelfBatchSourceSheet: View {
                     .foregroundStyle(Color.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                Button {
-                    submitSelection()
-                } label: {
-                    Text("完成")
-                        .font(AppTypography.bodyMedium)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(Color.primaryActionFill)
-                .disabled(selectedID == nil || isCreating)
             }
             .padding(.horizontal, Spacing.screenEdge)
             .padding(.bottom, Spacing.contentEdge)

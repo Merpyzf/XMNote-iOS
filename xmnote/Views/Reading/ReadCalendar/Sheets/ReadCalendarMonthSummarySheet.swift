@@ -34,9 +34,19 @@ struct ReadCalendarMonthSummarySheet: View {
     let onSwitchMonth: (Date) -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
+        XMSheetScaffold(
+            title: "月度总结",
+            onClose: { dismiss() },
+            scrollEdgePresentation: .overlaySoft,
+            contentTopBar: {
+                monthSwitcher
+                    .padding(.horizontal, Layout.horizontalInset)
+                    .padding(.bottom, Spacing.base)
+            }
+        ) {
             VStack(alignment: .leading, spacing: Layout.sectionSpacing) {
                 ReadCalendarSummaryMetricSection(
                     metrics: summaryMetrics,
@@ -49,13 +59,6 @@ struct ReadCalendarMonthSummarySheet: View {
             .padding(.top, Spacing.base)
             .padding(.bottom, Layout.bottomInset)
         }
-        .safeAreaBar(edge: .top, spacing: Spacing.none) {
-            monthSwitcher
-                .padding(.horizontal, Layout.horizontalInset)
-                .padding(.top, Layout.topInset)
-                .padding(.bottom, Spacing.base)
-        }
-        .scrollEdgeEffectStyle(.soft, for: .top)
         .animation(reduceMotion ? nil : Motion.monthChange, value: sheet)
     }
 }

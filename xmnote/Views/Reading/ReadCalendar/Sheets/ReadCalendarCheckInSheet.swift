@@ -39,9 +39,35 @@ struct ReadCalendarCheckInSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section("书籍") {
+        XMSheetScaffold(
+            title: recordID == nil ? "阅读打卡" : "编辑打卡",
+            subtitle: Self.dateFormatter.string(from: date),
+            onClose: {
+                guard !isSaving else { return }
+                dismiss()
+            },
+            bottomBar: {
+                Button(action: save) {
+                    HStack(spacing: Spacing.cozy) {
+                        if isSaving {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                        Text(isSaving ? "正在保存…" : "保存")
+                    }
+                    .font(AppTypography.subheadlineSemibold)
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: InteractionMetrics.minimumTouchTarget)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(selectedBook == nil || isSaving)
+                .padding(.horizontal, Spacing.screenEdge)
+                .padding(.vertical, Spacing.cozy)
+            }
+        ) {
+            VStack(alignment: .leading, spacing: Spacing.section) {
+                XMSettingsSection("书籍") {
+                    XMSettingsGroup(presentation: .singleItem) {
                     Button {
                         isBookPickerPresented = true
                     } label: {
@@ -73,43 +99,29 @@ struct ReadCalendarCheckInSheet: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .frame(minHeight: XMSettingsPageLayout.regularRowMinHeight)
+                    }
                 }
 
-                Section {
+                XMSettingsSection("阅读量") {
+                    XMSettingsGroup(presentation: .singleItem) {
                     Picker("阅读量", selection: $amount) {
                         ForEach(1...4, id: \.self) { value in
                             Text(CheckInAmountLevel(amount: Int64(value)).label).tag(value)
                         }
                     }
                     .pickerStyle(.segmented)
-                } header: {
-                    Text("阅读量")
-                } footer: {
-                    Text(Self.dateFormatter.string(from: date))
+                    .frame(minHeight: XMSettingsPageLayout.regularRowMinHeight)
+                    }
                 }
 
                 if let errorMessage {
-                    Section {
-                        Text(errorMessage)
-                            .font(AppTypography.footnote)
-                            .foregroundStyle(Color.feedbackError)
-                    }
+                    XMInlineStatusBanner(errorMessage, tone: .error)
                 }
             }
-            .navigationTitle(recordID == nil ? "阅读打卡" : "编辑打卡")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
-                        .disabled(isSaving)
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") {
-                        save()
-                    }
-                    .disabled(selectedBook == nil || isSaving)
-                }
-            }
+            .padding(.horizontal, Spacing.screenEdge)
+            .padding(.bottom, Spacing.contentEdge)
+            .disabled(isSaving)
         }
         .interactiveDismissDisabled(isSaving)
         .sheet(isPresented: $isBookPickerPresented) {

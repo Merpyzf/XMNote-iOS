@@ -15,6 +15,7 @@ struct TimelineNoteCard: View {
     var presentationStyle: TimelineCardPresentationStyle = .standard
     var actionColor: Color = .textSecondary
     var quoteColor: UIColor = RichTextAppearance.quoteAccent
+    var onOpenDetail: (() -> Void)? = nil
 
     var body: some View {
         CardContainer(cornerRadius: TimelineCalendarStyle.eventCardCornerRadius) {
@@ -24,7 +25,9 @@ struct TimelineNoteCard: View {
                         iconSystemName: "note.text",
                         timestamp: timestamp,
                         bookName: bookName,
-                        fallbackBookTitle: event.bookTitle
+                        fallbackBookTitle: event.bookTitle,
+                        openDetailAccessibilityLabel: "打开书摘详情",
+                        onOpenDetail: onOpenDetail
                     )
                     TimelineCardDivider()
                 }

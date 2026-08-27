@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 RichTextFormat、DesignTokens、xmMinimumHitTarget 与 SwiftUI 基础组件，承接书摘编辑工具栏的动作定义与渲染约束
+ * [INPUT]: 依赖 RichTextFormat、DesignTokens、InteractionMetrics 与 SwiftUI 基础组件，承接书摘编辑工具栏的动作定义与渲染约束
  * [OUTPUT]: 对外提供 NoteToolbarActionID、NoteToolbarIconAction、NoteToolbarIconStrip，统一主编辑页与全屏编辑页工具栏动作顺序和显隐动画
  * [POS]: Views/Note/Components 页面私有工具栏构件，确保 Android → iOS 工具栏优先级顺序与动画反馈一致
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -24,6 +24,25 @@ enum NoteToolbarActionID: String, CaseIterable, Identifiable {
     case formatClear
 
     var id: String { rawValue }
+
+    var accessibilityLabel: LocalizedStringResource {
+        switch self {
+        case .undo: "撤销"
+        case .redo: "重做"
+        case .cursorLeft: "向左移动光标"
+        case .cursorRight: "向右移动光标"
+        case .fullScreen: "全屏编辑"
+        case .ocr: "文字识别"
+        case .choiceImage: "选择图片"
+        case .indent: "增加缩进"
+        case .bold: "粗体"
+        case .highlight: "高亮"
+        case .underlined: "下划线"
+        case .italic: "斜体"
+        case .strikeThrough: "删除线"
+        case .formatClear: "清除格式"
+        }
+    }
 
     var systemImage: String {
         switch self {
@@ -128,7 +147,7 @@ struct NoteToolbarIconStrip: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        HStack(spacing: Spacing.tight) {
+        HStack(spacing: Spacing.none) {
             ForEach(Array(actions.enumerated()), id: \.element.identity) { index, action in
                 if shouldInsertDivider(before: index) {
                     toolbarDivider
@@ -151,6 +170,7 @@ struct NoteToolbarIconStrip: View {
         Rectangle()
             .fill(Color.primary.opacity(dividerOpacity))
             .frame(width: 1, height: 18)
+            .padding(.horizontal, Spacing.half)
     }
 
     private func toolbarIconButton(for action: NoteToolbarIconAction) -> some View {
@@ -163,10 +183,15 @@ struct NoteToolbarIconStrip: View {
                     action.isActive ? Color.selectionAccent.opacity(0.16) : Color.clear,
                     in: RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous)
                 )
-                .xmMinimumHitTarget()
+                .frame(
+                    width: InteractionMetrics.minimumTouchTarget,
+                    height: InteractionMetrics.minimumTouchTarget
+                )
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(!action.isEnabled)
-        .accessibilityLabel(action.id.systemImage)
+        .accessibilityLabel(action.id.accessibilityLabel)
+        .accessibilityAddTraits(action.isActive ? .isSelected : [])
     }
 }

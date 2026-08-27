@@ -101,7 +101,6 @@ struct ReadingHeatmapWidgetView: View {
 
     @State private var viewModel = ReadingHeatmapWidgetViewModel()
     @State private var isHelpPresented = false
-    @State private var helpSheetHeight: CGFloat = 300
     @State private var readLoadingGate = LoadingGate()
 
     let onOpenReadCalendar: (Date) -> Void
@@ -133,8 +132,8 @@ struct ReadingHeatmapWidgetView: View {
         }
         .sheet(isPresented: $isHelpPresented) {
             HeatmapHelpSheetView()
-                .onPreferenceChange(SheetHeightKey.self) { helpSheetHeight = $0 }
-                .presentationDetents([.height(helpSheetHeight)])
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         }
         .onAppear {
             syncReadLoadingVisibility()

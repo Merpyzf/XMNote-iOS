@@ -16,6 +16,7 @@ import SwiftUI
 import GRDB
 import Nuke
 import AliyunpanSDK
+import OSLog
 
 /// 启动期一次性发布的运行时依赖，避免数据库、仓储与计时器分步写入产生不可用中间态。
 struct AppRuntimeContext {
@@ -27,6 +28,10 @@ struct AppRuntimeContext {
 @main
 /// 应用入口，常驻挂载根界面并在后台完成数据库、仓储与阅读计时依赖组装。
 struct xmnoteApp: App {
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "XMNote",
+        category: "AppInitialization"
+    )
     @UIApplicationDelegateAdaptor(ReadingTimerNotificationDelegate.self) private var notificationDelegate
     @Environment(\.scenePhase) private var scenePhase
     @State private var appState = AppState()
@@ -35,6 +40,7 @@ struct xmnoteApp: App {
     @State private var readingTimerSettingsStore = ReadingTimerSettingsStore()
     @State private var desktopWebSessionCoordinator = DesktopWebSessionCoordinator()
     @State private var initError: Error?
+    @State private var initializationAttemptID = UUID()
 
     init() {
         #if DEBUG
@@ -46,14 +52,18 @@ struct xmnoteApp: App {
 
     var body: some Scene {
         WindowGroup {
-            AppSceneRoot(runtime: runtime, initializationError: initError)
+            AppSceneRoot(
+                runtime: runtime,
+                initializationError: initError,
+                onRetryInitialization: retryInitialization
+            )
                 .environment(appState)
                 .environment(readingTimerSettingsStore)
                 .environment(desktopWebSessionCoordinator)
                 .environment(toastCenter)
                 .xmToastHost(center: toastCenter)
                 .scrollBounceBehavior(.always, axes: [.vertical, .horizontal])
-                .task {
+                .task(id: initializationAttemptID) {
                     #if DEBUG
                     if ProcessInfo.processInfo.environment["XMNOTE_WEB_PARITY_PREMIUM"] == "1" {
                         appState.isPremium = true
@@ -91,6 +101,7 @@ struct xmnoteApp: App {
                         await timerCoordinator.refresh(reason: .appLaunch)
                         await desktopWebSessionCoordinator.handleScenePhase(scenePhase)
                     } catch {
+                        Self.logger.error("App initialization failed: \(error.localizedDescription, privacy: .public)")
                         initError = error
                     }
                 }
@@ -121,6 +132,13 @@ struct xmnoteApp: App {
         }
     }
 
+    /// 以新的任务身份重试根依赖组装；已有运行时存在时拒绝重复提交。
+    private func retryInitialization() {
+        guard runtime == nil else { return }
+        initError = nil
+        initializationAttemptID = UUID()
+    }
+
 }
 
 /// 每个 WindowGroup 场景独立持有恢复状态与外部路由，避免多窗口共享返回栈或重复消费页面请求。
@@ -132,9 +150,14 @@ private struct AppSceneRoot: View {
 
     let runtime: AppRuntimeContext?
     let initializationError: Error?
+    let onRetryInitialization: () -> Void
 
     var body: some View {
-        ContentView(runtime: runtime, initializationError: initializationError)
+        ContentView(
+            runtime: runtime,
+            initializationError: initializationError,
+            onRetryInitialization: onRetryInitialization
+        )
             .environment(sceneStateStore)
             .environment(bookCollectionImportRouter)
             .environment(readingTimerDeepLinkRouter)

@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import OSLog
 
 /**
  * [INPUT]: 依赖 ReadingDashboardRepositoryProtocol 提供首页聚合观察流，依赖 ReadingDashboardSnapshot 领域模型与格式化工具
@@ -13,6 +14,10 @@ import Observation
 /// 在读首页状态中枢，负责首页聚合订阅与目标编辑交互。
 final class ReadingDashboardViewModel {
     static let yearlyGoalRange = 1...365
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "XMNote",
+        category: "ReadingDashboard"
+    )
 
     /// GoalEditorMode 区分今日目标与年度目标编辑入口，避免弹层文案和保存逻辑分叉散落在视图层。
     enum GoalEditorMode: Equatable {
@@ -165,10 +170,11 @@ final class ReadingDashboardViewModel {
                 }
             } catch {
                 guard !Task.isCancelled else { return }
+                Self.logger.error("Reading dashboard load failed: \(error.localizedDescription, privacy: .public)")
                 await MainActor.run { [weak self] in
                     guard let self else { return }
                     self.isLoading = false
-                    self.errorMessage = "首页数据加载失败：\(error.localizedDescription)"
+                    self.errorMessage = "请检查后重试"
                 }
             }
         }

@@ -22,6 +22,7 @@ struct ReadCalendarShareView: View {
 
     @Environment(RepositoryContainer.self) private var repositories
     @Environment(AppState.self) private var appState
+    @Environment(XMToastCenter.self) private var toastCenter
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var viewModel: ReadCalendarShareViewModel
@@ -31,7 +32,6 @@ struct ReadCalendarShareView: View {
     @State private var premiumBlock: PremiumBlock?
     @State private var pendingShareFileURL: URL?
     @State private var isExporting = false
-    @State private var toastCenter = XMToastCenter()
 
     /// 注入入口月份、初始成品类型与会员页导航回调。
     init(
@@ -60,7 +60,6 @@ struct ReadCalendarShareView: View {
         .xmSystemAlert(item: $premiumBlock) { block in
             premiumDescriptor(for: block)
         }
-        .xmToastHost(center: toastCenter)
         .task {
             viewModel.updateAccessBoundary(
                 minimumAccessibleMonthStart: shareMinimumAccessibleMonthStart

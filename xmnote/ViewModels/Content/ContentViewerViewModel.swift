@@ -6,6 +6,7 @@
  */
 
 import Foundation
+import OSLog
 
 /// Viewer 写操作反馈角色；View 将其映射到项目统一 Toast，状态层不直接依赖 UI 组件。
 nonisolated enum ContentViewerActionFeedbackRole: Equatable, Sendable {
@@ -26,6 +27,15 @@ nonisolated struct ContentViewerActionFeedback: Identifiable, Equatable, Sendabl
 @Observable
 /// 通用内容查看器状态源，负责 feed 订阅、分页选择、详情刷新与删除后的相邻项回退。
 final class ContentViewerViewModel {
+    enum ListErrorRecovery: Equatable {
+        case retry
+        case dismiss
+    }
+
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "XMNote",
+        category: "ContentViewer"
+    )
     private struct PendingDeletedSelection {
         let deletedItemID: ContentViewerItemID
         let deletedIndex: Int
@@ -48,6 +58,7 @@ final class ContentViewerViewModel {
     var configuredExternalAppDestinations: Set<ExternalAppDestination> = []
     var actionFeedback: ContentViewerActionFeedback?
     var listErrorMessage: String?
+    private(set) var listErrorRecovery: ListErrorRecovery?
     private(set) var dismissalRequestToken: Int = 0
 
     private var detailCache: [ContentViewerItemID: ContentViewerDetail] = [:]
@@ -135,6 +146,7 @@ final class ContentViewerViewModel {
         guard listObservationTask == nil else { return }
         isLoadingList = true
         listErrorMessage = nil
+        listErrorRecovery = nil
         let repository = self.repository
         let source = self.source
         let stream = repository.observeViewerItems(source: source)
@@ -144,6 +156,7 @@ final class ContentViewerViewModel {
                 for try await observedItems in stream {
                     guard !Task.isCancelled else { return }
                     self?.listErrorMessage = nil
+                    self?.listErrorRecovery = nil
                     self?.applyObservedItems(observedItems)
                 }
             } catch is CancellationError {
@@ -152,12 +165,25 @@ final class ContentViewerViewModel {
                 guard !Task.isCancelled else { return }
                 guard let self else { return }
                 self.isLoadingList = false
-                if self.items.isEmpty {
-                    self.listErrorMessage = "加载失败：\(error.localizedDescription)"
-                }
+                Self.logger.error("Content viewer list failed: \(error.localizedDescription, privacy: .public)")
+                self.listErrorMessage = "内容列表加载失败，请重试"
+                self.listErrorRecovery = .retry
             }
         }
         startExternalAppObservation()
+    }
+
+    /// 列表观察失败后重建唯一观察任务；旧任务先取消，避免迟到结果覆盖新状态。
+    func retryListObservation() {
+        listObservationTask?.cancel()
+        listObservationTask = nil
+        startObservation()
+    }
+
+    /// 清除保留内容上的非阻断错误，不改变列表或当前分页选择。
+    func dismissListError() {
+        listErrorMessage = nil
+        listErrorRecovery = nil
     }
 
     /// 读取当前书摘的标签编辑快照；只允许 note 类型调用，失败通过一次性反馈交给页面。
@@ -281,6 +307,7 @@ final class ContentViewerViewModel {
         guard let selectedItemID else { return }
         isDeleting = true
         listErrorMessage = nil
+        listErrorRecovery = nil
         if let currentIndex = items.firstIndex(where: { $0.id == selectedItemID }) {
             pendingDeletedSelection = PendingDeletedSelection(
                 deletedItemID: selectedItemID,
@@ -295,7 +322,9 @@ final class ContentViewerViewModel {
             pruneDetailCache(around: self.selectedItemID)
         } catch {
             pendingDeletedSelection = nil
-            listErrorMessage = "删除失败：\(error.localizedDescription)"
+            Self.logger.error("Content viewer delete failed: \(error.localizedDescription, privacy: .public)")
+            listErrorMessage = "删除失败，请重试"
+            listErrorRecovery = .dismiss
         }
         isDeleting = false
     }
@@ -431,7 +460,8 @@ private extension ContentViewerViewModel {
             detailCache[itemID] = detail
             pruneDetailCache(around: selectedItemID ?? itemID)
         } catch {
-            detailErrorMessages[itemID] = "加载失败：\(error.localizedDescription)"
+            Self.logger.error("Content viewer detail failed: \(error.localizedDescription, privacy: .public)")
+            detailErrorMessages[itemID] = "内容详情加载失败，请重试"
             pruneDetailCache(around: selectedItemID ?? itemID)
         }
     }

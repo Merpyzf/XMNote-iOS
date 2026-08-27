@@ -20,45 +20,46 @@ struct BackupRestoreConfirmSheet: View {
     }()
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: Spacing.comfortable) {
-                    XMSettingsGroup(
-                        horizontalPadding: Spacing.none,
-                        verticalPadding: Spacing.none
-                    ) {
-                        VStack(spacing: Spacing.none) {
-                            detailRow(title: "来源", value: target.sourceName)
-                            XMSettingsDivider()
-                                .padding(.leading, Spacing.contentEdge)
-                            detailRow(title: "设备", value: target.deviceName)
-                            XMSettingsDivider()
-                                .padding(.leading, Spacing.contentEdge)
-                            detailRow(title: "备份时间", value: backupDateText)
-                        }
+        XMSheetScaffold(
+            title: "从备份恢复",
+            onClose: onCancel,
+            bottomBar: {
+                Button("恢复", role: .destructive, action: onConfirm)
+                    .font(AppTypography.subheadlineSemibold)
+                    .foregroundStyle(Color.primaryActionForeground)
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: InteractionMetrics.minimumTouchTarget)
+                    .background(
+                        Color.feedbackError,
+                        in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
+                    )
+                    .padding(.horizontal, Spacing.screenEdge)
+                    .padding(.vertical, Spacing.cozy)
+            }
+        ) {
+            VStack(spacing: Spacing.comfortable) {
+                XMSettingsGroup(
+                    horizontalPadding: Spacing.none,
+                    verticalPadding: Spacing.none
+                ) {
+                    VStack(spacing: Spacing.none) {
+                        detailRow(title: "来源", value: target.sourceName)
+                        XMSettingsDivider()
+                            .padding(.leading, Spacing.contentEdge)
+                        detailRow(title: "设备", value: target.deviceName)
+                        XMSettingsDivider()
+                            .padding(.leading, Spacing.contentEdge)
+                        detailRow(title: "备份时间", value: backupDateText)
                     }
+                }
 
-                    Text("恢复后，当前设备上的数据将被备份中的内容替换。此操作无法撤销。")
-                        .font(AppTypography.footnote)
-                        .foregroundStyle(Color.textSecondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .padding(.horizontal, Spacing.screenEdge)
-                .padding(.vertical, Spacing.base)
+                Text("恢复后，当前设备上的数据将被备份中的内容替换。此操作无法撤销。")
+                    .font(AppTypography.footnote)
+                    .foregroundStyle(Color.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .scrollBounceBehavior(.always)
-            .background(Color.surfacePage)
-            .navigationTitle("从备份恢复")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消", action: onCancel)
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("恢复", action: onConfirm)
-                        .foregroundStyle(Color.feedbackError)
-                }
-            }
+            .padding(.horizontal, Spacing.screenEdge)
+            .padding(.bottom, Spacing.contentEdge)
         }
     }
 

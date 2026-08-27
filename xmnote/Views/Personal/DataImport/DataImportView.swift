@@ -290,7 +290,19 @@ private struct WereadBatchView: View {
     }
 
     @ViewBuilder private func batchStatus(_ status: WereadImportBatchStatus) -> some View {
-        switch status { case .notStarted: Text("未开始"); case .loading(let percent): ProgressView(value: Double(percent), total: 100).frame(width: 72); case .failed: Text("重试").foregroundStyle(Color.red); case .success: Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.green) }
+        switch status {
+        case .notStarted:
+            Text("未开始")
+        case .loading(let percent):
+            ProgressView(value: Double(percent), total: 100)
+                .frame(width: 72)
+        case .failed:
+            Text("重试")
+                .foregroundStyle(Color.feedbackError)
+        case .success:
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(Color.feedbackSuccess)
+        }
     }
 }
 
@@ -363,11 +375,12 @@ private struct WereadImportPreviewView: View {
         Section {
             HStack(alignment: .top, spacing: Spacing.base) {
                 selectionButton(book)
-                AsyncImage(url: URL(string: book.coverURL)) { image in
-                    image.resizable().scaledToFill()
-                } placeholder: { Color.surfaceNested }
-                .frame(width: 48, height: 68)
-                .clipShape(RoundedRectangle(cornerRadius: CornerRadius.inlaySmall))
+                XMBookCover.fixedWidth(
+                    48,
+                    urlString: book.coverURL,
+                    cornerRadius: CornerRadius.inlaySmall,
+                    placeholderIconSize: .small
+                )
                 VStack(alignment: .leading, spacing: Spacing.compact) {
                     Text(book.title).font(AppTypography.headline)
                     Text(book.author).font(AppTypography.caption).foregroundStyle(Color.textSecondary)
@@ -404,9 +417,20 @@ private struct WereadImportPreviewView: View {
 
     private func selectionButton(_ book: WereadImportBook) -> some View {
         Button { viewModel.toggleBook(book.id) } label: {
-            Image(systemName: book.isSelected ? "checkmark.circle.fill" : "circle").font(.title2)
+            XMSelectionIndicator(
+                style: .checkbox,
+                isSelected: book.isSelected,
+                font: AppTypography.title2,
+                showsUnselectedBase: true
+            )
+            .frame(
+                width: InteractionMetrics.minimumTouchTarget,
+                height: InteractionMetrics.minimumTouchTarget
+            )
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(book.isSelected ? "取消选择《\(book.title)》" : "选择《\(book.title)》")
+        .accessibilityAddTraits(book.isSelected ? .isSelected : [])
     }
 
     private func summaryText(for book: WereadImportBook) -> String {
@@ -421,7 +445,32 @@ private struct WereadBookContentPreviewView: View {
             if !book.notes.isEmpty {
                 Section { HStack { Button("全选") { selectNotes(true) }; Spacer(); Button("取消全选") { selectNotes(false) } } } header: { Text("书摘") }
                 ForEach($book.notes) { $note in
-                    HStack(alignment: .top) { Button { note.isSelected.toggle() } label: { Image(systemName: note.isSelected ? "checkmark.circle.fill" : "circle") }.buttonStyle(.plain); VStack(alignment: .leading) { Text(note.content); if !note.idea.isEmpty { Text(note.idea).font(AppTypography.caption).foregroundStyle(Color.textSecondary) } } }
+                    HStack(alignment: .top) {
+                        Button { note.isSelected.toggle() } label: {
+                            XMSelectionIndicator(
+                                style: .checkbox,
+                                isSelected: note.isSelected,
+                                font: AppTypography.title2,
+                                showsUnselectedBase: true
+                            )
+                            .frame(
+                                width: InteractionMetrics.minimumTouchTarget,
+                                height: InteractionMetrics.minimumTouchTarget
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(note.isSelected ? "取消选择书摘" : "选择书摘")
+                        .accessibilityAddTraits(note.isSelected ? .isSelected : [])
+
+                        VStack(alignment: .leading) {
+                            Text(note.content)
+                            if !note.idea.isEmpty {
+                                Text(note.idea)
+                                    .font(AppTypography.caption)
+                                    .foregroundStyle(Color.textSecondary)
+                            }
+                        }
+                    }
                 }
             }
             if !book.reviews.isEmpty { Section("书评（随书导入）") { ForEach(book.reviews) { review in VStack(alignment: .leading) { if !review.title.isEmpty { Text(review.title).font(AppTypography.headline) }; Text(review.content) } } } }

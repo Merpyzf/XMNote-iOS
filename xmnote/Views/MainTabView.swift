@@ -1983,17 +1983,13 @@ private struct MainTabBootstrapHome: View {
     let tab: AppTab
     let snapshot: AppSceneSnapshot
 
-    private var topBarHeight: CGFloat {
-        dynamicTypeSize >= .accessibility1 ? 60 : 56
-    }
-
     var body: some View {
         ZStack(alignment: .top) {
             Color.surfacePage.ignoresSafeArea()
 
             MainTabBootstrapContent(tab: tab, snapshot: snapshot)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .padding(.top, topBarHeight)
+                .padding(.top, PrimaryTopBarLayout.minimumHeight(for: dynamicTypeSize))
 
             HomeTopHeaderGradient()
                 .allowsHitTesting(false)

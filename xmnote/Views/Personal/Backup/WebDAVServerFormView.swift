@@ -13,34 +13,44 @@ struct WebDAVServerFormView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
-            Form {
+        XMSheetScaffold(
+            title: viewModel.editingServer == nil ? "添加服务器" : "编辑服务器",
+            onClose: {
+                guard !viewModel.isTesting else { return }
+                dismiss()
+            },
+            bottomBar: {
+                Button {
+                    Task {
+                        if await viewModel.save() {
+                            dismiss()
+                        }
+                    }
+                } label: {
+                    HStack(spacing: Spacing.cozy) {
+                        if viewModel.isTesting {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                        Text(viewModel.isTesting ? "正在保存…" : "保存")
+                    }
+                    .font(AppTypography.subheadlineSemibold)
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: InteractionMetrics.minimumTouchTarget)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!viewModel.isFormValid || viewModel.isTesting)
+                .padding(.horizontal, Spacing.screenEdge)
+                .padding(.vertical, Spacing.cozy)
+            }
+        ) {
+            VStack(alignment: .leading, spacing: Spacing.section) {
                 formFields
                 testSection
             }
+            .padding(.horizontal, Spacing.screenEdge)
+            .padding(.bottom, Spacing.contentEdge)
             .disabled(viewModel.isTesting)
-            .navigationTitle(viewModel.editingServer == nil ? "添加服务器" : "编辑服务器")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
-                        .disabled(viewModel.isTesting)
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    if viewModel.isTesting {
-                        LoadingStateView(style: .inline)
-                    } else {
-                        Button("保存") {
-                            Task {
-                                if await viewModel.save() {
-                                    dismiss()
-                                }
-                            }
-                        }
-                        .disabled(!viewModel.isFormValid)
-                    }
-                }
-            }
         }
         .interactiveDismissDisabled(viewModel.isTesting)
     }
@@ -51,21 +61,29 @@ struct WebDAVServerFormView: View {
 private extension WebDAVServerFormView {
 
     var formFields: some View {
-        Section {
+        XMSettingsGroup {
             TextField("名称", text: $viewModel.formTitle)
+                .frame(minHeight: XMSettingsPageLayout.inputMinHeight)
+            XMSettingsDivider()
             TextField("服务器地址", text: $viewModel.formAddress)
                 .keyboardType(.URL)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
+                .frame(minHeight: XMSettingsPageLayout.inputMinHeight)
+            XMSettingsDivider()
             TextField("账号", text: $viewModel.formAccount)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
+                .frame(minHeight: XMSettingsPageLayout.inputMinHeight)
+            XMSettingsDivider()
             SecureField("密码", text: $viewModel.formPassword)
+                .frame(minHeight: XMSettingsPageLayout.inputMinHeight)
         }
+        .font(AppTypography.body)
     }
 
     var testSection: some View {
-        Section {
+        XMSettingsGroup {
             Button {
                 Task { await viewModel.testConnection() }
             } label: {
@@ -80,9 +98,12 @@ private extension WebDAVServerFormView {
             .disabled(!viewModel.isFormValid || viewModel.isTesting)
 
             if let message = viewModel.testResultMessage {
+                XMSettingsDivider()
                 Text(message)
                     .font(AppTypography.caption)
-                    .foregroundStyle(message.contains("成功") ? Color.appTint : Color.red)
+                    .foregroundStyle(message.contains("成功") ? Color.feedbackSuccess : Color.feedbackError)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, Spacing.cozy)
             }
         }
     }

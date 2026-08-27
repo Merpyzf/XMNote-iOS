@@ -163,11 +163,14 @@ private struct ContentViewerLoadedView: View {
             let safeAreaBottomInset = proxy.safeAreaInsets.bottom
 
             VStack(spacing: Spacing.none) {
-                if presentationStyle.showsListErrorBanner,
-                   let listErrorMessage = viewModel.listErrorMessage,
+                if let listErrorMessage = viewModel.listErrorMessage,
                    !listErrorMessage.isEmpty,
                    !viewModel.items.isEmpty {
-                    viewerMessageCard(text: listErrorMessage)
+                    XMInlineStatusBanner(
+                        listErrorMessage,
+                        tone: .error,
+                        action: listErrorAction
+                    )
                         .padding(.horizontal, Spacing.screenEdge)
                         .padding(.top, Spacing.base)
                 }
@@ -196,6 +199,7 @@ private struct ContentViewerLoadedView: View {
                     onRefreshDetail: { itemID in
                         await viewModel.loadDetailIfNeeded(itemID: itemID)
                     },
+                    onRetryList: viewModel.retryListObservation,
                     onAISelection: presentTextLookup
                 )
             }
@@ -233,7 +237,7 @@ private struct ContentViewerLoadedView: View {
                 tags: selectedTagNames,
                 onDismiss: { showsTagSheet = false }
             )
-            .presentationDetents([.height(220)])
+            .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
         }
         .sheet(item: $tagEditSession) { session in
@@ -623,13 +627,26 @@ private struct ContentViewerLoadedView: View {
     }
 
     private var listState: ContentViewerContentView.Props.ListState {
-        if viewModel.items.isEmpty {
-            if viewModel.isLoadingList {
-                return listLoadingGate.isVisible ? .loading : .placeholder
-            }
-            return .empty(viewModel.listErrorMessage ?? presentationStyle.missingItemMessage)
+        .resolve(
+            isEmpty: viewModel.items.isEmpty,
+            isLoading: viewModel.isLoadingList,
+            isLoadingVisible: listLoadingGate.isVisible,
+            errorMessage: viewModel.listErrorMessage,
+            emptyMessage: presentationStyle.missingItemMessage
+        )
+    }
+
+    private var listErrorAction: XMStateAction {
+        switch viewModel.listErrorRecovery {
+        case .retry:
+            XMStateAction(
+                "重试",
+                systemImage: "arrow.clockwise",
+                perform: viewModel.retryListObservation
+            )
+        case .dismiss, .none:
+            XMStateAction("关闭", perform: viewModel.dismissListError)
         }
-        return .content
     }
 
     func syncListLoadingVisibility() {
@@ -642,7 +659,7 @@ private struct ContentViewerLoadedView: View {
             return .detail(detail)
         }
         if let message = viewModel.detailErrorMessage(for: itemID) {
-            return .error(message)
+            return .failure(message)
         }
         return .loading
     }

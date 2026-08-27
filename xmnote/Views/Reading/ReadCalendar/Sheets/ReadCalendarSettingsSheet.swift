@@ -1,7 +1,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 ReadCalendarSettings 提供受业务规则约束的设置状态，依赖通用设置卡片与 Toast 组件
+ * [INPUT]: 依赖 ReadCalendarSettings 提供受业务规则约束的设置状态，依赖通用设置卡片与根环境 Toast 中心
  * [OUTPUT]: 对外提供采用统一 17/15pt 设置行层级的 ReadCalendarSettingsSheet
  * [POS]: ReadCalendar 业务模块 Sheet，负责卡片外分组、流式数字选项、六类阅读行为与行内展开交互
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -11,8 +11,8 @@ import SwiftUI
 struct ReadCalendarSettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(XMToastCenter.self) private var toastCenter
     @Bindable var settings: ReadCalendarSettings
-    @State private var toastCenter = XMToastCenter()
     @State private var isDayEventCountExpanded = false
     @State private var isEmojiExpanded = false
     @State private var selectedDetent = ReadCalendarSettingsSheetLayout.compactDetent
@@ -35,7 +35,6 @@ struct ReadCalendarSettingsSheet: View {
             selection: $selectedDetent
         )
         .presentationDragIndicator(.visible)
-        .xmToastHost(center: toastCenter)
         .onChange(of: selectedDetent) { oldValue, newValue in
             guard oldValue == .large,
                   newValue == ReadCalendarSettingsSheetLayout.compactDetent else { return }

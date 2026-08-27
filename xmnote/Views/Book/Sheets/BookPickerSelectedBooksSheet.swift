@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖外层共享 BookPickerViewModel 的选择草稿、统一 Sheet 骨架、XMSearchBar 与 XMBookCover
+ * [INPUT]: 依赖外层共享 BookPickerViewModel 的选择草稿、统一 Sheet 骨架、XMInlineSearchField 与 XMBookCover
  * [OUTPUT]: 对外提供 BookPickerSelectedBooksSheet，以连续分组表面查看、搜索并即时取消已选本地或远端书籍
  * [POS]: BookPicker 页面私有管理 Sheet，只修改外层草稿，不承担业务提交
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -42,10 +42,11 @@ struct BookPickerSelectedBooksSheet: View {
     }
 
     private var searchBar: some View {
-        XMSearchBar(
+        XMInlineSearchField(
             text: $query,
             isActive: $isSearchActive,
-            prompt: "搜索已选书籍"
+            prompt: "搜索已选书籍",
+            cancelPresentation: .hidden
         )
         .padding(.horizontal, Spacing.screenEdge)
         .padding(.bottom, Spacing.section)

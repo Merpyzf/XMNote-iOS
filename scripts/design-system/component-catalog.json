@@ -534,7 +534,7 @@
     },
     {
       "path": "xmnote/UIComponents/Navigation/TopBar/PrimaryTopBar.swift",
-      "symbols": ["PrimaryTopBar"],
+      "symbols": ["PrimaryTopBarLayout", "PrimaryTopBar"],
       "status": "canonical", "category": "layout", "layer": "navigation", "framework": "swiftui", "usageScope": "appShell",
       "stateCoverage": ["normal", "readOnly"],
       "dependencies": ["DesignSystem"],

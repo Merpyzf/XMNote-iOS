@@ -1,7 +1,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 ReadingTimerStartDraft 输出启动计时方式与倒计时时长
+ * [INPUT]: 依赖 ReadingTimerStartDraft、Settings 组件族与 InteractionMetrics 输出启动计时方式与倒计时时长
  * [OUTPUT]: 对外提供 ReadingTimerStartSheet 与 ReadingTimerStartDraft，承接阅读计时开始前的正计时/倒计时选择
  * [POS]: Reading/Sheets 业务弹层，负责阅读计时启动配置，避免把倒计时设置堆叠到主计时页
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -23,19 +23,35 @@ struct ReadingTimerStartSheet: View {
     private let presetMinutes = [1, 15, 30, 45, 60, 90]
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section("计时方式") {
+        XMSheetScaffold(
+            title: "开始阅读计时",
+            onClose: { dismiss() },
+            bottomBar: {
+                Button("开始", action: submit)
+                    .font(AppTypography.subheadlineSemibold)
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: InteractionMetrics.minimumTouchTarget)
+                    .buttonStyle(.borderedProminent)
+                    .padding(.horizontal, Spacing.screenEdge)
+                    .padding(.vertical, Spacing.cozy)
+            }
+        ) {
+            VStack(alignment: .leading, spacing: Spacing.section) {
+                XMSettingsSection("计时方式") {
+                    XMSettingsGroup(presentation: .singleItem) {
                     Picker("计时方式", selection: $mode) {
                         ForEach(ReadingTimerStartMode.allCases, id: \.self) { mode in
                             Text(mode.title).tag(mode)
                         }
                     }
                     .pickerStyle(.segmented)
+                    .frame(minHeight: XMSettingsPageLayout.regularRowMinHeight)
+                    }
                 }
 
                 if mode == .countdown {
-                    Section("阅读时长") {
+                    XMSettingsSection("阅读时长") {
+                        XMSettingsGroup {
                         Stepper(value: $countdownMinutes, in: 1...720, step: 5) {
                             HStack {
                                 Text("时长")
@@ -48,7 +64,9 @@ struct ReadingTimerStartSheet: View {
                             }
                         }
 
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 76), spacing: Spacing.cozy)], spacing: Spacing.cozy) {
+                        XMSettingsDivider()
+
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 76), spacing: Spacing.cozy)], spacing: Spacing.base) {
                             ForEach(presetMinutes, id: \.self) { minutes in
                                 Button {
                                     countdownMinutes = minutes
@@ -61,28 +79,19 @@ struct ReadingTimerStartSheet: View {
                                             Capsule()
                                                 .fill(minutes == countdownMinutes ? Color.textPrimary : Color.surfaceCard)
                                         )
+                                        .frame(minHeight: InteractionMetrics.minimumTouchTarget)
+                                        .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
                             }
                         }
-                        .padding(.vertical, Spacing.tiny)
+                        .padding(.vertical, Spacing.cozy)
+                        }
                     }
                 }
             }
-            .navigationTitle("开始阅读计时")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") {
-                        dismiss()
-                    }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("开始") {
-                        submit()
-                    }
-                }
-            }
+            .padding(.horizontal, Spacing.screenEdge)
+            .padding(.bottom, Spacing.contentEdge)
         }
         .presentationDetents([.medium])
         .presentationDragIndicator(.visible)

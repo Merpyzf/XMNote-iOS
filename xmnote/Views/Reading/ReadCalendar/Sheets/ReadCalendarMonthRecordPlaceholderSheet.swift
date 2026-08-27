@@ -20,18 +20,29 @@ struct ReadCalendarMonthRecordPlaceholderSheet: View {
 
     let monthStart: Date
     let onOpenMonthSummary: (Date) -> Void
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        VStack(spacing: Layout.contentSpacing) {
+        XMSheetScaffold(
+            title: "\(monthTitle)阅读记录",
+            onClose: { dismiss() },
+            bottomBar: {
+                Button {
+                    onOpenMonthSummary(monthStart)
+                } label: {
+                    Text("查看当月总结")
+                        .font(AppTypography.subheadlineSemibold)
+                        .frame(maxWidth: .infinity, minHeight: Layout.buttonHeight)
+                }
+                .buttonStyle(.borderedProminent)
+                .padding(.horizontal, Spacing.screenEdge)
+                .padding(.vertical, Spacing.cozy)
+            }
+        ) {
             VStack(spacing: Spacing.cozy) {
                 Image(systemName: "book.pages")
                     .font(.system(size: Layout.iconSize, weight: .medium))
                     .foregroundStyle(Color.iconSecondary)
-
-                Text("\(monthTitle)阅读记录")
-                    .font(AppTypography.headlineSemibold)
-                    .foregroundStyle(Color.textPrimary)
-                    .monospacedDigit()
 
                 Text("当月阅读记录页正在接入，当前可先查看该月总结")
                     .font(AppTypography.subheadline)
@@ -45,27 +56,8 @@ struct ReadCalendarMonthRecordPlaceholderSheet: View {
                     .fill(Color.surfaceNested)
             )
 
-            Button {
-                onOpenMonthSummary(monthStart)
-            } label: {
-                Text("查看当月总结")
-                    .font(AppTypography.subheadlineSemibold)
-                    .foregroundStyle(ReadCalendarTheme.topAction)
-                    .frame(maxWidth: .infinity, minHeight: Layout.buttonHeight)
-            }
-            .buttonStyle(.plain)
-            .background(
-                RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                    .fill(ReadCalendarTheme.selectionFill.opacity(0.72))
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                    .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
-            }
+            .padding(Layout.containerPadding)
         }
-        .padding(Layout.containerPadding)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Color.surfaceSheet)
     }
 }
 

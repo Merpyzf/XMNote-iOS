@@ -75,86 +75,111 @@ struct ReadingTimerFinishSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    VStack(alignment: .leading, spacing: Spacing.cozy) {
-                        Text(ReadDurationFormatter.format(seconds: effectiveElapsedSeconds))
-                            .font(AppTypography.title3Semibold)
-                            .foregroundStyle(Color.textPrimary)
-                            .contentTransition(.numericText())
-
-                        Button {
-                            shouldPresentBookPicker = true
-                        } label: {
-                            HStack(spacing: Spacing.cozy) {
-                                Text(selectedBook?.title ?? book?.name ?? "选择书籍")
-                                    .font(AppTypography.bodyMedium)
-                                    .foregroundStyle(Color.textPrimary)
-                                    .lineLimit(2)
-                                Spacer(minLength: Spacing.base)
-                                Image(systemName: "chevron.right")
-                                    .font(AppTypography.caption)
-                                    .foregroundStyle(Color.textSecondary)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.vertical, Spacing.micro)
-                }
-
-                Section("阅读时间") {
-                    DatePicker(
-                        "开始",
-                        selection: $startAt,
-                        displayedComponents: [.date, .hourAndMinute]
-                    )
-                    DatePicker(
-                        "结束",
-                        selection: $endAt,
-                        in: ...Date(),
-                        displayedComponents: [.date, .hourAndMinute]
-                    )
-                    if !isTimeRangeValid {
-                        Text("结束时间必须晚于开始时间，且不能超过当前时间")
-                            .font(AppTypography.footnote)
-                            .foregroundStyle(Color.feedbackError)
-                    }
-                }
-
-                Section("阅读位置") {
-                    TextField(positionPlaceholder, text: $positionText)
-                        .keyboardType(positionKeyboardType)
-                }
-
-                Section("本次感悟") {
-                    insightEditor
-                }
-
-                Section {
-                    Toggle("标记为读完", isOn: $markReadDone)
-                }
-
-                if let errorMessage = coordinator.errorMessage {
-                    Section {
-                        Text(errorMessage)
-                            .font(AppTypography.footnote)
-                            .foregroundStyle(Color.feedbackError)
-                    }
-                }
-            }
-            .safeAreaInset(edge: .bottom) {
+        XMSheetScaffold(
+            title: "保存阅读记录",
+            onClose: {
+                guard !coordinator.isWriting else { return }
+                dismiss()
+            },
+            bottomBar: {
                 finishActionBar
             }
-            .navigationTitle("保存阅读记录")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("关闭") {
-                        dismiss()
+        ) {
+            VStack(alignment: .leading, spacing: Spacing.section) {
+                XMSettingsSection("本次记录") {
+                    XMSettingsGroup {
+                        VStack(alignment: .leading, spacing: Spacing.cozy) {
+                            Text(ReadDurationFormatter.format(seconds: effectiveElapsedSeconds))
+                                .font(AppTypography.title3Semibold)
+                                .foregroundStyle(Color.textPrimary)
+                                .contentTransition(.numericText())
+
+                            Button {
+                                shouldPresentBookPicker = true
+                            } label: {
+                                HStack(spacing: Spacing.cozy) {
+                                    Text(selectedBook?.title ?? book?.name ?? "选择书籍")
+                                        .font(AppTypography.bodyMedium)
+                                        .foregroundStyle(Color.textPrimary)
+                                        .lineLimit(2)
+                                    Spacer(minLength: Spacing.base)
+                                    Image(systemName: "chevron.right")
+                                        .font(AppTypography.caption)
+                                        .foregroundStyle(Color.textSecondary)
+                                }
+                                .frame(minHeight: InteractionMetrics.minimumTouchTarget)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+
+                            if let bookErrorMessage {
+                                fieldError(bookErrorMessage)
+                            }
+                        }
                     }
                 }
+
+                XMSettingsSection("阅读时间") {
+                    XMSettingsGroup {
+                        DatePicker(
+                            "开始",
+                            selection: $startAt,
+                            displayedComponents: [.date, .hourAndMinute]
+                        )
+                        .frame(minHeight: XMSettingsPageLayout.regularRowMinHeight)
+
+                        XMSettingsDivider()
+
+                        DatePicker(
+                            "结束",
+                            selection: $endAt,
+                            in: ...Date(),
+                            displayedComponents: [.date, .hourAndMinute]
+                        )
+                        .frame(minHeight: XMSettingsPageLayout.regularRowMinHeight)
+
+                        if let timeErrorMessage {
+                            XMSettingsDivider()
+                            fieldError(timeErrorMessage)
+                                .padding(.vertical, Spacing.cozy)
+                        }
+                    }
+                }
+
+                XMSettingsSection("阅读位置") {
+                    XMSettingsGroup(presentation: positionErrorMessage == nil ? .singleItem : .grouped) {
+                        TextField(positionPlaceholder, text: $positionText)
+                            .font(AppTypography.body)
+                            .keyboardType(positionKeyboardType)
+                            .frame(minHeight: XMSettingsPageLayout.inputMinHeight)
+
+                        if let positionErrorMessage {
+                            XMSettingsDivider()
+                            fieldError(positionErrorMessage)
+                                .padding(.vertical, Spacing.cozy)
+                        }
+                    }
+                }
+
+                XMSettingsSection("本次感悟") {
+                    XMSettingsGroup {
+                        insightEditor
+                    }
+                }
+
+                XMSettingsSection("完成状态") {
+                    XMSettingsGroup(presentation: .singleItem) {
+                        XMSettingsToggleRow(title: "标记为读完", isOn: $markReadDone)
+                    }
+                }
+
+                if let remainingCoordinatorError {
+                    XMInlineStatusBanner(remainingCoordinatorError, tone: .error)
+                }
             }
+            .padding(.horizontal, Spacing.screenEdge)
+            .padding(.bottom, Spacing.contentEdge)
+            .disabled(coordinator.isWriting)
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
@@ -191,6 +216,18 @@ struct ReadingTimerFinishSheet: View {
         )
         .onAppear {
             initializeDraftIfNeeded()
+        }
+        .onChange(of: selectedBook?.id) { _, _ in
+            clearCoordinatorError("请选择记录书籍")
+        }
+        .onChange(of: startAt) { _, _ in
+            clearCoordinatorError("阅读时间范围不正确")
+        }
+        .onChange(of: endAt) { _, _ in
+            clearCoordinatorError("阅读时间范围不正确")
+        }
+        .onChange(of: positionText) { _, _ in
+            clearCoordinatorError("阅读位置格式不正确")
         }
     }
 
@@ -295,7 +332,50 @@ struct ReadingTimerFinishSheet: View {
         }
     }
 
+    private var bookErrorMessage: String? {
+        coordinator.errorMessage == "请选择记录书籍" ? coordinator.errorMessage : nil
+    }
+
+    private var timeErrorMessage: String? {
+        if !isTimeRangeValid {
+            return "结束时间必须晚于开始时间，且不能超过当前时间"
+        }
+        if coordinator.errorMessage == "阅读时间范围不正确"
+            || coordinator.errorMessage == "阅读时长为 0，请继续计时或放弃本次记录" {
+            return coordinator.errorMessage
+        }
+        return nil
+    }
+
+    private var positionErrorMessage: String? {
+        let trimmed = positionText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty, positionValue == nil {
+            return "阅读位置格式不正确"
+        }
+        return coordinator.errorMessage == "阅读位置格式不正确" ? coordinator.errorMessage : nil
+    }
+
+    private var remainingCoordinatorError: String? {
+        guard let message = coordinator.errorMessage else { return nil }
+        let fieldMessages = [bookErrorMessage, timeErrorMessage, positionErrorMessage]
+        return fieldMessages.contains(message) ? nil : message
+    }
+
+    private func fieldError(_ message: String) -> some View {
+        Text(message)
+            .font(SettingsTypography.rowDescription)
+            .foregroundStyle(Color.feedbackError)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityLabel("错误：\(message)")
+    }
+
+    private func clearCoordinatorError(_ message: String) {
+        guard coordinator.errorMessage == message else { return }
+        coordinator.errorMessage = nil
+    }
+
     private func submit() {
+        coordinator.errorMessage = nil
         guard let targetBookId else {
             coordinator.errorMessage = "请选择记录书籍"
             return

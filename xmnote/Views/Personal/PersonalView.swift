@@ -107,7 +107,7 @@ struct PersonalView: View {
     @Environment(AppState.self) private var appState
     @Environment(DesktopWebSessionCoordinator.self) private var desktopWebSessionCoordinator
     @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
-    private let topBarHeight: CGFloat = 56
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let onAddBook: () -> Void
     let onAddNote: () -> Void
     let onOpenReadCalendar: () -> Void
@@ -140,7 +140,7 @@ struct PersonalView: View {
                 .padding(.horizontal, Spacing.screenEdge)
                 .padding(.vertical, Spacing.base)
             }
-            .padding(.top, topBarHeight)
+            .padding(.top, PrimaryTopBarLayout.minimumHeight(for: dynamicTypeSize))
 
             HomeTopHeaderGradient()
                 .allowsHitTesting(false)

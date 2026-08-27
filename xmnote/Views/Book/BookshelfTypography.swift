@@ -56,6 +56,27 @@ enum BookshelfTypography {
         minimumPointSize: 11
     )
 
+    /// 返回与 SwiftUI gridTitle 同源、按指定内容尺寸类别缩放的 UIKit 测量字体。
+    nonisolated static func uiGridTitle(compatibleWith traits: UITraitCollection) -> UIFont {
+        AppTypography.uiFixed(
+            baseSize: 12,
+            textStyle: .caption1,
+            weight: .medium,
+            minimumPointSize: 12,
+            compatibleWith: traits
+        )
+    }
+
+    /// 返回与 SwiftUI gridSubtitle 同源、按指定内容尺寸类别缩放的 UIKit 测量字体。
+    nonisolated static func uiGridSubtitle(compatibleWith traits: UITraitCollection) -> UIFont {
+        AppTypography.uiFixed(
+            baseSize: 11,
+            textStyle: .caption2,
+            minimumPointSize: 11,
+            compatibleWith: traits
+        )
+    }
+
     static let listTitle: Font = AppTypography.bodyMedium
     static let uiListTitle: UIFont = AppTypography.uiSemantic(.body, weight: .medium)
 }

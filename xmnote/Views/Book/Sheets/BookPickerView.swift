@@ -189,14 +189,14 @@ private struct BookPickerResolvedView: View {
     }
 
     private func searchBar(_ viewModel: BookPickerViewModel) -> some View {
-        XMSearchBar(
+        XMInlineSearchField(
             text: Binding(
                 get: { viewModel.query },
                 set: { viewModel.updateQuery($0) }
             ),
             isActive: $isSearchActive,
             prompt: "搜索书名、作者、ISBN",
-            isEnabled: !viewModel.isResolvingRemoteSelections,
+            cancelPresentation: .hidden,
             onSubmit: {
                 guard viewModel.visibleScope == .online else { return }
                 Task {
@@ -204,6 +204,7 @@ private struct BookPickerResolvedView: View {
                 }
             }
         )
+        .disabled(viewModel.isResolvingRemoteSelections)
         .padding(.horizontal, Spacing.screenEdge)
         .padding(.bottom, Spacing.section)
     }
@@ -530,7 +531,7 @@ private struct BookPickerResolvedView: View {
     }
 
     private func multipleSelectionBar(_ viewModel: BookPickerViewModel) -> some View {
-        XMPrimaryActionButton(multipleConfirmationTitle(for: viewModel)) {
+        Button(multipleConfirmationTitle(for: viewModel)) {
             confirmationTask?.cancel()
             confirmationTask = Task {
                 guard let result = await viewModel.confirmMultipleSelection() else { return }
@@ -538,6 +539,7 @@ private struct BookPickerResolvedView: View {
                 finish(result)
             }
         }
+        .buttonStyle(BookPickerConfirmationButtonStyle())
         .disabled(!canConfirmMultipleSelection(viewModel))
         .accessibilityIdentifier("book.picker.confirm")
         .padding(.horizontal, Spacing.screenEdge)
@@ -920,4 +922,45 @@ struct BookPickerGroupedRowButtonStyle: ButtonStyle {
                 )
             )
     }
+}
+
+/// BookPicker 私有的底部确认样式；使用可用宽度，不把单一 Sheet 尺寸晋升为公共按钮合同。
+private struct BookPickerConfirmationButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        let shape = RoundedRectangle(
+            cornerRadius: CornerRadius.blockLarge,
+            style: .continuous
+        )
+
+        configuration.label
+            .font(AppTypography.headlineSemibold)
+            .foregroundStyle(
+                isEnabled
+                    ? Color.primaryActionForeground
+                    : Color.buttonDisabledForeground
+            )
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, Spacing.screenEdge)
+            .frame(
+                maxWidth: .infinity,
+                minHeight: BookPickerConfirmationMetrics.minimumControlHeight
+            )
+            .background(
+                isEnabled ? Color.primaryActionFill : Color.buttonDisabled,
+                in: shape
+            )
+            .contentShape(shape)
+            .opacity(
+                isEnabled && configuration.isPressed
+                    ? BookPickerConfirmationMetrics.pressedOpacity
+                    : 1
+            )
+    }
+}
+
+private enum BookPickerConfirmationMetrics {
+    static let minimumControlHeight: CGFloat = 46
+    static let pressedOpacity = 0.86
 }

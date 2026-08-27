@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import SwiftUI
 
 /**
@@ -19,7 +20,13 @@ final class TimelineViewModel {
     enum BootstrapPhase: Equatable {
         case bootstrapping
         case ready
+        case failed
     }
+
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "XMNote",
+        category: "Timeline"
+    )
 
     var sections: [TimelineSection] = []
     private(set) var sectionsRevision: Int = 0
@@ -28,6 +35,8 @@ final class TimelineViewModel {
     var displayedMonthStart: Date
     private(set) var bootstrapPhase: BootstrapPhase = .bootstrapping
     private(set) var isRefreshing = false
+    private(set) var initialErrorMessage: String?
+    private(set) var refreshErrorMessage: String?
     private(set) var markerRevision: Int = 0
 
     private var markerCache: [String: [Date: TimelineDayMarker]] = [:]
@@ -54,25 +63,52 @@ final class TimelineViewModel {
     /// 首次加载：并发拉取首屏列表与当前月份 marker，并以单次快照提交首屏。
     func loadInitialData() async {
         guard !hasResolvedInitialSnapshot else { return }
+        bootstrapPhase = .bootstrapping
+        initialErrorMessage = nil
 
-        let snapshot = await fetchBootstrapSnapshot()
-        applySections(snapshot.sections)
-        replaceMarkerCache(with: snapshot.markerCache)
-        hasResolvedInitialSnapshot = true
-        bootstrapPhase = .ready
-        await preloadMarkers(around: displayedMonthStart)
+        do {
+            let snapshot = try await fetchBootstrapSnapshot()
+            applySections(snapshot.sections)
+            if let markerCache = snapshot.markerCache {
+                replaceMarkerCache(with: markerCache)
+            }
+            hasResolvedInitialSnapshot = true
+            bootstrapPhase = .ready
+            await preloadMarkers(around: displayedMonthStart)
+        } catch {
+            guard !Task.isCancelled else { return }
+            Self.logger.error("Initial timeline load failed: \(error.localizedDescription, privacy: .public)")
+            initialErrorMessage = "请检查后重试"
+            bootstrapPhase = .failed
+        }
+    }
+
+    /// 首次读取失败后重新获取列表与日历标记；失败期间不提交空数据快照。
+    func retryInitialData() async {
+        guard !hasResolvedInitialSnapshot else { return }
+        await loadInitialData()
     }
 
     /// 按当前 selectedDate 和 selectedCategory 拉取事件列表。
-    func loadEvents() async {
+    @discardableResult
+    func loadEvents() async -> Bool {
         guard hasResolvedInitialSnapshot else {
             await loadInitialData()
-            return
+            return hasResolvedInitialSnapshot
         }
 
         isRefreshing = true
+        refreshErrorMessage = nil
         defer { isRefreshing = false }
-        applySections(await fetchSections())
+        do {
+            applySections(try await fetchSections())
+            return true
+        } catch {
+            guard !Task.isCancelled else { return false }
+            Self.logger.error("Timeline refresh failed: \(error.localizedDescription, privacy: .public)")
+            refreshErrorMessage = "时间线更新失败，请重试"
+            return false
+        }
     }
 
     /// 阅读计时记录在其他页面完成写入后，刷新当前列表与当前月份标记缓存。
@@ -84,46 +120,74 @@ final class TimelineViewModel {
         }
 
         isRefreshing = true
+        refreshErrorMessage = nil
         defer { isRefreshing = false }
 
         let currentMonthStart = displayedMonthStart
-        async let sections = fetchSections()
-        async let markers = fetchMarkers(for: currentMonthStart, category: selectedCategory)
-        let resolvedSections = await sections
-        let resolvedMarkers = await markers
+        async let sections = fetchSectionsResult()
+        async let markers = fetchMarkersResult(for: currentMonthStart, category: selectedCategory)
+        let (resolvedSections, resolvedMarkers) = await (sections, markers)
 
-        applySections(resolvedSections)
-        var nextMarkerCache = markerCache
-        nextMarkerCache[Self.monthKey(for: currentMonthStart, using: calendar)] = resolvedMarkers
-        replaceMarkerCache(with: nextMarkerCache)
+        switch resolvedSections {
+        case .success(let newSections):
+            applySections(newSections)
+        case .failure(let error):
+            Self.logger.error("Timeline mutation refresh failed: \(error.localizedDescription, privacy: .public)")
+            refreshErrorMessage = "时间线更新失败，请重试"
+        }
+
+        if case .success(let newMarkers) = resolvedMarkers {
+            var nextMarkerCache = markerCache
+            nextMarkerCache[Self.monthKey(for: currentMonthStart, using: calendar)] = newMarkers
+            replaceMarkerCache(with: nextMarkerCache)
+        }
     }
 
     /// 选中日期变更：更新 selectedDate 并重新拉取事件。
     func selectDate(_ date: Date) async {
         let normalized = calendar.startOfDay(for: date)
         guard normalized != selectedDate else { return }
+        let previousDate = selectedDate
         selectedDate = normalized
-        await loadEvents()
+        if !(await loadEvents()) {
+            selectedDate = previousDate
+        }
     }
 
     /// 分类筛选变更：保留旧内容在位，待新分类列表与当前月份 marker 就绪后一次性替换。
     func selectCategory(_ category: TimelineEventCategory) async {
         guard category != selectedCategory else { return }
-        selectedCategory = category
         guard hasResolvedInitialSnapshot else {
+            selectedCategory = category
             await loadInitialData()
             return
         }
 
+        let previousCategory = selectedCategory
+        selectedCategory = category
         isRefreshing = true
+        refreshErrorMessage = nil
         defer { isRefreshing = false }
         let currentMonthStart = displayedMonthStart
-        async let sections = fetchSections()
-        async let markers = fetchMarkers(for: currentMonthStart, category: category)
-        let resolvedSections = await sections
-        let resolvedMarkers = await markers
-        applySections(resolvedSections)
-        replaceMarkerCache(with: [Self.monthKey(for: currentMonthStart, using: calendar): resolvedMarkers])
+        async let sections = fetchSectionsResult()
+        async let markers = fetchMarkersResult(for: currentMonthStart, category: category)
+        let (resolvedSections, resolvedMarkers) = await (sections, markers)
+
+        guard case .success(let newSections) = resolvedSections else {
+            selectedCategory = previousCategory
+            if case .failure(let error) = resolvedSections {
+                Self.logger.error("Timeline filter failed: \(error.localizedDescription, privacy: .public)")
+            }
+            refreshErrorMessage = "筛选结果更新失败，请重试"
+            return
+        }
+
+        applySections(newSections)
+        if case .success(let newMarkers) = resolvedMarkers {
+            replaceMarkerCache(with: [Self.monthKey(for: currentMonthStart, using: calendar): newMarkers])
+        } else {
+            replaceMarkerCache(with: [:])
+        }
         await preloadMarkers(around: displayedMonthStart)
     }
 
@@ -156,8 +220,8 @@ final class TimelineViewModel {
                 markerCache[key] = markers
                 didUpdate = true
             } catch {
-                markerCache[key] = [:]
-                didUpdate = true
+                guard !Task.isCancelled else { return }
+                Self.logger.error("Timeline marker preload failed: \(error.localizedDescription, privacy: .public)")
             }
         }
 
@@ -268,45 +332,58 @@ private extension TimelineViewModel {
 private extension TimelineViewModel {
     struct BootstrapSnapshot {
         let sections: [TimelineSection]
-        let markerCache: [String: [Date: TimelineDayMarker]]
+        let markerCache: [String: [Date: TimelineDayMarker]]?
     }
 
     /// 并发获取首屏最小可用快照，保证列表和当前月份 marker 一次性提交。
-    func fetchBootstrapSnapshot() async -> BootstrapSnapshot {
+    func fetchBootstrapSnapshot() async throws -> BootstrapSnapshot {
         let currentMonthStart = displayedMonthStart
         async let sections = fetchSections()
-        async let markers = fetchMarkers(for: currentMonthStart, category: selectedCategory)
-        let resolvedSections = await sections
+        async let markers = try? await fetchMarkers(for: currentMonthStart, category: selectedCategory)
+        let resolvedSections = try await sections
         let resolvedMarkers = await markers
         return BootstrapSnapshot(
             sections: resolvedSections,
-            markerCache: [Self.monthKey(for: currentMonthStart, using: calendar): resolvedMarkers]
+            markerCache: resolvedMarkers.map {
+                [Self.monthKey(for: currentMonthStart, using: calendar): $0]
+            }
         )
     }
 
-    /// 读取当前筛选条件下的时间线列表；失败时降级为空数据，避免首帧暴露异常中间态。
-    func fetchSections() async -> [TimelineSection] {
+    /// 读取当前筛选条件下的时间线列表；错误必须交给页面状态映射，不得伪装为空数据。
+    func fetchSections() async throws -> [TimelineSection] {
         let (start, end) = calculateTimeRange()
+        return try await repository.fetchTimelineEvents(
+            startTimestamp: start,
+            endTimestamp: end,
+            category: selectedCategory
+        )
+    }
+
+    /// 读取指定月份的 marker；失败保持未缓存，让后续预加载仍可重试。
+    func fetchMarkers(for monthStart: Date, category: TimelineEventCategory) async throws -> [Date: TimelineDayMarker] {
+        try await repository.fetchCalendarMarkers(
+            for: monthStart,
+            category: category
+        )
+    }
+
+    func fetchSectionsResult() async -> Result<[TimelineSection], Error> {
         do {
-            return try await repository.fetchTimelineEvents(
-                startTimestamp: start,
-                endTimestamp: end,
-                category: selectedCategory
-            )
+            return .success(try await fetchSections())
         } catch {
-            return []
+            return .failure(error)
         }
     }
 
-    /// 读取指定月份的 marker；失败时返回空 marker，保持日历结构稳定。
-    func fetchMarkers(for monthStart: Date, category: TimelineEventCategory) async -> [Date: TimelineDayMarker] {
+    func fetchMarkersResult(
+        for monthStart: Date,
+        category: TimelineEventCategory
+    ) async -> Result<[Date: TimelineDayMarker], Error> {
         do {
-            return try await repository.fetchCalendarMarkers(
-                for: monthStart,
-                category: category
-            )
+            return .success(try await fetchMarkers(for: monthStart, category: category))
         } catch {
-            return [:]
+            return .failure(error)
         }
     }
 

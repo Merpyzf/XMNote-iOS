@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/XMNote-iOS.iml" filepath="$PROJECT_DIR$/.idea/XMNote-iOS.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/design-system-remediation.iml" filepath="$PROJECT_DIR$/.idea/design-system-remediation.iml" />
     </modules>
   </component>
 </project>

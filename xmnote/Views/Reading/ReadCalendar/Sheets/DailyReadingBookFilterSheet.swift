@@ -17,31 +17,39 @@ struct DailyReadingBookFilterSheet: View {
     @ScaledMetric(relativeTo: .body) private var coverWidth = 30.0
 
     var body: some View {
-        NavigationStack {
-            List {
+        XMSheetScaffold(
+            title: "筛选书籍",
+            onClose: { dismiss() }
+        ) {
+            XMSettingsGroup(horizontalPadding: Spacing.none, verticalPadding: Spacing.none) {
+                LazyVStack(spacing: Spacing.none) {
                 selectionButton(
                     title: "全部书籍",
                     coverURL: nil,
                     bookID: nil
                 )
 
-                ForEach(books) { summary in
+                if !books.isEmpty {
+                    XMSettingsDivider()
+                        .padding(.leading, Spacing.contentEdge)
+                }
+
+                ForEach(books.enumerated(), id: \.element.id) { index, summary in
                     selectionButton(
                         title: summary.book.name,
                         coverURL: summary.book.coverURL,
                         bookID: summary.id
                     )
+
+                    if index < books.count - 1 {
+                        XMSettingsDivider()
+                            .padding(.leading, Spacing.contentEdge)
+                    }
                 }
             }
-            .listStyle(.insetGrouped)
-            .navigationTitle("筛选书籍")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("关闭") { dismiss() }
-                        .xmToolbarNeutralTint()
-                }
             }
+            .padding(.horizontal, Spacing.screenEdge)
+            .padding(.bottom, Spacing.contentEdge)
         }
     }
 
