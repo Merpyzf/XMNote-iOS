@@ -35,6 +35,30 @@
             "statusMessage": "检索相关 Bug 经验"
           }
         ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/.agents/skills/xmnote-git-commit/scripts/commit_gate.py\" hook pre-tool-use",
+            "timeout": 20,
+            "statusMessage": "验证 Git 提交 PASS 凭据"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/.agents/skills/xmnote-git-commit/scripts/commit_gate.py\" hook post-tool-use",
+            "timeout": 20,
+            "statusMessage": "消费 Git 提交 PASS 凭据"
+          }
+        ]
       }
     ],
     "Stop": [

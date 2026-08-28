@@ -1,0 +1,6 @@
+interface:
+  display_name: "XMNote Git Commit"
+  short_description: "基于实时 diff 审核并门禁 XMNote Git 提交"
+  default_prompt: "Use $xmnote-git-commit to inspect the live XMNote diff, validate the commit boundary and message, and prepare one gated Git history operation."
+policy:
+  allow_implicit_invocation: true

@@ -113,7 +113,15 @@
   - 固定协议语句必须保留：`[PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md`
 - 进入新目录前，优先读取该目录下的 `CLAUDE.md`；若目标业务文件缺少 L3 头部注释，先补齐再继续。
 
-## 6. 提交与校验清单
+## 6. Git 提交门禁与构建校验
+
+### AI Git 提交强制门禁
+- AI 创建、修改或继续任何 Git 历史写入前，必须使用项目级 `$xmnote-git-commit`；小改动没有例外。
+- 每个独立提交或历史操作都必须取得与实时 HEAD、索引、工作区、目标命令、消息和验证证据绑定的 `PASS`；检查未通过时禁止执行。
+- 禁止绕过 Skill 或 Hook，禁止使用低层命令直接写入历史；Skill 通过不替代用户对提交或重写历史的明确授权。
+- 默认只提交当前任务范围；其他未提交修改必须原样保留并在提交前报告，不得擅自附带、清理、回滚或 stash。
+- 完整检查流程、Commit Message 规范、scope 复用、提交粒度、验证矩阵与禁止事项只在 `.agents/skills/xmnote-git-commit/SKILL.md` 维护。
+
 ### 构建与验证命令
 - `open xmnote.xcodeproj`：用 Xcode 打开工程。
 - `BOOTED_SIMULATOR_ID="$(xcrun simctl list devices booted | sed -nE 's/.*\(([0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12})\) \(Booted\).*/\1/p' | head -n 1)" && xcodebuild -project xmnote.xcodeproj -scheme xmnote -destination "platform=iOS Simulator,id=${BOOTED_SIMULATOR_ID}" build`：默认交付验证命令，直接使用当前已启动的 iOS 模拟器。
@@ -140,21 +148,3 @@
 <!-- AUTO_SYNC_MODULES_END -->
 - 同步命令：`bash scripts/sync_arch_docs.sh`
 - 校验命令：`bash scripts/verify_arch_docs_sync.sh`
-
-### 提交规范
-- 提交信息必须使用中文，格式为 `type(功能模块): 动作 + 结果`。
-- `type` 仅允许：`feat` / `fix` / `refactor` / `chore` / `docs` / `test` / `build` / `ci` / `revert`。
-- 具体命名流程与复用规则以 `docs/architecture/Git提交风格规范.md` 为准。
-- 括号中的功能名优先复用历史提交已有名称，保持原有中文写法一致，不自行发明近义词。
-- 只有在历史里找不到语义等价的功能名时，才允许新增新的功能名。
-- 严禁使用 `提交本地全部改动`、`更新代码`、`修复问题` 等无信息标题。
-- 单次提交只做一个逻辑变更；跨模块且相互独立的改动必须拆分提交。
-- 当改动涉及多个文件，或包含配置/脚本/依赖变更时，提交正文必填，至少包含：`变更点`、`影响范围`、`验证命令与结果`。
-- 证据化缺陷修复在正式案例发布后，应在提交正文添加 `Knowledge-Case: IOS-BUG-YYYYMMDD-NNN` trailer；30 天试运行期缺少 trailer 只告警，案例/模式格式错误仍阻止提交。
-- 提交前必须先执行 `git status --short` 与 `git diff --stat` 自检；发现无关改动时需先和用户确认是否纳入本次提交。
-
-### 提交前 / 收口后必须执行的脚本
-- `bash scripts/verify_glossary.sh`
-- `bash scripts/verify_l3_protocol_headers.sh`
-- `bash scripts/verify_arch_docs_sync.sh`
-- `bash scripts/verify_ai_bug_knowledge.sh`

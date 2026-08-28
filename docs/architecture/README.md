@@ -3,7 +3,6 @@
 - 术语表：`docs/architecture/术语对照表.md`
 - UI 核心组件白名单：`docs/architecture/UI核心组件白名单.md`
 - UI 组件文档清单：`docs/architecture/UI组件文档清单.md`
-- Git 提交风格规范：`docs/architecture/Git提交风格规范.md`
 - 颜色系统优化规范：`docs/architecture/颜色系统优化规范.md`
 - iOS 设计系统工程规范：`docs/architecture/iOS设计系统工程规范.md`
 - 页面状态基建与开发模式：`docs/architecture/页面状态基建与开发模式.md`
@@ -13,15 +12,6 @@
 - AI Bug 经验闭环设计：`docs/architecture/AI Bug经验闭环设计.md`
 - X5 外置存储开发工作流：`docs/architecture/X5外置存储开发工作流.md`
 - Bug 问题库入口：`docs/knowledge/bugs/问题库说明.md`
-
-提交前校验
-- `python3 scripts/design-system/ds.py audit`
-- `bash scripts/verify_glossary.sh`
-- `bash scripts/verify_ui_glossary_scope.sh`
-- `bash scripts/verify_arch_docs_sync.sh`
-- `bash scripts/verify_component_guides.sh`
-- `bash scripts/verify_state_presentations.sh`
-- `bash scripts/verify_ai_bug_knowledge.sh`
 
 自动同步
 - `bash scripts/sync_arch_docs.sh`

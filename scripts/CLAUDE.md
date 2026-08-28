@@ -19,7 +19,7 @@
 执行约束
 - 修改生产 UI 前执行：`python3 scripts/design-system/ds.py context --paths <相关 Swift 路径>`；开发中执行 `python3 scripts/design-system/ds.py lint --changed`。
 - 变更设计规则、组件目录或上下文路由后执行：`make -f Makefile.parallel-ios ai-ui-lint-test`。
-- 提交前执行：`python3 scripts/design-system/ds.py audit && bash scripts/verify_glossary.sh && bash scripts/verify_ui_glossary_scope.sh && bash scripts/verify_view_component_boundaries.sh && bash scripts/verify_l3_protocol_headers.sh && bash scripts/verify_arch_docs_sync.sh && bash scripts/verify_component_guides.sh && bash scripts/verify_state_presentations.sh && bash scripts/verify_scroll_ux.sh && bash scripts/verify_ai_bug_knowledge.sh`。
+- AI 准备任何 Git 历史写入时，统一进入 `.agents/skills/xmnote-git-commit/SKILL.md`；本目录脚本的适用条件与验证编排由该 Skill 判定。
 - 变更 `scripts/` 中的规则、扫描范围、输出格式时，必须同步更新本文件与根 `CLAUDE.md`。
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

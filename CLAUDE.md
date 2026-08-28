@@ -1,5 +1,9 @@
 @AGENTS.md
 
+### AI Git 提交门禁兼容入口
+- 唯一执行流程与 Commit Message 规范：`.agents/skills/xmnote-git-commit/SKILL.md`。
+- 确定性门禁与测试：`.agents/skills/xmnote-git-commit/scripts/`；Codex AI Hook：`.codex/hooks.json`。
+
 ### AI Bug 经验闭环兼容入口
 - 执行规范与状态定义：`AGENTS.md`、`docs/architecture/AI Bug经验闭环设计.md`、`docs/knowledge/bugs/问题库说明.md`。
 - 仓库 Skill：`.agents/skills/xmnote-bug-knowledge/SKILL.md`；Codex 生命周期配置：`.codex/hooks.json`。
