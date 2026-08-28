@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 DataBackupViewModel 驱动本地与云端备份状态
- * [OUTPUT]: 对外提供 DataBackupView，以统一设置页文本层级承载本地备份、云端备份与恢复确认入口
+ * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 DataBackupViewModel 驱动本地与云端备份状态，复用 XMPopupButton 选择备份方式
+ * [OUTPUT]: 对外提供 DataBackupView，以统一设置页文本层级和等高 Popup 指示器承载本地备份、云端备份与恢复确认入口
  * [POS]: Backup 模块入口壳层，统一组织 iOS 原生本地备份与云备份操作
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -273,41 +273,33 @@ private extension DataBackupContentView {
         .frame(minHeight: XMSettingsPageLayout.regularRowMinHeight)
     }
 
+    @ViewBuilder
     var providerSelectionMenu: some View {
-        Menu {
-            Picker("备份方式", selection: selectedProviderBinding) {
-                ForEach([CloudBackupProvider.webdav, .aliyunDrive]) { provider in
-                    Text(provider.displayName)
-                        .tag(provider)
-                }
-            }
-        } label: {
-            Group {
-                if viewModel.isProviderSwitching {
-                    ProgressView()
-                        .controlSize(.small)
-                } else {
-                    HStack(spacing: Spacing.compact) {
-                        Text(viewModel.selectedProvider.displayName)
-                            .font(SettingsTypography.rowValue)
-                            .foregroundStyle(Color.textSecondary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.9)
-
-                        Image(systemName: "chevron.down")
-                            .font(AppTypography.captionSemibold)
-                            .foregroundStyle(Color.textHint)
+        if viewModel.isProviderSwitching {
+            ProgressView()
+                .controlSize(.small)
+                .frame(
+                    minHeight: InteractionMetrics.minimumTouchTarget,
+                    alignment: .trailing
+                )
+                .accessibilityLabel("正在切换云备份方式")
+                .accessibilityValue(viewModel.selectedProvider.displayName)
+        } else {
+            XMPopupButton(
+                viewModel.selectedProvider.displayName,
+                font: SettingsTypography.rowValue
+            ) {
+                Picker("备份方式", selection: selectedProviderBinding) {
+                    ForEach([CloudBackupProvider.webdav, .aliyunDrive]) { provider in
+                        Text(provider.displayName)
+                            .tag(provider)
                     }
                 }
             }
-            .frame(minHeight: InteractionMetrics.minimumTouchTarget, alignment: .trailing)
-            .contentShape(Rectangle())
+            .disabled(viewModel.isBusy)
+            .accessibilityLabel("云备份方式")
+            .accessibilityValue(viewModel.selectedProvider.displayName)
         }
-        .xmMenuNeutralTint()
-        .buttonStyle(.plain)
-        .disabled(viewModel.isBusy)
-        .accessibilityLabel("云备份方式")
-        .accessibilityValue(viewModel.selectedProvider.displayName)
     }
 
     var selectedProviderBinding: Binding<CloudBackupProvider> {

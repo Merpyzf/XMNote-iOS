@@ -143,6 +143,16 @@
       "guidePath": null
     },
     {
+      "path": "xmnote/UIComponents/Controls/Menu/XMPopupButton.swift",
+      "symbols": ["XMPopupButton"],
+      "status": "canonical", "category": "formInteraction", "layer": "controls", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "pressed", "disabled"],
+      "dependencies": ["DesignSystem", "XMMinimumHitTarget", "XMMenuStyle", "SwiftUI.Layout", "SwiftUI.Menu"],
+      "useWhen": "紧凑入口需要显示单行当前离散值，并通过原生 Menu 切换选项且让 Popup 指示器严格跟随调用方语义字体高度", "avoidWhen": "工具栏纯图标菜单、复合设置行、异步内容容器、玻璃胶囊、自定义多行标签或非离散值操作菜单",
+      "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Controls/Menu/XMPopupButton.swift"},
+      "guidePath": null
+    },
+    {
       "path": "xmnote/UIComponents/Controls/Rating/XMFluentStarIcon.swift",
       "symbols": ["XMStarredAppearance", "XMFluentStarIcon", "XMFluentStarShape"],
       "status": "canonical", "category": "foundationVisual", "layer": "controls", "framework": "swiftui", "usageScope": "crossFeature",

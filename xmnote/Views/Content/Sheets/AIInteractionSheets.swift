@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 AITextResultViewModel/AIAutoTagViewModel、AIRepositoryProtocol、AIMarkdownResultView、系统 Sheet/Liquid Glass、LoadingGate、xmMinimumHitTarget 与现有反馈组件
- * [OUTPUT]: 对外提供 AITextResultSheet 与 AIAutoTagSheet，承接流式 Markdown 结果、克制等待态、中性模型菜单、固定底部品牌确认操作、编辑器请求交接和 AI 标签确认写回生命周期
+ * [INPUT]: 依赖 AITextResultViewModel/AIAutoTagViewModel、AIRepositoryProtocol、AIMarkdownResultView、XMPopupButton、系统 Sheet/Liquid Glass、LoadingGate 与现有反馈组件
+ * [OUTPUT]: 对外提供 AITextResultSheet 与 AIAutoTagSheet，承接流式 Markdown 结果、克制等待态、中性模型 Popup 菜单、固定底部品牌确认操作、编辑器请求交接和 AI 标签确认写回生命周期
  * [POS]: Views/Content/Sheets 的 AI 业务 Sheet，被通用 viewer 及单页详情入口复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -248,32 +248,29 @@ struct AITextResultSheet: View {
     }
 
     private var modelMenu: some View {
-        Menu {
+        XMPopupButton(
+            modelMenuTitle,
+            font: AppTypography.caption2,
+            truncationMode: .middle,
+            hitTargetAnchor: .top
+        ) {
             ForEach(viewModel.availableProviders) { provider in
                 Section(provider.displayName) {
                     ForEach(provider.modelOptions) { model in
                         Button {
                             viewModel.switchModel(provider: provider, modelID: model.id)
                         } label: {
-                            if viewModel.isCurrentModel(provider: provider, modelID: model.id) {
-                                Label(model.title, systemImage: "checkmark")
-                            } else {
-                                Text(model.title)
-                            }
+                            XMMenuLabel(
+                                model.title,
+                                isSelected: viewModel.isCurrentModel(
+                                    provider: provider,
+                                    modelID: model.id
+                                )
+                            )
                         }
                     }
                 }
             }
-        } label: {
-            Text(modelMenuTitle)
-                .font(AppTypography.caption2)
-                .foregroundStyle(Color.textSecondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .xmMinimumHitTarget(anchor: .top)
-        }
-        .buttonStyle(.plain)
-        .xmMenuNeutralTint()
         .disabled(viewModel.availableProviders.isEmpty || viewModel.isSwitchingModel)
         .accessibilityLabel("当前模型，\(modelMenuTitle)")
         .accessibilityHint("打开菜单切换 AI 模型")
