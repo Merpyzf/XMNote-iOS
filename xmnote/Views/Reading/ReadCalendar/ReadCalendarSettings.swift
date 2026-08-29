@@ -1,7 +1,7 @@
 import Foundation
 
 /**
- * [INPUT]: 依赖 ReadCalendarEventType 提供事件类型枚举
+ * [INPUT]: 依赖 ReadCalendarEventType 与可注入 UserDefaults 提供事件类型和偏好存储
  * [OUTPUT]: 对外提供 ReadCalendarSettings、阅读行为设置项与读完标记配置（UserDefaults 持久化）
  * [POS]: ReadCalendar 子功能设置状态，统一约束六类事件过滤、读完标记与触感配置
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -52,6 +52,8 @@ enum ReadCalendarBehaviorSetting: CaseIterable, Identifiable {
 @Observable
 /// 阅读日历设置状态容器，负责本地持久化与业务规则校验。
 final class ReadCalendarSettings {
+    private let userDefaults: UserDefaults
+
     private(set) var excludeReadTiming: Bool {
         didSet { save(excludeReadTiming, forKey: Self.keyReadTiming) }
     }
@@ -84,8 +86,19 @@ final class ReadCalendarSettings {
     }
 
     /// 从 UserDefaults 恢复阅读日历筛选与交互配置，并应用默认值兜底。
-    init() {
-        let defaults = UserDefaults.standard
+    convenience init() {
+        self.init(userDefaults: .standard)
+    }
+
+#if DEBUG
+    /// 为隔离 Sheet 校准环境读取临时偏好 suite，避免预览操作改写正式设置。
+    convenience init(sheetPreviewUserDefaults: UserDefaults) {
+        self.init(userDefaults: sheetPreviewUserDefaults)
+    }
+#endif
+
+    private init(userDefaults defaults: UserDefaults) {
+        self.userDefaults = defaults
         let legacyExcludeNoteRecord = defaults.bool(forKey: Self.legacyKeyNoteRecord)
         var storedExcludeReadTiming = defaults.bool(forKey: Self.keyReadTiming)
         let storedExcludeNote = defaults.object(forKey: Self.keyNote) as? Bool ?? legacyExcludeNoteRecord
@@ -220,15 +233,15 @@ final class ReadCalendarSettings {
     private static let keyDoneEmojiAssetName = "rcDoneEmojiAssetName"
 
     private func save(_ value: Bool, forKey key: String) {
-        UserDefaults.standard.set(value, forKey: key)
+        userDefaults.set(value, forKey: key)
     }
 
     private func save(_ value: Int, forKey key: String) {
-        UserDefaults.standard.set(value, forKey: key)
+        userDefaults.set(value, forKey: key)
     }
 
     private func save(_ value: String, forKey key: String) {
-        UserDefaults.standard.set(value, forKey: key)
+        userDefaults.set(value, forKey: key)
     }
 }
 

@@ -2,7 +2,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 AppTypography、Spacing、语义色、XMContentStateView 与 34 个测试详情页
+ * [INPUT]: 依赖 RepositoryContainer、DatabaseManager、AppTypography、Spacing、语义色、XMContentStateView 与测试详情页
  * [OUTPUT]: 对外提供按验证目标分组且可搜索的 DebugCenterView 测试目录
  * [POS]: Debug 测试目录页，由 PersonalView 经 AppRoute.debug 进入并延迟构造具体测试详情页
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -10,6 +10,8 @@ import SwiftUI
 
 struct DebugCenterView: View {
     @State private var searchText = ""
+    @Environment(RepositoryContainer.self) private var repositories
+    @Environment(DatabaseManager.self) private var databaseManager
 
     private static let items: [DebugCenterItem] = [
         DebugCenterItem(
@@ -18,6 +20,13 @@ struct DebugCenterView: View {
             icon: "square.grid.2x2",
             title: "设计系统展厅",
             subtitle: "核心令牌、组件状态、适配环境与专项验收入口"
+        ),
+        DebugCenterItem(
+            category: .designFoundationAndFeedback,
+            destination: .sheetCatalog,
+            icon: "rectangle.portrait.on.rectangle.portrait",
+            title: "Sheet 样式校准",
+            subtitle: "82 个生产调用、113 个生产目标与隔离生产数据逐项验收"
         ),
         DebugCenterItem(
             category: .readingAndContent,
@@ -317,6 +326,11 @@ struct DebugCenterView: View {
         switch destination {
         case .designSystemGallery:
             DesignSystemGalleryView()
+        case .sheetCatalog:
+            SheetCatalogTestView(
+                repositories: repositories,
+                databaseManager: databaseManager
+            )
         case .richTextEditor:
             RichTextTestView()
         case .fadeOverflowText:
@@ -417,6 +431,7 @@ private enum DebugCenterCategory: CaseIterable, Hashable, Identifiable {
 
 private enum DebugCenterDestination: Hashable {
     case designSystemGallery
+    case sheetCatalog
     case richTextEditor
     case fadeOverflowText
     case readingHeatmap
@@ -499,8 +514,10 @@ private struct DebugCenterRow: View {
 }
 
 #Preview {
+    let repositories = RepositoryContainer(databaseManager: DatabaseManager(database: try! .empty()))
     NavigationStack {
         DebugCenterView()
     }
+    .environment(repositories)
 }
 #endif

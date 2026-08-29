@@ -1222,6 +1222,32 @@ private struct XMTagSelectionRowButtonStyle: ButtonStyle {
     }
 }
 
+#if DEBUG
+/// 复用私有生产命名 Sheet 的校准入口，供测试中心分别观察创建与重命名状态。
+struct XMTagNameSheetPreview: View {
+    enum Mode {
+        case create
+        case rename
+    }
+
+    let mode: Mode
+
+    var body: some View {
+        XMTagNameSheet(
+            mode: mode == .create
+                ? .create
+                : .rename(XMTagSelectionItem(id: 1, title: "设计系统")),
+            existingTitles: ["用户体验", "交互设计", "知识管理"],
+            onSubmit: { name in
+                try await Task.sleep(for: .milliseconds(650))
+                return XMTagSelectionItem(id: 99, title: name)
+            },
+            onSubmitted: { _ in }
+        )
+    }
+}
+#endif
+
 /// 标签选择 Sheet 的局部尺寸约束，避免把单一场景数值扩散为全局设计令牌。
 private enum XMTagSelectionLayout {
     static let minimumHitSize: CGFloat = InteractionMetrics.minimumTouchTarget

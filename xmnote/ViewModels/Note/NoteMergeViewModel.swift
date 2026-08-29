@@ -61,6 +61,35 @@ final class NoteMergeViewModel {
         load()
     }
 
+#if DEBUG
+    /// 仅为测试中心注入固定内存草稿；不启动 Repository 读取，也不改变生产初始化路径。
+    init(
+        validationDraft: NoteMergeDraft,
+        availableTags: [NoteEditorTagOption],
+        chapterOptions: [NoteEditorChapterOption],
+        repository: any NoteRepositoryProtocol,
+        quotaRepository: any NoteImageUploadQuotaRepositoryProtocol,
+        isPremium: Bool
+    ) {
+        self.bookID = validationDraft.book.id
+        self.noteIDs = validationDraft.sourceNoteIDs
+        self.repository = repository
+        self.quotaRepository = quotaRepository
+        self.isPremium = isPremium
+        self.phase = .content
+        self.draft = validationDraft
+        self.availableTags = availableTags
+        self.chapterOptions = chapterOptions
+        self.imageQuotaState = NoteImageUploadQuotaState(
+            isLimited: false,
+            dailyLimit: 9,
+            todaySavedCount: 0,
+            currentDraftNewImageCount: 0,
+            remainingCount: 9
+        )
+    }
+#endif
+
     var sourceNotes: [NoteExcerptListItem] { draft?.sourceNotes ?? [] }
 
     /// 重新拉取初始预览；取消旧任务可避免重试结果覆盖后续编辑。

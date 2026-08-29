@@ -1526,6 +1526,7 @@ struct MainTabView: View {
             if let runtime {
                 DebugCenterView()
                     .environment(runtime.repositories)
+                    .environment(runtime.databaseManager)
             }
             #else
             Text("测试入口仅在 Debug 构建可用")

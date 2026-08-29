@@ -793,6 +793,32 @@ private struct LocalBackupImportDocumentPicker: UIViewControllerRepresentable {
     }
 }
 
+#if DEBUG
+/// 复用生产文档选择器的 Debug 校准入口；导出使用无敏感信息临时文件，导入结果不会进入恢复流程。
+struct SheetPreviewDocumentPicker: View {
+    enum Mode {
+        case export(URL)
+        case `import`
+    }
+
+    let mode: Mode
+
+    @ViewBuilder
+    var body: some View {
+        switch mode {
+        case .export(let fileURL):
+            LocalBackupExportDocumentPicker(fileURL: fileURL) { _ in }
+        case .import:
+            LocalBackupImportDocumentPicker(
+                onPick: { _ in },
+                onCancel: { },
+                onFailure: { _ in }
+            )
+        }
+    }
+}
+#endif
+
 // MARK: - Shared Surface
 
 private struct BackupTaskBackdropView: View {
