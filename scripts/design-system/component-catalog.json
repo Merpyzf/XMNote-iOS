@@ -220,7 +220,7 @@
       "dependencies": ["DesignSystem", "Swift Concurrency"],
       "useWhen": "读取加载需要延迟显示与最短驻留，或页面需要统一阶段承载", "avoidWhen": "可确定进度、局部写入反馈或没有阶段切换的静态内容",
       "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Feedback/Loading/LoadingFeedbackKit.swift"},
-      "guidePath": null
+      "guidePath": "docs/component-guides/XMStatePresentation使用说明.md"
     },
     {
       "path": "xmnote/UIComponents/Feedback/LoadingStateView.swift",
@@ -230,15 +230,15 @@
       "dependencies": ["DesignSystem", "SwiftUI.ProgressView"],
       "useWhen": "LoadingGate 或 LoadPhaseHost 已决定显示加载反馈", "avoidWhen": "页面自行拥有读取时序、写操作按钮进度或可确定进度条",
       "previewPolicy": {"kind": "hosted", "path": "xmnote/Views/Debug/DesignSystemGalleryView.swift", "reason": "与加载门闩、卡片表层和适配环境共同展示"},
-      "guidePath": null
+      "guidePath": "docs/component-guides/XMStatePresentation使用说明.md"
     },
     {
       "path": "xmnote/UIComponents/Feedback/StatePresentation/StatePresentationCatalogPreview.swift",
       "symbols": ["StatePresentationCatalogView"],
       "status": "canonical", "category": "designInfrastructure", "layer": "feedback", "framework": "swiftui", "usageScope": "internalSupport",
-      "stateCoverage": ["normal", "disabled", "loading", "error", "empty", "readOnly"],
+      "stateCoverage": ["normal", "loading", "error", "empty", "readOnly"],
       "dependencies": ["XMContentStateView", "XMCompactStateView", "XMInlineStatusBanner", "LoadingStateView", "LoadPhaseHost"],
-      "useWhen": "Debug 测试中心或 SwiftUI Preview 需要集中验收通用状态视觉矩阵", "avoidWhen": "任何生产页面或业务状态承载",
+      "useWhen": "测试中心或 SwiftUI Preview 以真实生产语义场景集中验收公共状态", "avoidWhen": "任何生产页面或业务状态承载",
       "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Feedback/StatePresentation/StatePresentationCatalogPreview.swift"},
       "guidePath": "docs/component-guides/XMStatePresentation使用说明.md"
     },
@@ -247,8 +247,8 @@
       "symbols": ["XMCompactStateView"],
       "status": "canonical", "category": "foundationVisual", "layer": "feedback", "framework": "swiftui", "usageScope": "crossFeature",
       "stateCoverage": ["normal", "disabled", "error", "empty", "readOnly"],
-      "dependencies": ["DesignSystem", "XMStateRole", "XMStateAction", "CardContainer"],
-      "useWhen": "卡片、分区或局部容器需要紧凑空态、无结果态或失败态", "avoidWhen": "整页状态、保留内容的行内反馈或读取加载主态",
+      "dependencies": ["DesignSystem", "XMStateRole", "XMStateAction", "XMMinimumHitTarget", "CardContainer"],
+      "useWhen": "卡片、分区或局部容器需要紧凑说明、空态、无结果态、内容失效或失败态", "avoidWhen": "整页状态、保留内容的行内反馈或读取加载主态",
       "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Feedback/StatePresentation/XMCompactStateView.swift"},
       "guidePath": "docs/component-guides/XMStatePresentation使用说明.md"
     },
@@ -257,8 +257,8 @@
       "symbols": ["XMContentStateView"],
       "status": "canonical", "category": "foundationVisual", "layer": "feedback", "framework": "swiftui", "usageScope": "crossFeature",
       "stateCoverage": ["normal", "disabled", "error", "empty", "readOnly"],
-      "dependencies": ["DesignSystem", "XMStateRole", "XMStateAction", "SwiftUI.ContentUnavailableView"],
-      "useWhen": "页面、Sheet 或列表背景需要完整空态、无结果态或失败态", "avoidWhen": "卡片内紧凑状态、保留内容的行内反馈或读取加载主态",
+      "dependencies": ["DesignSystem", "XMStateRole", "XMStateAction", "XMMinimumHitTarget", "SwiftUI.ContentUnavailableView"],
+      "useWhen": "页面、Sheet 或列表背景需要完整说明、空态、无结果态、内容失效或失败态", "avoidWhen": "卡片内紧凑状态、保留内容的行内反馈或读取加载主态",
       "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Feedback/StatePresentation/XMContentStateView.swift"},
       "guidePath": "docs/component-guides/XMStatePresentation使用说明.md"
     },
@@ -267,7 +267,7 @@
       "symbols": ["XMInlineStatusBanner"],
       "status": "canonical", "category": "foundationVisual", "layer": "feedback", "framework": "swiftui", "usageScope": "crossFeature",
       "stateCoverage": ["normal", "disabled", "error", "readOnly"],
-      "dependencies": ["DesignSystem", "XMStateAction"],
+      "dependencies": ["DesignSystem", "XMStateAction", "XMMinimumHitTarget"],
       "useWhen": "已有可信内容仍保留时需要中性、警告或失败行内反馈", "avoidWhen": "内容完全不可用、整页阻断或短驻留 Toast",
       "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Feedback/StatePresentation/XMInlineStatusBanner.swift"},
       "guidePath": "docs/component-guides/XMStatePresentation使用说明.md"

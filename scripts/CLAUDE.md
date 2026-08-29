@@ -6,7 +6,7 @@
 - `verify_ui_glossary_scope.sh`: 校验 `xmnote/UIComponents` 可复用 UI 与白名单核心页面组件是否完整登记且类别正确。
 - `verify_view_component_boundaries.sh`: 校验页面壳层、页面私有子视图、业务 Sheet、ViewModel 与跨模块复用组件的目录边界。
 - `verify_component_guides.sh`: 校验重要 UI 组件使用文档清单、白名单覆盖、路径与文档必备章节是否完整。
-- `verify_state_presentations.sh`: 校验生产路径的 ContentUnavailableView 唯一入口、旧状态组件回流和未审查状态型 View，并强制公共状态视觉具备测试目录样例、术语/组件登记、组件指南消费证据与至少两个生产消费者；容器/领域例外必须带原因白名单。
+- `verify_state_presentations.sh`: 校验生产路径的 ContentUnavailableView 唯一入口、旧状态组件回流和未审查状态型 View；同时锁定统一 Regular 标题、可访问的 `stateActionForeground`、32/18/16pt 图标层级、纯文字动作及非视觉命中区、内容层无 Liquid Glass、已审计页面层级、重复入口和模板化文案，并强制测试目录包含长中文、禁用动作、missing/failure、完全失败/保留内容失败对照，以及术语/组件登记、组件指南消费证据与至少两个生产消费者；容器/领域例外必须带原因白名单。
 - `verify_l3_protocol_headers.sh`: 校验 `xmnote/**/*.swift` 是否具备 L3 头部协议语句。
 - `sync_arch_docs.sh`: 根据 `xmnote/` 顶层目录自动同步 `AGENTS.md` 与 `CLAUDE.md` 的模块清单块。
 - `verify_arch_docs_sync.sh`: 校验 `AGENTS.md` 与 `CLAUDE.md` 模块清单块是否与实际目录一致。
