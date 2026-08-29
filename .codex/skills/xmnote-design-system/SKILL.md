@@ -50,7 +50,8 @@ description: 为 XMNote 的 iOS/SwiftUI/UIKit 界面提供项目级设计系统�
 - 整体信息层级、品牌表达、文案、适配或可访问性：读取 [设计语言](references/design-language.md)。
 - 字体角色、字号层级、行距、间距、圆角、描边或布局密度：读取 [排版、间距与布局](references/typography-and-layout.md)。
 - 颜色、表层、卡片、图标、品牌 tint、阴影或 Liquid Glass：读取 [颜色、表层、图标与材质](references/color-surfaces-and-material.md)。
-- 组件归位、Settings、Sheet、导航、反馈、点击热区或滚动：读取 [组件与交互](references/components-and-interaction.md)。
+- 页面或局部空态、搜索/筛选无结果、加载、失败、内容失效、保留内容错误、状态组件治理或状态视觉评审：读取 [页面状态与反馈](references/state-presentation.md)。
+- 组件归位、Settings、Sheet、导航、Toast/Alert、点击热区或滚动：读取 [组件与交互](references/components-and-interaction.md)。
 - 评审、规范缺口、疑似丑陋设计或公共抽象提议：读取 [证据与评审](references/evidence-and-review.md)。
 
 只读取当前任务涉及的参考；一个任务跨越多个维度时组合读取。公共组件的实时清单始终通过 `ds.py catalog` 获取，不从参考文件猜测。

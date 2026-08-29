@@ -171,24 +171,11 @@ XMSettingsPage {
 - 普通设置输入最小体量查询 `XMSettingsPageLayout.inputMinHeight`（当前 48pt）；实际点击区仍不得低于 44pt。多行 TextEditor 高度属于 feature `Layout`，必须验证键盘和 Dynamic Type，不进入全局 token。
 - 不用自定义占位 Text 覆盖系统输入命中，不用 `onTapGesture` 模拟焦点，也不用硬编码键盘 offset。密码、粘贴、自动填充、清除和 VoiceOver value 保留系统语义。
 
-## 状态与反馈决策
+## 状态与反馈
 
-### 先判断内容是否仍可用
+页面或局部空态、搜索/筛选无结果、加载、失败、内容失效、保留内容错误及状态组件治理，必须读取 [页面状态与反馈](state-presentation.md)。该参考负责状态事实核对、展示角色映射、组件层级、加载生命周期和业务专用状态边界；本文件只保留 Toast、Alert 与其他交互组件的交界规则。
 
-1. 数据尚未返回：placeholder 或 loading，不是 empty。
-2. 数据源确认没有数据：`.empty`。
-3. 搜索或筛选没有匹配：`.noResults`。
-4. 无可用内容且读取失败：`.failure`。
-5. 等待用户前置选择：`.instruction`。
-6. 已有可信内容，仅刷新、分页或写入失败：保留内容并显示 `XMInlineStatusBanner`。
-
-完整页面、Sheet 或列表背景使用 `XMContentStateView`；卡片和局部容器使用 `XMCompactStateView`。通用状态组件只承接展示角色、文字、图标和单一动作，不持有业务加载阶段、ViewModel 或恢复策略。
-
-不要把 loading、success 或领域 phase 加入 `XMStateRole`；这些属于加载门闩、反馈结果或业务状态 owner。
-
-`XMCompactStateView(style: .card)` 已经拥有卡片表层，不再嵌套 `CardContainer`。`XMInlineStatusBanner` 的外部位置和与内容的间距由调用方负责。
-
-### 再判断反馈成本
+### 消息反馈边界
 
 - 需要确认、存在风险、需要用户决策或轻量输入：`XMSystemAlert`。生产路径不新增 SwiftUI `.alert` 作为中心弹窗。
 - Alert 的 destructive role 只给真实破坏动作；item-driven 呈现只保留一个状态 owner，避免多个 Bool 竞争。
@@ -197,15 +184,6 @@ XMSettingsPage {
 - 手动排序成功不提示；失败必须回滚或解释。搜索、筛选或非手动排序不可排序时前置阻断。
 - Toast 采用 newest-wins，不把多条状态排队；processing 必须由后续状态替换或显式关闭。
 - Toast host 只在 App 根挂载一次，业务页面只提交消息，不各自创建呈现层。
-
-### 加载意图
-
-- 读取主态使用 `LoadingGate + LoadingStateView` 或 `LoadPhaseHost`。当前 `readDefault` 延迟 150ms、显示后最短驻留 200ms，防止闪烁；实现时读取 owner，不在页面复制时序。
-- `LoadingGate` 只管理视觉时间，不是网络状态 owner；页面在出现、业务阶段变化和取消/离场时同步它，离场时清理未完成的显隐任务。
-- `LoadingStateView` 只是视觉，不脱离 gate/phase host 直接绑定请求状态。
-- 写操作使用 `.write`/即时反馈并禁用重复触发入口；写入中的 spinner 可以属于按钮或局部 owner，不机械套整页读取加载。
-- 可确定百分比、上传/导入、扫描和 AI 流式状态由领域流程持有，不强行改造成通用 loading。
-- 裸 `ProgressView` 是 `DSR003` 观察项，不自动等同缺陷；先区分读取主态、写入局部反馈和可确定进度。
 
 ## 点击热区与控件语义
 
