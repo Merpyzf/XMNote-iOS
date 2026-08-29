@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer 注入 AIRepositoryProtocol，依赖 AIConfigurationViewModel、设置分组卡片与统一反馈组件
- * [OUTPUT]: 对外提供 AIConfigurationView，以统一设置页文本层级承载模型服务、按需展开的 API 凭证管理和三类 Prompt 配置入口
+ * [OUTPUT]: 对外提供 AIConfigurationView，以统一设置页文本层级承载 iOS 当前仅开放的 DeepSeek 模型、API 凭证管理和三类 Prompt 配置入口
  * [POS]: Views/Personal 的 AI 配置页面壳层，被 PersonalRoute.aiConfiguration 导航消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -93,10 +93,6 @@ private struct AIConfigurationContentView: View {
                     .transition(.opacity)
             }
         }
-        .animation(
-            reduceMotion ? nil : .smooth(duration: 0.18),
-            value: viewModel.configuration.provider
-        )
     }
 
     private var modelServiceSection: some View {
@@ -121,8 +117,6 @@ private struct AIConfigurationContentView: View {
                     .tint(Color.appTint)
                     .frame(minHeight: XMSettingsPageLayout.detailRowMinHeight)
 
-                    settingsDivider
-                    providerPicker
                     settingsDivider
                     modelPicker
                 }
@@ -225,19 +219,6 @@ private struct AIConfigurationContentView: View {
                 }
             }
         }
-    }
-
-    private var providerPicker: some View {
-        XMSettingsValueMenuRow(
-            title: "服务商",
-            value: viewModel.selectedProvider.displayName,
-            options: AIProvider.allCases,
-            selection: viewModel.selectedProvider,
-            optionTitle: { $0.displayName },
-            optionImage: { _ in nil },
-            onSelect: selectProvider
-        )
-        .frame(minHeight: XMSettingsPageLayout.regularRowMinHeight)
     }
 
     private var modelPicker: some View {
@@ -346,11 +327,6 @@ private struct AIConfigurationContentView: View {
         withAnimation(credentialAnimation) {
             isEditingAPIKey = true
         }
-    }
-
-    private func selectProvider(_ provider: AIProvider) {
-        resetAPIKeyEditing(animated: false)
-        viewModel.selectProvider(provider)
     }
 
     private func cancelAPIKeyEditing() {

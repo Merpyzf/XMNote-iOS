@@ -1,16 +1,19 @@
 /**
  * [INPUT]: 依赖 Foundation 提供 Codable、URL 与本地化错误语义
- * [OUTPUT]: 对外提供 AIProvider 模型目录与展示名、AIConfiguration、三套 Prompt、AI 查词输入、AI 标签流事件/建议与统一错误模型
+ * [OUTPUT]: 对外提供 AIProvider 完整兼容目录与 iOS 产品可用性策略、AIConfiguration、三套 Prompt、AI 查词输入、AI 标签流事件/建议与统一错误模型
  * [POS]: Domain/Models 的 AI 业务模型，隔离设置页、Viewer、Repository 与 OpenAI-compatible 网络细节
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import Foundation
 
-/// Android 已开放的 AI 供应商；基础地址固定为同源生产地址，各供应商密钥在 iOS 配置快照中隔离保存。
+/// 完整 AI 供应商能力目录；SiliconFlow 继续服务兼容读取、备份和未来开放，iOS 原生产品当前仅公开 DeepSeek。
 nonisolated enum AIProvider: String, CaseIterable, Codable, Hashable, Identifiable, Sendable {
     case deepSeek
     case siliconFlow
+
+    /// iOS 原生产品当前允许展示和执行的供应商；不得因 Android 对齐改回 `allCases`。
+    static let iOSProductProviders: [AIProvider] = [.deepSeek]
 
     var id: String { rawValue }
 
@@ -276,6 +279,17 @@ nonisolated struct AIConfiguration: Codable, Equatable, Sendable {
                 result.setModelID(provider.defaultModelID, for: provider)
             }
         }
+        return result
+    }
+
+    /// 返回 iOS 原生产品运行态配置；只投影当前供应商，不删除 SiliconFlow 模型、凭据或备份字段。
+    var iOSProductNormalized: AIConfiguration {
+        var result = normalized
+        guard let fallbackProvider = AIProvider.iOSProductProviders.first,
+              !AIProvider.iOSProductProviders.contains(result.provider) else {
+            return result
+        }
+        result.provider = fallbackProvider
         return result
     }
 
