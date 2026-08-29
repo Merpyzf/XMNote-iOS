@@ -23,19 +23,7 @@ struct BackupRestoreConfirmSheet: View {
         XMSheetScaffold(
             title: "从备份恢复",
             onClose: onCancel,
-            bottomBar: {
-                Button("恢复", role: .destructive, action: onConfirm)
-                    .font(AppTypography.subheadlineSemibold)
-                    .foregroundStyle(Color.primaryActionForeground)
-                    .frame(maxWidth: .infinity)
-                    .frame(minHeight: InteractionMetrics.minimumTouchTarget)
-                    .background(
-                        Color.feedbackError,
-                        in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                    )
-                    .padding(.horizontal, Spacing.screenEdge)
-                    .padding(.vertical, Spacing.cozy)
-            }
+            confirmationAction: onConfirm
         ) {
             VStack(spacing: Spacing.comfortable) {
                 XMSettingsGroup(

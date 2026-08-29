@@ -26,15 +26,7 @@ struct ReadingTimerStartSheet: View {
         XMSheetScaffold(
             title: "开始阅读计时",
             onClose: { dismiss() },
-            bottomBar: {
-                Button("开始", action: submit)
-                    .font(AppTypography.subheadlineSemibold)
-                    .frame(maxWidth: .infinity)
-                    .frame(minHeight: InteractionMetrics.minimumTouchTarget)
-                    .buttonStyle(.borderedProminent)
-                    .padding(.horizontal, Spacing.screenEdge)
-                    .padding(.vertical, Spacing.cozy)
-            }
+            confirmationAction: submit
         ) {
             VStack(alignment: .leading, spacing: Spacing.section) {
                 XMSettingsSection("计时方式") {

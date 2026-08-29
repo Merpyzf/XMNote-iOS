@@ -28,7 +28,10 @@ struct BookReadingDetailSettingSheet: View {
     }
 
     var body: some View {
-        XMSheetScaffold(title: "自定义", onClose: { dismiss() }) {
+        XMSheetScaffold(
+            title: "自定义",
+            onClose: { dismiss() }
+        ) {
             XMSettingsGroup {
                 settingRow(
                     title: "渐变背景",

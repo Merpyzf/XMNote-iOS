@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 XMSheetScaffold、XMInlineSearchField、XMKeywordHighlighting、XMSelectionIndicator、XMSystemAlert、LoadingGate，以及外部注入的布局偏好与标签创建/改名/删除/保存动作
- * [OUTPUT]: 对外提供 XMTagSelectionItem、XMTagSelectionLayoutConfiguration、XMTagSelectionManagementConfiguration 与 XMTagSelectionSheet，以纯值和动作边界承载标签关联编辑
+ * [INPUT]: 依赖 XMSheetScaffold、XMSystemSearchBar、XMKeywordHighlighting、XMSelectionIndicator、XMSystemAlert、LoadingGate，以及外部注入的布局偏好与标签创建/改名/删除/保存动作
+ * [OUTPUT]: 对外提供 XMTagSelectionItem、XMTagSelectionLayoutConfiguration、XMTagSelectionManagementConfiguration 与 iOS 26 系统工具栏风格的 XMTagSelectionSheet
  * [POS]: UIComponents/Business/Tag 的跨模块标签选择组件，被书摘、回顾、详情、每日阅读与书架批量编辑 Sheet 复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -145,15 +145,17 @@ struct XMTagSelectionSheet: View {
     var body: some View {
         XMSheetScaffold(
             title: title,
-            subtitle: subtitle,
             onClose: closeSheet,
-            closeVisualSize: XMTagSelectionLayout.closeButtonVisualSize,
-            scrollEdgePresentation: .overlayHard,
+            isInteractionLocked: deletingItemID != nil,
+            scrollEdgePresentation: .overlaySoft,
+            isConfirmationDisabled: !canSave,
+            isConfirming: isSaving,
+            confirmationAction: saveSelection,
+            titleSubtitle: {
+                Text(selectionSummary)
+            },
             contentTopBar: {
                 selectionToolbar
-            },
-            bottomBar: {
-                saveBar
             }
         ) {
             ScrollViewReader { proxy in
@@ -187,26 +189,37 @@ struct XMTagSelectionSheet: View {
         .onDisappear(perform: cancelOwnedWork)
     }
 
-    private var subtitle: String? {
-        guard let contextText else { return nil }
+    private var selectionSummary: String {
+        let countSummary = "已选 \(draftSelectedIDs.count) 个标签"
+        guard let contextText else { return countSummary }
         let normalizedContext = contextText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalizedContext.isEmpty else { return nil }
-        return "\(normalizedContext) · \(draftSelectedIDs.count) 个标签"
+        guard !normalizedContext.isEmpty else { return countSummary }
+        return "\(normalizedContext) · \(countSummary)"
     }
 
     private var selectionToolbar: some View {
         VStack(spacing: Spacing.cozy) {
-            XMInlineSearchField(
+            XMSystemSearchBar(
                 text: $searchText,
                 isActive: $isSearchActive,
                 prompt: "搜索标签",
-                cancelPresentation: .hidden
+                accessibilityIdentifier: "tag.selection.search",
+                isEnabled: !isTagInteractionDisabled
             )
-            .disabled(isTagInteractionDisabled)
             .frame(maxWidth: .infinity)
             .layoutPriority(1)
 
             toolbarUtilityControls
+
+            if let saveErrorMessage, !saveErrorMessage.isEmpty {
+                Text(saveErrorMessage)
+                    .font(AppTypography.caption)
+                    .foregroundStyle(Color.feedbackError)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .transition(.opacity)
+                    .accessibilityLabel("保存失败，\(saveErrorMessage)")
+            }
         }
         .padding(.horizontal, Spacing.screenEdge)
         .padding(.bottom, Spacing.section)
@@ -413,41 +426,6 @@ struct XMTagSelectionSheet: View {
         .padding(.horizontal, Spacing.contentEdge)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(message)
-    }
-
-    private var saveBar: some View {
-        VStack(alignment: .leading, spacing: Spacing.cozy) {
-            if let saveErrorMessage, !saveErrorMessage.isEmpty {
-                Text(saveErrorMessage)
-                    .font(AppTypography.caption)
-                    .foregroundStyle(Color.feedbackError)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .transition(.opacity)
-                    .accessibilityLabel("保存失败，\(saveErrorMessage)")
-            }
-
-            Button(action: saveSelection) {
-                HStack(spacing: Spacing.cozy) {
-                    if isSaving {
-                        ProgressView()
-                            .controlSize(.small)
-                            .tint(Color.white)
-                            .transition(.opacity)
-                    }
-
-                    Text(isSaving ? "保存中…" : "保存")
-                        .font(AppTypography.subheadlineSemibold)
-                        .contentTransition(.opacity)
-                }
-            }
-            .buttonStyle(XMTagSelectionPrimaryButtonStyle())
-            .disabled(!canSave)
-            .accessibilityHint(saveAccessibilityHint)
-        }
-        .padding(.horizontal, Spacing.screenEdge)
-        .padding(.top, Spacing.cozy)
-        .padding(.bottom, Spacing.base)
-        .animation(structuralAnimation, value: saveErrorMessage)
     }
 
     private var normalizedSearchText: String {
@@ -1041,11 +1019,9 @@ private struct XMTagNameSheet: View {
         XMSheetScaffold(
             title: mode.title,
             onClose: closeSheet,
-            closeVisualSize: XMTagSelectionLayout.closeButtonVisualSize,
-            scrollEdgePresentation: .overlayHard,
-            bottomBar: {
-                submitBar
-            }
+            isConfirmationDisabled: !canSubmit,
+            isConfirming: isSubmitting,
+            confirmationAction: submitName
         ) {
             XMSettingsGroup {
                 VStack(alignment: .leading, spacing: Spacing.cozy) {
@@ -1136,27 +1112,6 @@ private struct XMTagNameSheet: View {
 
     private var structureAnimation: Animation? {
         reduceMotion ? nil : .smooth(duration: 0.28)
-    }
-
-    private var submitBar: some View {
-        Button(action: submitName) {
-            HStack(spacing: Spacing.cozy) {
-                if isSubmitting {
-                    ProgressView()
-                        .controlSize(.small)
-                        .tint(Color.white)
-                }
-
-                Text(isSubmitting ? mode.progressTitle : mode.actionTitle)
-                    .font(AppTypography.subheadlineSemibold)
-                    .contentTransition(.opacity)
-            }
-        }
-        .buttonStyle(XMTagSelectionPrimaryButtonStyle())
-        .disabled(!canSubmit)
-        .padding(.horizontal, Spacing.screenEdge)
-        .padding(.top, Spacing.cozy)
-        .padding(.bottom, Spacing.base)
     }
 
     private func closeSheet() {

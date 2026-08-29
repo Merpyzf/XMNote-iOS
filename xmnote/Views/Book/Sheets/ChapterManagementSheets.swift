@@ -19,6 +19,7 @@ struct ChapterMoveSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var searchText = ""
+    @State private var isSearchActive = false
 
     private var visibleTargets: [ChapterMoveTarget] {
         let keyword = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -31,33 +32,59 @@ struct ChapterMoveSheet: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if visibleTargets.isEmpty {
-                    XMContentStateView(
-                        role: .noResults,
-                        title: "没有匹配的目录",
-                        message: searchText.isEmpty ? nil : "未找到与“\(searchText)”匹配的目录。"
+            XMScrollEdgeChrome(
+                presentation: .overlaySoft,
+                edges: [.top, .bottom],
+                topBar: {
+                    XMSystemSearchBar(
+                        text: $searchText,
+                        isActive: $isSearchActive,
+                        prompt: "搜索目标目录",
+                        accessibilityIdentifier: "chapter.move.search"
                     )
-                } else {
-                    List(visibleTargets) { target in
-                        Button {
-                            onSelect(target.id)
-                        } label: {
-                            ChapterMoveTargetRow(target: target)
+                    .padding(.top, Spacing.cozy)
+                    .padding(.bottom, Spacing.half)
+                },
+                bottomBar: {
+                    Color.surfaceSheet
+                        .frame(height: Spacing.half)
+                        .allowsHitTesting(false)
+                }
+            ) {
+                Group {
+                    if visibleTargets.isEmpty {
+                        XMContentStateView(
+                            role: .noResults,
+                            title: "没有匹配的目录",
+                            message: searchText.isEmpty ? nil : "未找到与“\(searchText)”匹配的目录。"
+                        )
+                    } else {
+                        List(visibleTargets) { target in
+                            Button {
+                                onSelect(target.id)
+                            } label: {
+                                ChapterMoveTargetRow(target: target)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(!target.isEnabled)
+                            .accessibilityHint(target.disabledReason ?? "移动到此目录末尾")
                         }
-                        .buttonStyle(.plain)
-                        .disabled(!target.isEnabled)
-                        .accessibilityHint(target.disabledReason ?? "移动到此目录末尾")
+                        .listStyle(.insetGrouped)
                     }
-                    .listStyle(.insetGrouped)
                 }
             }
+            .background(Color.surfaceSheet.ignoresSafeArea())
             .navigationTitle(request.title)
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $searchText, prompt: "搜索目标目录")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .tint(Color.textSecondary)
+                    .accessibilityLabel("关闭")
                 }
             }
         }
@@ -148,13 +175,21 @@ struct ChapterSiblingOrderSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .tint(Color.textSecondary)
+                    .accessibilityLabel("关闭")
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") {
+                    XMSheetConfirmationAction(
+                        isDisabled: draftItems.map(\.id) == request.siblings.map(\.id),
+                        isConfirming: false
+                    ) {
                         onSave(draftItems.map(\.id))
                     }
-                    .disabled(draftItems.map(\.id) == request.siblings.map(\.id))
                 }
             }
         }
@@ -404,12 +439,21 @@ private extension ChapterBatchImportSheet {
     @ToolbarContentBuilder
     var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .cancellationAction) {
-            Button("取消") { dismiss() }
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+            }
+            .tint(Color.textSecondary)
                 .disabled(isBusy)
+                .accessibilityLabel("关闭")
         }
         ToolbarItem(placement: .confirmationAction) {
-            Button("导入", action: viewModel.importChapters)
-                .disabled(!viewModel.canImport || isReadingPhoto)
+            XMSheetConfirmationAction(
+                isDisabled: !viewModel.canImport || isReadingPhoto,
+                isConfirming: viewModel.isImporting,
+                action: viewModel.importChapters
+            )
         }
     }
 
@@ -714,6 +758,7 @@ struct ChapterRemoteSyncSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var loadingGate = LoadingGate()
+    @State private var isSearchActive = false
 
     private var visibleCandidates: [ChapterRemoteCatalogCandidate] {
         let keyword = viewModel.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -727,23 +772,33 @@ struct ChapterRemoteSyncSheet: View {
 
     var body: some View {
         NavigationStack {
-            ZStack(alignment: .top) {
+            XMScrollEdgeChrome(
+                presentation: .overlaySoft,
+                edges: [.top, .bottom],
+                topBar: {
+                    XMSystemSearchBar(
+                        text: $viewModel.searchText,
+                        isActive: $isSearchActive,
+                        prompt: searchPrompt,
+                        accessibilityIdentifier: "chapter.remote.search",
+                        isEnabled: !viewModel.isImporting
+                    )
+                    .padding(.top, Spacing.cozy)
+                    .padding(.bottom, Spacing.half)
+                },
+                bottomBar: {
+                    Color.surfaceSheet
+                        .frame(height: Spacing.half)
+                        .allowsHitTesting(false)
+                }
+            ) {
                 phaseContent
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.985)))
-
-                if viewModel.isImporting {
-                    LoadingStateView("正在导入目录…", style: .card)
-                        .padding(.top, Spacing.cozy)
-                        .allowsHitTesting(false)
-                        .accessibilityAddTraits(.updatesFrequently)
-                        .transition(.opacity)
-                        .zIndex(2)
-                }
             }
+            .allowsHitTesting(!viewModel.isImporting)
             .background(Color.surfacePage)
             .navigationTitle(navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $viewModel.searchText, prompt: searchPrompt)
             .toolbar { toolbarContent }
         }
         .presentationDetents([.large])
@@ -957,14 +1012,23 @@ struct ChapterRemoteSyncSheet: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .cancellationAction) {
-            Button("关闭") { dismiss() }
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+            }
+            .tint(Color.textSecondary)
                 .disabled(viewModel.isImporting)
+                .accessibilityLabel("关闭")
         }
 
         if viewModel.phase == .catalog {
             ToolbarItem(placement: .confirmationAction) {
-                Button("导入") { viewModel.importSelected() }
-                    .disabled(viewModel.selectedItemIDs.isEmpty || viewModel.isImporting)
+                XMSheetConfirmationAction(
+                    isDisabled: viewModel.selectedItemIDs.isEmpty,
+                    isConfirming: viewModel.isImporting,
+                    action: viewModel.importSelected
+                )
             }
         }
     }

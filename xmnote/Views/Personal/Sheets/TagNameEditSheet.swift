@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 TagManagementViewModel 提供名称编辑状态与提交动作，依赖 DesignTokens/LoadingStateView 渲染标签轻编辑表单
+ * [INPUT]: 依赖 TagManagementViewModel 提供名称编辑状态与提交动作，依赖 DesignTokens、xmSheetContentPanel 与 LoadingStateView 渲染标签轻编辑表单
  * [OUTPUT]: 对外提供 TagNameEditSheet，承接标签新增与重命名的输入、校验和写入反馈
  * [POS]: Views/Personal/Sheets 的标签管理业务 Sheet，被 TagManagementView 通过 sheet(item:) 呈现
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -29,18 +29,13 @@ struct TagNameEditSheet: View {
         XMSheetScaffold(
             title: edit.title,
             onClose: { viewModel.dismissNameEdit() },
-            leadingAction: {
-                Button("取消") { viewModel.dismissNameEdit() }
-                    .disabled(isWriting)
-            },
-            trailingAction: {
-                Button("保存") { viewModel.submitNameEdit() }
-                    .disabled(!viewModel.canSubmitNameEdit || isWriting)
-            }
+            isConfirmationDisabled: !viewModel.canSubmitNameEdit,
+            isConfirming: isWriting,
+            confirmationAction: { viewModel.submitNameEdit() }
         ) {
             VStack(spacing: Spacing.section) {
                 VStack(alignment: .leading, spacing: Spacing.half) {
-                    CardContainer(cornerRadius: CornerRadius.containerMedium, showsBorder: false) {
+                    CardContainer(shape: ConcentricRectangle.xmSheetContentPanel, showsBorder: false) {
                         VStack(alignment: .leading, spacing: Spacing.base) {
                             TextField("请输入标签名称", text: nameBinding)
                                 .font(AppTypography.body)

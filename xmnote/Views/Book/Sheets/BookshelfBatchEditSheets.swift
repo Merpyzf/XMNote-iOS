@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer、BookshelfBatchEditOptions 中的标签、来源、阅读状态候选项、XMRatingBar、InteractionMetrics、surfaceDividerDefault、BookshelfMoveGroupOption 分组封面数据与 BookCollectionSummary 书单候选项，依赖外层 ViewModel 闭包提交批量写入意图
+ * [INPUT]: 依赖 RepositoryContainer、BookshelfBatchEditOptions 中的标签、来源、阅读状态候选项、XMRatingBar、InteractionMetrics、surfaceDividerDefault、xmSheetContentPanel、BookshelfMoveGroupOption 分组封面数据与 BookCollectionSummary 书单候选项，依赖外层 ViewModel 闭包提交批量写入意图
  * [OUTPUT]: 对外提供移组、加入书单、标签、来源与阅读状态等批量编辑 Sheet；标签选择仅在多本操作时显示精简上下文
  * [POS]: Book 模块业务 Sheet，被 BookshelfBookListView 的编辑态批量操作入口唤起
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -15,6 +15,7 @@ struct BookshelfMoveGroupSheet: View {
     @State private var optionsState: [BookshelfMoveGroupOption]
     @State private var selectedID: Int64?
     @State private var searchKeyword = ""
+    @State private var isSearchActive = false
     @State private var createError: String?
     @State private var isCreating = false
 
@@ -49,30 +50,20 @@ struct BookshelfMoveGroupSheet: View {
             title: "移入分组",
             subtitle: "已选\(selectedCount)本",
             onClose: { dismiss() },
-            leadingAction: {
-                BookshelfBatchTopTextActionButton(
-                    title: "取消",
-                    foregroundColor: .textSecondary,
-                    action: { dismiss() }
+            isConfirmationDisabled: !canSubmit || isCreating || isLoading || hasLoadError,
+            confirmationAction: submitSelection,
+            contentTopBar: {
+                XMSystemSearchBar(
+                    text: $searchKeyword,
+                    isActive: $isSearchActive,
+                    prompt: "搜索分组",
+                    accessibilityIdentifier: "bookshelf.batch.move-group.search",
+                    isEnabled: !isCreating && !isLoading
                 )
-            },
-            trailingAction: {
-                BookshelfBatchTopTextActionButton(
-                    title: "保存",
-                    foregroundColor: .appTint.opacity(0.82),
-                    isDisabled: !canSubmit || isCreating || isLoading || hasLoadError,
-                    action: submitSelection
-                )
+                .padding(.horizontal, Spacing.cozy)
             }
         ) {
             VStack(spacing: Spacing.base) {
-                BookshelfBatchSearchField(
-                    text: $searchKeyword,
-                    placeholder: "搜索分组",
-                    backgroundColor: .surfaceCard,
-                    minHeight: 50
-                )
-
                 BookshelfBatchNamedOptionListPanel(
                     options: filteredOptions,
                     selectedIDs: selectedID.map { Set([$0]) } ?? [],
@@ -225,6 +216,7 @@ struct BookshelfBookCollectionSheet: View {
     @State private var optionsState: [BookCollectionSummary]
     @State private var selectedID: Int64?
     @State private var searchKeyword = ""
+    @State private var isSearchActive = false
     @State private var createError: String?
     @State private var isCreating = false
 
@@ -259,30 +251,20 @@ struct BookshelfBookCollectionSheet: View {
             title: "加入书单",
             subtitle: "已选\(selectedCount)本",
             onClose: { dismiss() },
-            leadingAction: {
-                BookshelfBatchTopTextActionButton(
-                    title: "取消",
-                    foregroundColor: .textSecondary,
-                    action: { dismiss() }
+            isConfirmationDisabled: !canSubmit || isCreating || isLoading || hasLoadError,
+            confirmationAction: submitSelection,
+            contentTopBar: {
+                XMSystemSearchBar(
+                    text: $searchKeyword,
+                    isActive: $isSearchActive,
+                    prompt: "搜索书单",
+                    accessibilityIdentifier: "bookshelf.batch.collection.search",
+                    isEnabled: !isCreating && !isLoading
                 )
-            },
-            trailingAction: {
-                BookshelfBatchTopTextActionButton(
-                    title: "保存",
-                    foregroundColor: .appTint.opacity(0.82),
-                    isDisabled: !canSubmit || isCreating || isLoading || hasLoadError,
-                    action: submitSelection
-                )
+                .padding(.horizontal, Spacing.cozy)
             }
         ) {
             VStack(spacing: Spacing.base) {
-                BookshelfBatchSearchField(
-                    text: $searchKeyword,
-                    placeholder: "搜索书单",
-                    backgroundColor: .surfaceCard,
-                    minHeight: 50
-                )
-
                 BookshelfBatchNamedOptionListPanel(
                     options: filteredOptions,
                     selectedIDs: selectedID.map { Set([$0]) } ?? [],
@@ -490,6 +472,7 @@ struct BookshelfBatchSourceSheet: View {
     @State private var optionsState: [BookshelfSourceOption]
     @State private var selectedID: Int64?
     @State private var searchKeyword = ""
+    @State private var isSearchActive = false
     @State private var createName = ""
     @State private var createError: String?
     @State private var isCreating = false
@@ -520,30 +503,20 @@ struct BookshelfBatchSourceSheet: View {
             title: "设置来源",
             subtitle: "已选\(selectedCount)本",
             onClose: { dismiss() },
-            bottomBar: {
-                Button {
-                    submitSelection()
-                } label: {
-                    Text("完成")
-                        .font(AppTypography.bodyMedium)
-                        .frame(maxWidth: .infinity)
-                        .frame(minHeight: InteractionMetrics.minimumTouchTarget)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(Color.primaryActionFill)
-                .disabled(selectedID == nil || isCreating)
-                .padding(.horizontal, Spacing.screenEdge)
-                .padding(.vertical, Spacing.cozy)
+            isConfirmationDisabled: selectedID == nil || isCreating,
+            confirmationAction: submitSelection,
+            contentTopBar: {
+                XMSystemSearchBar(
+                    text: $searchKeyword,
+                    isActive: $isSearchActive,
+                    prompt: "搜索来源",
+                    accessibilityIdentifier: "bookshelf.batch.source.search",
+                    isEnabled: !isCreating
+                )
+                .padding(.horizontal, Spacing.cozy)
             }
         ) {
             VStack(spacing: Spacing.comfortable) {
-                XMSettingsGroup {
-                    BookshelfBatchSearchField(
-                        text: $searchKeyword,
-                        placeholder: "搜索来源"
-                    )
-                }
-
                 XMSettingsGroup {
                     BookshelfBatchCreateField(
                         text: $createName,
@@ -668,89 +641,6 @@ struct BookshelfBatchSourceSheet: View {
     }
 }
 
-/// 批量编辑面板搜索输入，统一行高与图标语义。
-private struct BookshelfBatchSearchField: View {
-    @Binding var text: String
-    let placeholder: String
-    let backgroundColor: Color
-    let minHeight: CGFloat
-
-    /// 构建搜索输入；外层可按是否嵌入卡片调整底色与高度。
-    init(
-        text: Binding<String>,
-        placeholder: String,
-        backgroundColor: Color = .surfaceNested,
-        minHeight: CGFloat = 46
-    ) {
-        self._text = text
-        self.placeholder = placeholder
-        self.backgroundColor = backgroundColor
-        self.minHeight = minHeight
-    }
-
-    var body: some View {
-        HStack(spacing: Spacing.tight) {
-            Image(systemName: "magnifyingglass")
-                .font(AppTypography.subheadlineMedium)
-                .foregroundStyle(Color.textSecondary)
-
-            TextField(placeholder, text: $text)
-                .font(AppTypography.body)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled(true)
-        }
-        .padding(.horizontal, Spacing.base)
-        .frame(minHeight: minHeight)
-        .background(backgroundColor, in: RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous))
-    }
-}
-
-/// 批量标签顶栏文字按钮的私有尺寸，维持横向胶囊比例且不影响公共设计令牌。
-private enum BookshelfBatchTopTextActionButtonLayout {
-    static let minWidth: CGFloat = 76
-}
-
-/// 批量编辑 Sheet 顶部的轻量文字操作按钮，承接取消与保存等编辑型动作。
-private struct BookshelfBatchTopTextActionButton: View {
-    let title: String
-    let foregroundColor: Color
-    let isDisabled: Bool
-    let action: () -> Void
-
-    /// 构建顶部文字操作按钮；禁用态保留热区但弱化文字层级。
-    init(
-        title: String,
-        foregroundColor: Color,
-        isDisabled: Bool = false,
-        action: @escaping () -> Void
-    ) {
-        self.title = title
-        self.foregroundColor = foregroundColor
-        self.isDisabled = isDisabled
-        self.action = action
-    }
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(AppTypography.bodyMedium)
-                .foregroundStyle(isDisabled ? Color.textHint : foregroundColor)
-                .lineLimit(1)
-                .minimumScaleFactor(0.86)
-                .padding(.horizontal, Spacing.base)
-                .frame(
-                    minWidth: BookshelfBatchTopTextActionButtonLayout.minWidth,
-                    minHeight: InteractionMetrics.minimumTouchTarget
-                )
-                .background(Color.surfaceCard, in: Capsule())
-                .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .disabled(isDisabled)
-        .accessibilityLabel(title)
-    }
-}
-
 /// 批量编辑的命名选项轻量列表面板，统一标签与移组的搜索、创建、读取与选择节奏。
 private struct BookshelfBatchNamedOptionListPanel<Option: Identifiable, RowContent: View>: View where Option.ID == Int64 {
     let options: [Option]
@@ -854,7 +744,7 @@ private struct BookshelfBatchNamedOptionListPanel<Option: Identifiable, RowConte
             }
         }
         .padding(.vertical, Spacing.half)
-        .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous))
+        .background(Color.surfaceCard, in: ConcentricRectangle.xmSheetContentPanel)
     }
 
     private var hasCreateError: Bool {
@@ -1345,17 +1235,23 @@ struct BookshelfBatchReadStatusSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") {
+                    Button {
                         dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
                     }
+                    .tint(Color.textSecondary)
+                    .accessibilityLabel("关闭")
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") {
+                    XMSheetConfirmationAction(
+                        isDisabled: !canSubmit,
+                        isConfirming: false
+                    ) {
                         onConfirm(selectedStatusID, changedAt, ratingScore)
                         dismiss()
                     }
-                    .disabled(!canSubmit)
                 }
             }
         }

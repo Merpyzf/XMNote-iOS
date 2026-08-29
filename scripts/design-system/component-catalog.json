@@ -183,6 +183,16 @@
       "guidePath": null
     },
     {
+      "path": "xmnote/UIComponents/Controls/Search/XMSystemSearchBar.swift",
+      "symbols": ["XMSystemSearchBar"],
+      "status": "canonical", "category": "formInteraction", "layer": "controls", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "focused", "disabled", "empty"],
+      "dependencies": ["SwiftUI", "UIKit.UISearchBar"],
+      "useWhen": "Sheet 或固定内容顶栏需要系统 minimal 搜索外观、框内清除、原生键盘提交与第一响应者同步", "avoidWhen": "导航栏 searchable 已足够、需要最近搜索复合能力、多字段高级筛选或自定义内容区取消操作",
+      "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Controls/Search/XMSystemSearchBar.swift"},
+      "guidePath": null
+    },
+    {
       "path": "xmnote/UIComponents/Controls/Search/XMSearchHistorySection.swift",
       "symbols": ["XMSearchHistoryStyle", "XMSearchHistoryEmptyPresentation", "XMSearchHistorySection"],
       "status": "canonical", "category": "formInteraction", "layer": "controls", "framework": "swiftui", "usageScope": "crossFeature",
@@ -624,11 +634,11 @@
     },
     {
       "path": "xmnote/UIComponents/Sheet/XMSheetScaffold.swift",
-      "symbols": ["XMSheetScaffoldLayout", "XMSheetScaffold"],
+      "symbols": ["XMSheetScaffoldLayout", "standardContentTopSpacing", "XMSheetScaffold", "xmSheetContentPanel"],
       "status": "canonical", "category": "layout", "layer": "sheet", "framework": "swiftui", "usageScope": "crossFeature",
       "stateCoverage": ["normal", "pressed", "disabled", "loading", "error"],
-      "dependencies": ["DesignSystem", "TopBarActionIcon", "XMScrollEdgeChrome"],
-      "useWhen": "业务 Sheet 需要标准标题、关闭或双侧操作、滚动回弹和固定栏", "avoidWhen": "系统选择器、中心弹窗或没有业务 Sheet 关系的页面",
+      "dependencies": ["DesignSystem", "SwiftUI.ConcentricRectangle", "TopBarActionIcon", "XMScrollEdgeChrome"],
+      "useWhen": "业务 Sheet 需要标准标题、普通内容的标题区后间距、关闭或双侧操作、滚动回弹、固定栏或内部复合内容面板的同心轮廓；contentTopBar 场景自动排除标准内容顶部间距", "avoidWhen": "系统选择器、中心弹窗、普通列表行或没有业务 Sheet 关系的页面",
       "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Sheet/XMSheetScaffold.swift"},
       "guidePath": "docs/component-guides/XMSheetScaffold使用说明.md"
     },

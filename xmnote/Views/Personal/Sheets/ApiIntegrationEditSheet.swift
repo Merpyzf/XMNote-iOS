@@ -20,7 +20,9 @@ struct ApiIntegrationEditSheet: View {
         XMSheetScaffold(
             title: "\(destination.presentationTitle) 配置",
             subtitle: destination.sheetSubtitle,
-            onClose: { dismiss() }
+            onClose: { dismiss() },
+            isConfirmationDisabled: !viewModel.canSave(destination),
+            confirmationAction: save
         ) {
             VStack(spacing: Spacing.comfortable) {
                 XMSettingsGroup {
@@ -52,7 +54,7 @@ struct ApiIntegrationEditSheet: View {
                     }
                 }
 
-                actionBar
+                clearAction
             }
             .padding(.horizontal, Spacing.screenEdge)
             .padding(.bottom, Spacing.contentEdge)
@@ -65,34 +67,24 @@ struct ApiIntegrationEditSheet: View {
         }
     }
 
-    private var actionBar: some View {
-        HStack(spacing: Spacing.base) {
-            Button(role: .destructive) {
-                if viewModel.clear(destination) {
-                    dismiss()
-                }
-            } label: {
-                Text("清空配置")
-                    .font(AppTypography.subheadlineSemibold)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: InteractionMetrics.minimumTouchTarget)
+    private var clearAction: some View {
+        Button(role: .destructive) {
+            if viewModel.clear(destination) {
+                dismiss()
             }
-            .buttonStyle(.bordered)
-            .disabled(!viewModel.canClear(destination))
+        } label: {
+            Label("清空配置", systemImage: "trash")
+                .font(AppTypography.subheadlineMedium)
+                .frame(minHeight: InteractionMetrics.minimumTouchTarget)
+        }
+        .buttonStyle(.bordered)
+        .disabled(!viewModel.canClear(destination))
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
 
-            Button {
-                if viewModel.save(destination) {
-                    dismiss()
-                }
-            } label: {
-                Text("保存")
-                    .font(AppTypography.subheadlineSemibold)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: InteractionMetrics.minimumTouchTarget)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(Color.primaryActionFill)
-            .disabled(!viewModel.canSave(destination))
+    private func save() {
+        if viewModel.save(destination) {
+            dismiss()
         }
     }
 

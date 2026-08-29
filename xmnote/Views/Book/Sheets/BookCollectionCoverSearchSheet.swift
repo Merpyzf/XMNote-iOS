@@ -18,12 +18,19 @@ struct BookCollectionCoverSearchSheet: View {
 
     @State private var viewModel: BookCollectionCoverSearchViewModel?
     @State private var loadingGate = LoadingGate()
+    @State private var isSearchActive = false
 
     var body: some View {
         XMSheetScaffold(
             title: "在线匹配封面",
             subtitle: normalizedInitialTitle,
-            onClose: { dismiss() }
+            onClose: { dismiss() },
+            scrollEdgePresentation: .overlaySoft,
+            contentTopBar: {
+                if let viewModel {
+                    searchControls(viewModel)
+                }
+            }
         ) {
             if let viewModel {
                 content(viewModel)
@@ -64,60 +71,30 @@ struct BookCollectionCoverSearchSheet: View {
     }
 
     private func content(_ viewModel: BookCollectionCoverSearchViewModel) -> some View {
-        VStack(alignment: .leading, spacing: Spacing.section) {
-            searchControls(viewModel)
-            resultsSection(viewModel)
-        }
+        resultsSection(viewModel)
         .padding(.horizontal, Spacing.screenEdge)
         .padding(.bottom, Spacing.contentEdge)
     }
 
     private func searchControls(_ viewModel: BookCollectionCoverSearchViewModel) -> some View {
-        VStack(alignment: .leading, spacing: Spacing.base) {
-            Text("搜索书名")
-                .font(AppTypography.captionMedium)
-                .foregroundStyle(Color.textSecondary)
-
-            HStack(spacing: Spacing.cozy) {
-                TextField(
-                    "输入书名匹配封面",
-                    text: Binding(
-                        get: { viewModel.query },
-                        set: { viewModel.updateQuery($0) }
-                    )
-                )
-                .font(AppTypography.body)
-                .foregroundStyle(Color.textPrimary)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .submitLabel(.search)
-                .onSubmit {
-                    viewModel.search()
-                }
-                .padding(.horizontal, Spacing.base)
-                .frame(minHeight: 48)
-                .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                        .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
-                }
-
-                Button {
-                    viewModel.search()
-                } label: {
-                    TopBarActionIcon(
-                        systemName: "magnifyingglass",
-                        foregroundColor: canSearch(viewModel) ? Color.iconPrimary : Color.textHint,
-                        hitShape: .circle
-                    )
-                }
-                .buttonStyle(.plain)
-                .disabled(!canSearch(viewModel))
-                .accessibilityLabel("搜索封面")
-            }
+        VStack(alignment: .leading, spacing: Spacing.cozy) {
+            XMSystemSearchBar(
+                text: Binding(
+                    get: { viewModel.query },
+                    set: { viewModel.updateQuery($0) }
+                ),
+                isActive: $isSearchActive,
+                prompt: "输入书名匹配封面",
+                accessibilityIdentifier: "book.collection.cover.search",
+                isEnabled: viewModel.status != .loading,
+                onSubmit: viewModel.search
+            )
 
             sourceMenu(viewModel)
+                .padding(.horizontal, Spacing.cozy)
         }
+        .padding(.horizontal, Spacing.cozy)
+        .padding(.bottom, Spacing.half)
     }
 
     private func sourceMenu(_ viewModel: BookCollectionCoverSearchViewModel) -> some View {
