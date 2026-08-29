@@ -22,9 +22,9 @@ python3 scripts/design-system/ds.py catalog
 
 新 UI 没有 catalog 匹配时，默认先落到页面私有组合。不得先放入 `UIComponents` 再寻找第二个消费者。
 
-遇到已存在但 catalog 未登记的 `UIComponents` 文件时进入隔离流程：
+遇到已存在但 catalog 未登记的 `UIComponents` 文件或对外符号时进入隔离流程：
 
-1. 标记为“未登记设计系统债务”，不是 canonical 或可复制范例。
+1. 将未登记文件或符号标记为“未登记设计系统债务”，不是 canonical 或可复制范例；同文件的其他符号已登记，不能自动赋予它公共身份。
 2. 当前任务不新增消费者、不扩展 API、不把它包装成新的公共入口。
 3. 若现有页面已经使用且本次不负责治理，保持其行为并在结论中报告，不顺手大范围替换。
 4. 确需继续使用或治理时，单独核对两个独立生产场景、依赖方向、状态、Preview、测试和 catalog 合同；不满足准入则改为 feature 私有组合或已有 canonical 入口。
@@ -38,7 +38,7 @@ python3 scripts/design-system/ds.py catalog
 | --- | --- | --- |
 | 卡片式配置页 | `XMSettingsPage`、`XMSettingsSection`、`XMSettingsGroup` | 普通业务列表、表单 Sheet 或内容页保留自身容器 |
 | 单一开关/离散值设置行 | `XMSettingsToggleRow` / `XMSettingsValueMenuRow` | 双行说明、输入、多选、异步或业务卡保留私有组合 |
-| 通用业务 Sheet | `XMSheetScaffold` | 系统选择器、中心决策弹窗或没有业务 Sheet 关系的页面不用套壳 |
+| 通用业务 Sheet | `XMSheetScaffold`，并读取 [业务 Sheet](sheets.md) | 系统选择器、中心决策弹窗或没有业务 Sheet 关系的页面不用套壳 |
 | 中心确认、警告、决策、轻量输入 | `XMSystemAlert` | 页面内状态、Toast、菜单和业务 Sheet 分别使用自己的入口 |
 | 不打断任务的短驻留消息 | `XMToast` | 成功可由界面状态表达、需要确认或风险决策时不用 Toast |
 | 页面/Sheet/列表背景的空、无结果、失败 | `XMContentStateView` | 卡片内或保留内容时改用对应紧凑/行内入口 |
@@ -87,41 +87,15 @@ XMSettingsPage {
 - 没有前导 icon/media 时，`XMSettingsDivider` 保持组内内容宽度；存在前导槽位时，divider 前缘对齐标题正文列。私有 `Layout` 用真实 slot 宽度加行内 spacing 计算，不复制另一页面的 inset 数字。
 - 带 trailing value、Toggle、icon 或处理状态时，必须在 Accessibility 字号和最长中文下渲染。现有私有行尚未形成统一的横向转纵向实现；发生挤压时优先 reflow，不用缩小关键文字。未渲染前标记“适配风险，需截图验证”。
 
-配置 Sheet 不嵌套 `XMSettingsPage`。根使用 `XMSheetScaffold`，内部只组合 `XMSettingsSection/XMSettingsGroup` 和行；scaffold 是唯一 ScrollView owner，避免第二层滚动、重复背景和重复页面边距。
+配置 Sheet 不嵌套 `XMSettingsPage`。标准骨架与滚动 owner 按 [业务 Sheet](sheets.md) 选择；有设置语义的内容使用 `XMSettingsSection/XMSettingsGroup`，业务输入、说明、错误、破坏性操作和领域组件仍可私有组合。避免第二层滚动、重复背景和重复页面边距。
 
 ## 业务 Sheet
 
-- `XMSheetScaffold` 持有标题栏、关闭或双侧操作、全轴回弹滚动区、可选固定内容顶栏/底栏及 scroll-edge 协同。
-- 内容槽传入内容组合，不再传入完整 ScrollView；选择能满足任务的最简单 initializer，只有真正固定的控件才启用 top/bottom bar。
-- 静态副标题使用 `subtitle`；动态或可交互副标题使用类型安全 `titleSubtitle` 槽位。标题—副标题亲密性由 scaffold 管理，页面不重写。
-- 固定搜索/筛选属于 `contentTopBar`，提交或确认区属于 `bottomBar`；普通内容仍在主滚动闭包中。
-- 槽位保留具体泛型 View，不使用 `AnyView` 消除差异。
-- scaffold 不持有 Repository、保存策略、校验、选择状态或异步任务。
-- 页面不得在 scaffold 内再造第二套标题栏、关闭按钮、回弹或底部模糊。
-- 系统照片/文件选择器、日期控件、中心 Alert 或简单系统分享不强行套业务 Sheet。
+所有 Sheet 新增、修改和审查必须读取 [业务 Sheet](sheets.md)。本参考只保留组件归位关系：
 
-### Sheet 提交位置
-
-先判断数据何时生效，再选择唯一提交层级：
-
-| 提交关系 | 入口 | 约束 |
-| --- | --- | --- |
-| Binding/行操作即时持久化，关闭不丢草稿 | 标准 close | 不添加“保存/完成”制造伪提交 |
-| Sheet 持有独立草稿；提交是短、单一文字动作；操作旁不需持续显示进度或错误 | 成对 `leadingAction` 取消 + `trailingAction` 提交 | 两侧都使用原生 Button；不复制某个 feature 的私有 pill/字号作为公共样式 |
-| 长列表/长表单中主操作必须常驻，需要全宽强调，或进度、禁用原因、失败必须与操作保持空间关系 | `bottomBar` | 错误在按钮上方，processing 在按钮/操作区内；内容尾部不再复制提交入口 |
-
-同一 Sheet 只保留一个保存入口。标题栏不承载 spinner、长错误、双行文案或复杂状态；`XMSheetScaffold` 当前也不提供双侧标题动作与 bottomBar 同时提交的语法，不能另造重复层级。
-
-### 校验、保存和输入适配
-
-- 用户能通过某字段修正的错误贴在字段下方，允许换行；错误存在时禁用提交，重新编辑时清除已过期的提交错误。不要用 Toast 代替可在当前任务中修正的字段错误。
-- 整体提交失败且字段本身合法时，贴近固定操作区；已有可信内容且可重试时使用 `XMInlineStatusBanner` 靠近来源区域。失败不 dismiss，保留草稿、选择和输入焦点恢复路径。
-- 保存开始后立即提供可感知反馈，禁用重复提交以及会丢失草稿的关闭/交互收起；成功后用 dismiss 或内容变化表达，不额外发送成功 Toast。
-- 若使用 bottomBar，按钮内 processing 与状态文案是当前最成熟模式；其他入口只固定“立即反馈、禁用重复触发、保留草稿”，不要强行复制同一种 spinner 位置。
-- 当前生产代码没有两个独立的异步字段校验场景，因而没有通用 `isValidating` 视觉、debounce 时序或成功勾选规范。此类状态保留 feature 私有，过期响应、取消和保存编排由状态 owner 处理，不新增公共校验组件。
-- 包含可换行文本、输入、校验或动态内容的 Sheet，在 Accessibility 字号下不得继续使用未经测量的固定 height detent；使用 `.large`，或由专用组件 owner 按 Dynamic Type 计算高度。固定数字只允许给内容封闭且经过字号矩阵验证的局部 owner。
-- 输入型 Sheet 验证键盘出现、交互收起、提交前失焦、失败后继续编辑和 bottomBar 可达性；不要新增第二层 ScrollView 或用硬编码 keyboard padding 补偿。
-- 标题/副标题是单行 chrome。长说明、错误和动态状态进入滚动内容或固定操作区；发现可能截断时先报告适配风险并截图验证。
+- 普通单层业务任务查询并使用 catalog 登记的 `XMSheetScaffold`；系统入口、中心决策和专项多步/滚动骨架按 Sheet 参考中的边界选择。
+- Scaffold 槽位保持具体泛型 View，不用 `AnyView` 消除业务差异，也不持有 Repository、保存策略、校验、选择状态或异步任务。
+- Sheet 内的 Settings、状态、反馈、按钮、输入、搜索和选择继续使用本文件对应组件规则；骨架、提交位置、内容边距、卡片、同心圆角、Detent 与退出保护不在此重复定义。
 
 ## 导航、切换与顶部操作
 
@@ -156,7 +130,7 @@ XMSettingsPage {
 
 按钮先按任务成本分层：
 
-- 页面/Sheet 唯一的提交、创建或确认可以使用 `primaryActionFill + primaryActionForeground`；同一任务面内通常只保留一个同权主按钮。
+- 页面唯一的提交、创建或确认可以使用 `primaryActionFill + primaryActionForeground`；标准业务 Sheet 的提交外观与位置由 [业务 Sheet](sheets.md) 和 scaffold 持有，不在内容层重建。同一任务面内通常只保留一个同权主按钮。
 - 取消、返回、筛选、排序、更多和辅助跳转保持系统/中性色，不因可点击就使用品牌填充。
 - 删除与不可逆操作使用原生 destructive role 和 `feedbackError` 语义，不与品牌主按钮伪装成同一层级。
 - 标签使用结果明确的动词；图标不能是唯一语义。按钮保持 `InteractionMetrics.minimumTouchTarget`，处理中文字宽度、Dynamic Type 和 loading 前后宽度稳定。

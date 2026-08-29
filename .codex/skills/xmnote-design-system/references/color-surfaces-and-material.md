@@ -18,7 +18,7 @@
 | 页面或分组流底板 | `surfacePage` | Tab 根页、分组列表和卡片流页面 |
 | 页面底板上的主要内容容器 | `surfaceCard` | 普通内容卡片；不用于 Settings 分组之外再套卡 |
 | 主卡片内部的次级表层 | `surfaceNested` | 确有第二层语义的局部模块，不是默认“更高级”皮肤 |
-| 业务 Sheet 根背景 | `surfaceSheet` | Sheet 根层；内部卡片继续按内容关系选择 |
+| 业务 Sheet 内容底板 | `surfaceSheet` | 由 `XMSheetScaffold` 根层持有；内部卡片按 [业务 Sheet](sheets.md) 的信息关系选择 |
 | 弱控件填充 | `controlFillSecondary` | 轻量按钮、圆形选项和弱填充控件 |
 | 批注/个人想法弱分组 | `surfaceAnnotation` | 阅读内容内的批注语义，不是通用卡片背景 |
 | 主要文本 | `textPrimary` | 标题、正文和关键值 |
@@ -46,11 +46,13 @@ token 存在不等于每个层级都必须使用。`surfaceBorderStrong`、`surf
 - 页面通常从 `surfacePage` 开始，主要内容按需使用一层 `surfaceCard`。
 - `surfaceNested` 只用于卡片内确有独立语义和边界的第二层内容；不得连续嵌套。
 - Settings 使用 `XMSettingsGroup`，普通内容卡使用机器目录确认后的 `CardContainer`；两者不能因外观相近互换。
-- `CardContainer` 只承接普通内容表层与可选轻描边，不承接设置分组、交互按钮或复杂业务状态。
+- `CardContainer` 只拥有普通内容表层、Shape 与可选轻描边；可以包裹 feature 私有业务组合，但不持有其交互、状态或保存逻辑。
 - 同时出现背景差、边框、阴影、玻璃和渐变时，通常说明层级没有通过信息结构解决。保留能解释关系的最少手段。
 - 阴影只表达真实浮起、堆叠或拖拽；普通列表项和阅读正文不默认投影。
 
 卡片嵌套、等权指标卡矩阵、重阴影、霓虹、发光和多层透明材质属于高风险模式。只有截图证明它解决了明确层级问题，且没有更简单的亲密性/留白方案时才可保留。
+
+业务 Sheet 自身已经是容器，不能从 `surfaceSheet` 推导出“内部必须再放白卡”。简单说明、列表、表单与系统分组何时保持无卡，以及复合面板何时使用 `surfaceCard`，统一读取 [业务 Sheet](sheets.md)；本文件不维护第二套 Sheet 卡片处方。
 
 ## 品牌与业务色边界
 

@@ -134,7 +134,7 @@ SwiftUI 文本嵌入 UIKit collection/list 或依赖绝对 cell 高度时，Typo
 | `contentEdge` | 18 | 普通卡片或内容容器内边距 | 不用于图标与文字 |
 | `section` | 20 | 模块级强调分组 | 不用于行内关系 |
 | `double` | 24 | 大段留白、强分区 | 不用于密集控件内部 |
-| `hairline/tiny/micro` | 1/2/3 | 描边避让、视觉补偿、极小留白；`micro` 也用于已定稿标题—副标题亲密关系 | 不作为卡片、列表或页面主间距 |
+| `hairline/tiny/micro` | 1/2/3 | 描边避让、视觉补偿、极小留白；`micro` 只在真实组件 owner 已定稿时表达极紧密关系 | 不作为卡片、列表或页面主间距 |
 | `tight/comfortable` | 10/14 | 默认档之间确有证据的密度补位 | 不作为新页面的起始选择 |
 
 `Spacing.none` 只表达明确的零间距。相同数字不代表相同语义：点击区使用 `InteractionMetrics`，描边使用 `StrokeWidth`，组件尺寸留在组件 `Layout/Metrics` owner。
@@ -142,7 +142,7 @@ SwiftUI 文本嵌入 UIKit collection/list 或依赖绝对 cell 高度时，Typo
 ### 常见组合
 
 - 图标与短标签：先试 `compact`；图标和较长正文通常从 `half` 或组件既有 owner 开始。
-- 标题与从属副标题：先试 `half`；`XMSheetScaffold` 已定稿为 `micro`，页面不得重写。
+- 标题与从属副标题：普通内容先试 `half`；Sheet 的系统静态副标题与动态标题槽分别由 [业务 Sheet](sheets.md) 和 scaffold owner 管理，页面不重写其间距。
 - 同一语义块中的段落或控件：先试 `cozy` / `base`。
 - 卡片内容到边缘：先试 `contentEdge`，简单紧凑卡片可以由其组件 owner 选择 `base`。
 - 页面横向边距：使用 `screenEdge`，规则宽度下再由页面容器决定最大宽度。
@@ -155,6 +155,8 @@ SwiftUI 文本嵌入 UIKit collection/list 或依赖绝对 cell 高度时，Typo
 ## 圆角与边界
 
 先判定角色，再选体量。所有 `RoundedRectangle` 保持 `.continuous`，除非真实系统组件或形状语义要求不同。
+
+下表只负责不依赖外部容器关系的固定圆角。系统 Sheet 外轮廓、容器感知的同心复合面板及嵌套连续关系统一读取 [业务 Sheet](sheets.md)，不得从下表反推固定半径模拟系统容器。
 
 | 角色 | Token 范围 | 典型场景 |
 | --- | --- | --- |
