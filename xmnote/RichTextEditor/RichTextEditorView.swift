@@ -1,19 +1,28 @@
 /**
- * [INPUT]: 依赖 RichTextEditor 模块格式定义、RichTextAppearance、AppTypography 与 UIKit/TextKit 能力，承接富文本解析/渲染/编辑链路
- * [OUTPUT]: 对外提供 RichTextEditorView 能力，用于富文本编辑器的序列化、交互或样式支持
+ * [INPUT]: 依赖 RichTextEditor 模块格式定义、RichTextAppearance、AppTypography 与 UIKit/TextKit 动态字体/语义色能力，承接富文本解析/渲染/编辑链路
+ * [OUTPUT]: 对外提供 RichTextEditorView 能力，用于富文本编辑器的序列化、交互、显示层动态字体与语义色适配
  * [POS]: RichTextEditor 功能模块内部构件，服务 Note 编辑场景的 Android 业务意图对齐
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import UIKit
 
+private extension NSAttributedString.Key {
+    /// 仅存在于编辑器显示副本中，记录 Dynamic Type 缩放前的模型字体。
+    static let xmnoteCanonicalFont = NSAttributedString.Key("com.xmnote.richText.canonicalFont")
+    /// 标记由编辑器补入的系统语义前景色，回写模型时需要移除。
+    static let xmnoteSemanticForeground = NSAttributedString.Key("com.xmnote.richText.semanticForeground")
+}
+
 /// 富文本模块共享排版 owner，统一 HTML 解析、编辑器输入与外部书摘编辑场景的默认正文基线。
 enum RichTextTypography {
+    /// 富文本模型使用固定的默认字号保存格式语义；实际显示缩放由编辑器 TextKit 临时属性负责。
     nonisolated static var editorBodyUIFont: UIFont {
         AppTypography.uiFixed(
             baseSize: 16,
             textStyle: .body,
-            minimumPointSize: 16
+            minimumPointSize: 16,
+            compatibleWith: UITraitCollection(preferredContentSizeCategory: .large)
         )
     }
 }
@@ -59,6 +68,9 @@ final class RichTextEditorView: UITextView {
     /// 编辑器基础字体，统一初始输入、清除格式与边界重置时的字体基线。
     private(set) var baseFont: UIFont
 
+    /// 监听系统字号与明暗模式变化，只刷新 TextKit 显示属性，不改写富文本模型。
+    private var displayTraitRegistration: (any UITraitChangeRegistration)?
+
     // MARK: - 初始化
 
     /// 创建编辑器并配置 TextKit 管线与默认输入行为。
@@ -84,11 +96,23 @@ final class RichTextEditorView: UITextView {
 
     private func commonInit() {
         font = baseFont
+        textColor = .label
+        adjustsFontForContentSizeCategory = false
         textContainerInset = UIEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
         alwaysBounceVertical = true
         keyboardDismissMode = .interactive
         contentInsetAdjustmentBehavior = .never
         refreshLinkTextAttributes()
+        displayTraitRegistration = registerForTraitChanges(
+            [UITraitPreferredContentSizeCategory.self, UITraitUserInterfaceStyle.self]
+        ) { (editorView: RichTextEditorView, _) in
+            editorView.refreshDisplayAttributes()
+        }
+    }
+
+    /// 当前 trait 下的正文显示字体；模型仍保存 `baseFont` 的固定字号。
+    var displayBaseFont: UIFont {
+        displayFont(for: baseFont)
     }
 
     /// 更新基础字体并同步到 typingAttributes，确保后续输入与占位基线一致。
@@ -97,9 +121,124 @@ final class RichTextEditorView: UITextView {
             return
         }
         baseFont = font
-        self.font = font
+        refreshDisplayAttributes()
+    }
+
+    /// 接收可持久化的富文本模型，生成只服务当前 trait 的编辑副本。
+    func setCanonicalAttributedText(_ attributedText: NSAttributedString) {
+        let selectedRange = selectedRange
+        let displayText = NSMutableAttributedString(attributedString: attributedText)
+        let fullRange = NSRange(location: 0, length: displayText.length)
+
+        if fullRange.length > 0 {
+            var runs: [([NSAttributedString.Key: Any], NSRange)] = []
+            displayText.enumerateAttributes(in: fullRange, options: []) { attributes, range, _ in
+                runs.append((attributes, range))
+            }
+
+            for (attributes, range) in runs {
+                let canonicalFont = attributes[.font] as? UIFont ?? baseFont
+                displayText.addAttribute(.xmnoteCanonicalFont, value: canonicalFont, range: range)
+                displayText.addAttribute(.font, value: displayFont(for: canonicalFont), range: range)
+
+                if attributes[.foregroundColor] == nil {
+                    displayText.addAttribute(.xmnoteSemanticForeground, value: true, range: range)
+                    displayText.addAttribute(.foregroundColor, value: UIColor.label, range: range)
+                }
+
+                if let lightARGB = attributes[.highlightColor] as? UInt32 {
+                    displayText.addAttribute(
+                        .backgroundColor,
+                        value: HighlightColors.adaptedColor(lightARGB: lightARGB, for: traitCollection),
+                        range: range
+                    )
+                }
+            }
+        }
+
+        self.attributedText = displayText
+        self.selectedRange = NSRange(
+            location: min(selectedRange.location, displayText.length),
+            length: 0
+        )
+        updateDisplayTypingAttributes()
+    }
+
+    /// 返回移除显示层字号与语义色后的模型副本，供 SwiftUI binding 与 HTML 序列化使用。
+    func canonicalAttributedText() -> NSAttributedString {
+        let canonicalText = NSMutableAttributedString(attributedString: attributedText)
+        let fullRange = NSRange(location: 0, length: canonicalText.length)
+        guard fullRange.length > 0 else { return canonicalText }
+
+        var runs: [([NSAttributedString.Key: Any], NSRange)] = []
+        canonicalText.enumerateAttributes(in: fullRange, options: []) { attributes, range, _ in
+            runs.append((attributes, range))
+        }
+
+        for (attributes, range) in runs {
+            let displayFont = attributes[.font] as? UIFont
+            let storedFont = attributes[.xmnoteCanonicalFont] as? UIFont ?? baseFont
+            canonicalText.addAttribute(
+                .font,
+                value: canonicalFont(storedFont, adoptingTraitsFrom: displayFont),
+                range: range
+            )
+
+            if attributes[.xmnoteSemanticForeground] != nil {
+                canonicalText.removeAttribute(.foregroundColor, range: range)
+            }
+
+            if let lightARGB = attributes[.highlightColor] as? UInt32 {
+                canonicalText.addAttribute(
+                    .backgroundColor,
+                    value: HighlightColors.color(from: lightARGB),
+                    range: range
+                )
+            }
+
+            canonicalText.removeAttribute(.xmnoteCanonicalFont, range: range)
+            canonicalText.removeAttribute(.xmnoteSemanticForeground, range: range)
+        }
+        return canonicalText
+    }
+
+    /// trait 变化时从模型副本重新生成显示属性，避免把放大字号或深色颜色写回持久化内容。
+    func refreshDisplayAttributes() {
+        setCanonicalAttributedText(canonicalAttributedText())
+    }
+
+    private func displayFont(for canonicalFont: UIFont) -> UIFont {
+        let defaultBodyFont = UIFont.preferredFont(
+            forTextStyle: .body,
+            compatibleWith: UITraitCollection(preferredContentSizeCategory: .large)
+        )
+        let preferredBodyFont = UIFont.preferredFont(
+            forTextStyle: .body,
+            compatibleWith: traitCollection
+        )
+        let scale = preferredBodyFont.pointSize / max(defaultBodyFont.pointSize, 1)
+        return UIFont(
+            descriptor: canonicalFont.fontDescriptor,
+            size: canonicalFont.pointSize * scale
+        )
+    }
+
+    private func canonicalFont(_ storedFont: UIFont, adoptingTraitsFrom displayFont: UIFont?) -> UIFont {
+        guard let displayFont else { return storedFont }
+        let displayTraits = displayFont.fontDescriptor.symbolicTraits
+        guard let descriptor = storedFont.fontDescriptor.withSymbolicTraits(displayTraits) else {
+            return UIFont(descriptor: storedFont.fontDescriptor, size: storedFont.pointSize)
+        }
+        return UIFont(descriptor: descriptor, size: storedFont.pointSize)
+    }
+
+    private func updateDisplayTypingAttributes() {
+        self.font = displayBaseFont
         var typing = typingAttributes
-        typing[.font] = font
+        typing[.font] = displayBaseFont
+        typing[.xmnoteCanonicalFont] = baseFont
+        typing[.foregroundColor] = UIColor.label
+        typing[.xmnoteSemanticForeground] = true
         typingAttributes = typing
     }
 
@@ -217,7 +356,12 @@ final class RichTextEditorView: UITextView {
     func clearFormats(in range: NSRange) {
         guard range.length > 0 else { return }
         let plainText = textStorage.attributedSubstring(from: range).string
-        let attrs: [NSAttributedString.Key: Any] = [.font: baseFont]
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: displayBaseFont,
+            .xmnoteCanonicalFont: baseFont,
+            .foregroundColor: UIColor.label,
+            .xmnoteSemanticForeground: true,
+        ]
         mutateTextStorage {
             textStorage.replaceCharacters(in: range, with: NSAttributedString(string: plainText, attributes: attrs))
         }

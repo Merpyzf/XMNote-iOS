@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 RichTextEditor 浮动挂饰模式与 SwiftUI safeAreaBar/glassEffect，承接书摘正文/想法的辅助编辑与 OCR 请求回流
- * [OUTPUT]: 对外提供 NoteTextComposerView，服务 NoteEditorView 的正文与想法全屏编辑入口
+ * [INPUT]: 依赖 RichTextEditor 浮动挂饰与 UIKit soft edge 模式以及 SwiftUI safeAreaBar/glassEffect，承接书摘正文/想法的辅助编辑与 OCR 请求回流
+ * [OUTPUT]: 对外提供带系统 soft 滚动边缘和底部液态玻璃挂饰的 NoteTextComposerView，服务 NoteEditorView 的正文与想法全屏编辑入口
  * [POS]: Views/Note/Components 的页面私有子视图，负责液态玻璃挂饰工具栏、系统 OCR 选择与键盘联动
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -21,46 +21,47 @@ struct NoteTextComposerView: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        ZStack {
-            Color.surfacePage.ignoresSafeArea()
-
-            editor
-        }
-        .navigationTitle(title)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button("完成") {
-                    dismiss()
+        editor
+            .background(Color.surfacePage.ignoresSafeArea())
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .tint(Color.textSecondary)
+                    .accessibilityLabel("关闭")
                 }
             }
-        }
-        .safeAreaBar(edge: .bottom, spacing: Spacing.none) {
-            bottomOrnament
-        }
-        .confirmationDialog("选择 OCR 方式", isPresented: $showsOCRChooser) {
-            if ornamentController.canCaptureTextFromCamera {
-                Button("系统取词") {
-                    ornamentController.send(.cameraTextCapture)
-                }
+            .safeAreaBar(edge: .bottom, spacing: Spacing.none) {
+                bottomOrnament
             }
-            if supportsPhotoOCR {
-                Button("拍照 OCR") {
-                    onRequestPhotoOCR()
+            .confirmationDialog("选择 OCR 方式", isPresented: $showsOCRChooser) {
+                if ornamentController.canCaptureTextFromCamera {
+                    Button("系统取词") {
+                        ornamentController.send(.cameraTextCapture)
+                    }
                 }
+                if supportsPhotoOCR {
+                    Button("拍照 OCR") {
+                        onRequestPhotoOCR()
+                    }
+                }
+                Button("取消", role: .cancel) { }
             }
-            Button("取消", role: .cancel) { }
-        }
-        .xmSystemAlert(
-            isPresented: $errorMessage.isPresented(),
-            descriptor: XMSystemAlertDescriptor(
-                title: "OCR 提示",
-                message: errorMessage ?? "",
-                actions: [
-                    XMSystemAlertAction(title: "知道了", role: .cancel) { }
-                ]
+            .xmSystemAlert(
+                isPresented: $errorMessage.isPresented(),
+                descriptor: XMSystemAlertDescriptor(
+                    title: "OCR 提示",
+                    message: errorMessage ?? "",
+                    actions: [
+                        XMSystemAlertAction(title: "知道了", role: .cancel) { }
+                    ]
+                )
             )
-        )
     }
 }
 
@@ -72,9 +73,10 @@ private extension NoteTextComposerView {
             isEditable: true,
             baseFont: NoteEditorViewModel.editorBaseUIFont,
             allowsCameraTextCapture: true,
-            toolbarPresentation: .ornament(ornamentController)
+            toolbarPresentation: .ornament(ornamentController),
+            isBackgroundTransparent: true,
+            usesSoftScrollEdgeEffects: true
         )
-        .background(Color.surfacePage)
     }
 
     var bottomOrnament: some View {
