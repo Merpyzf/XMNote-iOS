@@ -133,6 +133,7 @@ XMSettingsPage {
 - 页面唯一的提交、创建或确认可以使用 `primaryActionFill + primaryActionForeground`；标准业务 Sheet 的提交外观与位置由 [业务 Sheet](sheets.md) 和 scaffold 持有，不在内容层重建。同一任务面内通常只保留一个同权主按钮。
 - 取消、返回、筛选、排序、更多和辅助跳转保持系统/中性色，不因可点击就使用品牌填充。
 - 删除与不可逆操作使用原生 destructive role 和 `feedbackError` 语义，不与品牌主按钮伪装成同一层级。
+- 原生 `.bordered` 会消费环境 tint，不能仅凭系统样式名称把它当作中性次级按钮；必须显式确认 tint 来源，并按 [颜色、表层、图标与材质](color-surfaces-and-material.md) 的操作按钮前景—背景配对规则选择语义色。
 - 标签使用结果明确的动词；图标不能是唯一语义。按钮保持 `InteractionMetrics.minimumTouchTarget`，处理中文字宽度、Dynamic Type 和 loading 前后宽度稳定。
 - 写入开始立即禁用来源；按钮内可以显示局部 spinner 和“保存中…”等状态，但业务 phase 不进入通用 ButtonStyle。失败后恢复可操作并保留上下文。
 - 不为普通按钮自行增加玻璃、渐变、重阴影或胶囊；只有 catalog 返回的场景 owner 才能提供这些外观。

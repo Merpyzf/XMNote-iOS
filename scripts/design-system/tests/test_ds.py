@@ -148,6 +148,24 @@ class DesignSystemOrchestratorTests(unittest.TestCase):
         )
         self.assertTrue(any("gesture exception 必须使用精确路径" in error for error in errors))
 
+    def test_policy_audit_rejects_invalid_button_color_policy(self) -> None:
+        policy = copy.deepcopy(DS.load_json(DS.POLICY_PATH))
+        policy["schemaVersion"] = 3
+        button_policy = policy["buttonColorPolicy"]
+        button_policy["ruleID"] = "DS003"
+        button_policy["borderedStyleNames"] = ["plain", "plain"]
+        button_policy["neutralColorSymbols"].append("appTint")
+        button_policy["normalTextMinimumContrast"] = 4.0
+
+        errors = DS.audit_policy(policy)
+
+        self.assertTrue(any("schemaVersion 必须为 4" in error for error in errors))
+        self.assertTrue(any("必须使用 report 规则" in error for error in errors))
+        self.assertTrue(any("包含重复项" in error for error in errors))
+        self.assertTrue(any("必须包含 bordered" in error for error in errors))
+        self.assertTrue(any("颜色分类重复" in error for error in errors))
+        self.assertTrue(any("normalTextMinimumContrast 必须为 4.5" in error for error in errors))
+
     def test_catalog_coverage_reports_missing_layer_and_preview_candidates(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

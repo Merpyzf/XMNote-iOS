@@ -166,6 +166,41 @@ public struct InteractionPolicy: Codable, Equatable, Sendable {
     }
 }
 
+/// Report-only policy for native action-button foreground and surface pairings.
+public struct ButtonColorPolicy: Codable, Equatable, Sendable {
+    public let ruleID: String
+    public let borderedStyleNames: [String]
+    public let prominentStyleNames: [String]
+    public let brandDerivedColorSymbols: [String]
+    public let neutralColorSymbols: [String]
+    public let feedbackColorSymbols: [String]
+    public let normalTextMinimumContrast: Double
+    public let largeTextMinimumContrast: Double
+    public let essentialGlyphMinimumContrast: Double
+
+    public init(
+        ruleID: String,
+        borderedStyleNames: [String],
+        prominentStyleNames: [String],
+        brandDerivedColorSymbols: [String],
+        neutralColorSymbols: [String],
+        feedbackColorSymbols: [String],
+        normalTextMinimumContrast: Double,
+        largeTextMinimumContrast: Double,
+        essentialGlyphMinimumContrast: Double
+    ) {
+        self.ruleID = ruleID
+        self.borderedStyleNames = borderedStyleNames
+        self.prominentStyleNames = prominentStyleNames
+        self.brandDerivedColorSymbols = brandDerivedColorSymbols
+        self.neutralColorSymbols = neutralColorSymbols
+        self.feedbackColorSymbols = feedbackColorSymbols
+        self.normalTextMinimumContrast = normalTextMinimumContrast
+        self.largeTextMinimumContrast = largeTextMinimumContrast
+        self.essentialGlyphMinimumContrast = essentialGlyphMinimumContrast
+    }
+}
+
 /// Swift-facing subset of `policy.json`; unrelated orchestrator fields are ignored by Codable.
 public struct LintPolicy: Codable, Equatable, Sendable {
     public let schemaVersion: Int
@@ -173,6 +208,7 @@ public struct LintPolicy: Codable, Equatable, Sendable {
     public let symbolPolicies: [SymbolPolicy]
     public let dependencyPolicies: [DependencyPolicy]
     public let interactionPolicy: InteractionPolicy
+    public let buttonColorPolicy: ButtonColorPolicy
 
     public init(
         schemaVersion: Int,
@@ -186,6 +222,32 @@ public struct LintPolicy: Codable, Equatable, Sendable {
             touchTargetLiteral: 44,
             touchTargetNameFragments: ["touch", "hit", "tap"],
             gestureExceptions: []
+        ),
+        buttonColorPolicy: ButtonColorPolicy = ButtonColorPolicy(
+            ruleID: "DSR004",
+            borderedStyleNames: ["bordered"],
+            prominentStyleNames: ["borderedProminent"],
+            brandDerivedColorSymbols: [
+                "appTint",
+                "primaryActionFill",
+                "stateActionForeground",
+                "linkForeground",
+                "selectionAccent",
+                "selectionForeground",
+                "feedbackSuccess"
+            ],
+            neutralColorSymbols: [
+                "textPrimary",
+                "textSecondary",
+                "iconPrimary",
+                "iconSecondary",
+                "menuActionForeground",
+                "menuSelectedForeground"
+            ],
+            feedbackColorSymbols: ["feedbackError", "feedbackWarning"],
+            normalTextMinimumContrast: 4.5,
+            largeTextMinimumContrast: 3,
+            essentialGlyphMinimumContrast: 3
         )
     ) {
         self.schemaVersion = schemaVersion
@@ -193,6 +255,7 @@ public struct LintPolicy: Codable, Equatable, Sendable {
         self.symbolPolicies = symbolPolicies
         self.dependencyPolicies = dependencyPolicies
         self.interactionPolicy = interactionPolicy
+        self.buttonColorPolicy = buttonColorPolicy
     }
 }
 
@@ -212,6 +275,44 @@ public struct RuleEngine: Sendable {
         visitor.walk(tree)
         return visitor.diagnostics.sorted {
             ($0.line, $0.column, $0.ruleID) < ($1.line, $1.column, $1.ruleID)
+        }
+    }
+}
+
+private enum ButtonTintClassification {
+    case inherited
+    case brandDerived(String)
+    case neutral(String)
+    case feedback(String)
+    case unknown
+
+    var category: String {
+        switch self {
+        case .inherited:
+            return "inherited"
+        case .brandDerived:
+            return "brand"
+        case .neutral:
+            return "neutral"
+        case .feedback:
+            return "feedback"
+        case .unknown:
+            return "unknown"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .inherited:
+            return "继承环境 tint"
+        case .brandDerived(let symbol):
+            return "品牌派生 \(symbol)"
+        case .neutral(let symbol):
+            return "中性 \(symbol)"
+        case .feedback(let symbol):
+            return "反馈 \(symbol)"
+        case .unknown:
+            return "未登记或多重 tint"
         }
     }
 }
@@ -288,6 +389,7 @@ private final class DesignRuleVisitor: SyntaxVisitor {
         let arguments = node.arguments.trimmedDescription
 
         appendTouchTargetCallViolationIfNeeded(node, baseName: baseName)
+        appendButtonColorReportIfNeeded(node, baseName: baseName)
 
         if baseName == "onTapGesture", isProductionPath {
             let declaration = enclosingDeclarationIdentifier(for: Syntax(node))
@@ -555,6 +657,86 @@ private final class DesignRuleVisitor: SyntaxVisitor {
         )
     }
 
+    /// Reports native action-button color pairings without claiming runtime contrast measurements.
+    private func appendButtonColorReportIfNeeded(
+        _ node: FunctionCallExprSyntax,
+        baseName: String
+    ) {
+        guard baseName == "buttonStyle",
+              isProductionPath,
+              !isInsidePreviewMacro(Syntax(node)),
+              rootFunctionName(in: ExprSyntax(node)) == "Button",
+              let style = buttonStyleName(in: node) else {
+            return
+        }
+
+        let policy = policy.buttonColorPolicy
+        let isProminent = policy.prominentStyleNames.contains(style)
+        guard isProminent || policy.borderedStyleNames.contains(style) else {
+            return
+        }
+
+        let chain = outermostModifierChain(containing: node)
+        let tintCalls = modifierCalls(named: "tint", in: chain)
+        let tint = buttonTintClassification(from: tintCalls)
+        let category = tint.category
+        let group = "button-color|\(reportModule)|\(style)|\(category)"
+
+        if isProminent {
+            append(
+                ruleID: policy.ruleID,
+                node: node,
+                message: "突出按钮的填充与前景需要实际对比度证据；普通文字至少 \(formattedContrast(policy.normalTextMinimumContrast)):1，大字号至少 \(formattedContrast(policy.largeTextMinimumContrast)):1，关键图标至少 \(formattedContrast(policy.essentialGlyphMinimumContrast)):1，不能用 token 名称代替测量。当前 tint：\(tint.description)。",
+                reportDisposition: .candidate,
+                reportGroup: group
+            )
+            return
+        }
+
+        switch tint {
+        case .inherited:
+            append(
+                ruleID: policy.ruleID,
+                node: node,
+                message: "`.bordered` 未显式隔离 tint，可能继承根级 appTint 并形成品牌前景与品牌弱填充；请按按钮角色选择明确的中性或反馈语义。",
+                reportDisposition: .candidate,
+                reportGroup: group
+            )
+        case .brandDerived(let symbol):
+            append(
+                ruleID: policy.ruleID,
+                node: node,
+                message: "`.bordered` 使用品牌派生 tint `\(symbol)`，会形成被禁止的品牌前景—品牌弱填充配对；请改用中性/反馈语义或重新判定唯一主操作。",
+                reportDisposition: .candidate,
+                reportGroup: group
+            )
+        case .neutral(let symbol):
+            append(
+                ruleID: policy.ruleID,
+                node: node,
+                message: "`.bordered` 已显式使用中性 tint `\(symbol)`；登记为库存，仍需在实际外观中确认文字与关键图标对比度。",
+                reportDisposition: .inventory,
+                reportGroup: group
+            )
+        case .feedback(let symbol):
+            append(
+                ruleID: policy.ruleID,
+                node: node,
+                message: "`.bordered` 已显式使用反馈 tint `\(symbol)`；登记为库存，并确认 role、文案及实际对比度共同表达状态。",
+                reportDisposition: .inventory,
+                reportGroup: group
+            )
+        case .unknown:
+            append(
+                ruleID: policy.ruleID,
+                node: node,
+                message: "`.bordered` 使用未登记或多重 tint，无法确认前景—背景语义；请改用已登记颜色角色并提供实际对比度证据。",
+                reportDisposition: .candidate,
+                reportGroup: group
+            )
+        }
+    }
+
     override func visit(_ node: FunctionDeclSyntax) -> SyntaxVisitorContinueKind {
         guard declaresStaticTypeMember(node.modifiers),
               let owner = enclosingTypeOwner(for: Syntax(node)) else {
@@ -698,6 +880,111 @@ private final class DesignRuleVisitor: SyntaxVisitor {
             return rootFunctionName(in: base)
         }
         return nil
+    }
+
+    /// Returns the configured native button style name without matching unrelated custom styles.
+    private func buttonStyleName(in node: FunctionCallExprSyntax) -> String? {
+        guard let expression = node.arguments.first?.expression else { return nil }
+        let identifiers = expression.tokens(viewMode: .sourceAccurate).compactMap { token -> String? in
+            guard case .identifier(let name) = token.tokenKind else { return nil }
+            return name
+        }
+        let configuredStyles = policy.buttonColorPolicy.prominentStyleNames
+            + policy.buttonColorPolicy.borderedStyleNames
+        return configuredStyles.first(where: identifiers.contains)
+    }
+
+    /// Walks only the receiver side of a modifier chain so label content cannot masquerade as button tint.
+    private func outermostModifierChain(
+        containing node: FunctionCallExprSyntax
+    ) -> FunctionCallExprSyntax {
+        var result = node
+        var current = Syntax(node)
+        while let parent = current.parent,
+              let memberAccess = parent.as(MemberAccessExprSyntax.self),
+              let base = memberAccess.base,
+              Syntax(base).id == current.id,
+              let call = parent.parent?.as(FunctionCallExprSyntax.self),
+              Syntax(call.calledExpression).id == Syntax(memberAccess).id {
+            result = call
+            current = Syntax(call)
+        }
+        return result
+    }
+
+    /// Collects direct modifiers with the requested name from an action Button's receiver chain.
+    private func modifierCalls(
+        named modifierName: String,
+        in chain: FunctionCallExprSyntax
+    ) -> [FunctionCallExprSyntax] {
+        var matches: [FunctionCallExprSyntax] = []
+        var expression: ExprSyntax? = ExprSyntax(chain)
+        while let current = expression,
+              let call = current.as(FunctionCallExprSyntax.self) {
+            guard let memberAccess = call.calledExpression.as(MemberAccessExprSyntax.self) else {
+                break
+            }
+            if memberAccess.declName.baseName.text == modifierName {
+                matches.append(call)
+            }
+            expression = memberAccess.base
+        }
+        return matches
+    }
+
+    /// Classifies explicit tint tokens; multiple or indirect values stay actionable instead of being guessed.
+    private func buttonTintClassification(
+        from tintCalls: [FunctionCallExprSyntax]
+    ) -> ButtonTintClassification {
+        guard !tintCalls.isEmpty else { return .inherited }
+        guard tintCalls.count == 1,
+              let expression = tintCalls[0].arguments.first?.expression else {
+            return .unknown
+        }
+
+        let identifiers = Set(
+            expression.tokens(viewMode: .sourceAccurate).compactMap { token -> String? in
+                guard case .identifier(let name) = token.tokenKind else { return nil }
+                return name
+            }
+        )
+        if let symbol = policy.buttonColorPolicy.brandDerivedColorSymbols.first(
+            where: identifiers.contains
+        ) {
+            return .brandDerived(symbol)
+        }
+        if let symbol = policy.buttonColorPolicy.neutralColorSymbols.first(
+            where: identifiers.contains
+        ) {
+            return .neutral(symbol)
+        }
+        if let symbol = policy.buttonColorPolicy.feedbackColorSymbols.first(
+            where: identifiers.contains
+        ) {
+            return .feedback(symbol)
+        }
+        return .unknown
+    }
+
+    /// Preview macros are visual fixtures rather than production consumption paths.
+    private func isInsidePreviewMacro(_ syntax: Syntax) -> Bool {
+        var ancestor: Syntax? = syntax
+        while let current = ancestor {
+            if let macro = current.as(MacroExpansionDeclSyntax.self),
+               macro.macroName.text == "Preview" {
+                return true
+            }
+            if let macro = current.as(MacroExpansionExprSyntax.self),
+               macro.macroName.text == "Preview" {
+                return true
+            }
+            ancestor = current.parent
+        }
+        return false
+    }
+
+    private func formattedContrast(_ value: Double) -> String {
+        value.formatted(.number.precision(.fractionLength(value.rounded() == value ? 0 : 1)))
     }
 
     private func append(

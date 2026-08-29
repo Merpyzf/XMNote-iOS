@@ -3,7 +3,7 @@ import Testing
 
 struct RuleEngineTests {
     private static let policy = LintPolicy(
-        schemaVersion: 3,
+        schemaVersion: 4,
         constructionPolicies: ConstructionPolicies(
             rawColor: ConstructionPolicy(
                 ruleID: "DS003",
@@ -715,6 +715,118 @@ struct RuleEngineTests {
 
         let ruleIDs = Set(engine.lint(source: source, path: "xmnote/Views/ExampleView.swift").map(\.ruleID))
         #expect(ruleIDs.isSuperset(of: ["DSR001", "DSR002", "DSR003"]))
+    }
+
+    @Test func classifiesNativeActionButtonColorPairings() {
+        let source = """
+        import SwiftUI
+
+        struct ExampleView: View {
+            var body: some View {
+                VStack {
+                    Button("Inherited") { }
+                        .buttonStyle(.bordered)
+                    Button("Brand") { }
+                        .buttonStyle(.bordered)
+                        .tint(Color.appTint)
+                    Button("Neutral") { }
+                        .tint(Color.textSecondary)
+                        .buttonStyle(.bordered)
+                    Button("Feedback", role: .destructive) { }
+                        .buttonStyle(.bordered)
+                        .tint(.feedbackError)
+                    Button("Prominent") { }
+                        .buttonStyle(.borderedProminent)
+                        .tint(Color.primaryActionFill)
+                    Button("Unknown") { }
+                        .buttonStyle(.bordered)
+                        .tint(theme.action)
+                }
+            }
+        }
+        """
+
+        let diagnostics = engine.lint(
+            source: source,
+            path: "xmnote/Views/ExampleView.swift"
+        ).filter { $0.ruleID == "DSR004" }
+
+        #expect(diagnostics.count == 6)
+        #expect(diagnostics.filter { $0.reportDisposition == .candidate }.count == 4)
+        #expect(diagnostics.filter { $0.reportDisposition == .inventory }.count == 2)
+        #expect(diagnostics.contains { $0.reportGroup?.hasSuffix("bordered|inherited") == true })
+        #expect(diagnostics.contains { $0.reportGroup?.hasSuffix("bordered|brand") == true })
+        #expect(diagnostics.contains { $0.reportGroup?.hasSuffix("bordered|neutral") == true })
+        #expect(diagnostics.contains { $0.reportGroup?.hasSuffix("bordered|feedback") == true })
+        #expect(
+            diagnostics.contains {
+                $0.reportGroup?.hasSuffix("borderedProminent|brand") == true
+                    && $0.message.contains("4.5:1")
+                    && $0.message.contains("3:1")
+            }
+        )
+        #expect(diagnostics.contains { $0.reportGroup?.hasSuffix("bordered|unknown") == true })
+    }
+
+    @Test func limitsButtonColorReportsToProductionActionButtons() {
+        let source = """
+        import SwiftUI
+
+        struct ExampleView: View {
+            var body: some View {
+                VStack {
+                    Toggle("Enabled", isOn: .constant(true))
+                        .buttonStyle(.bordered)
+                    NavigationLink("Open", destination: Text("Detail"))
+                        .buttonStyle(.bordered)
+                    Button("Plain") { }
+                        .buttonStyle(.plain)
+                }
+            }
+        }
+
+        #Preview {
+            Button("Preview") { }
+                .buttonStyle(.bordered)
+                .tint(Color.appTint)
+        }
+        """
+
+        let productionDiagnostics = engine.lint(
+            source: source,
+            path: "xmnote/Views/ExampleView.swift"
+        ).filter { $0.ruleID == "DSR004" }
+        let debugDiagnostics = engine.lint(
+            source: "Button(\"Debug\") { }.buttonStyle(.bordered)",
+            path: "xmnote/Views/Debug/ButtonProbe.swift"
+        ).filter { $0.ruleID == "DSR004" }
+
+        #expect(productionDiagnostics.isEmpty)
+        #expect(debugDiagnostics.isEmpty)
+    }
+
+    @Test func treatsMultipleButtonTintsAsUnresolved() {
+        let source = """
+        import SwiftUI
+
+        struct ExampleView: View {
+            var body: some View {
+                Button("Ambiguous") { }
+                    .tint(Color.textSecondary)
+                    .buttonStyle(.bordered)
+                    .tint(Color.feedbackError)
+            }
+        }
+        """
+
+        let diagnostics = engine.lint(
+            source: source,
+            path: "xmnote/Views/ExampleView.swift"
+        ).filter { $0.ruleID == "DSR004" }
+
+        #expect(diagnostics.count == 1)
+        #expect(diagnostics.first?.reportDisposition == .candidate)
+        #expect(diagnostics.first?.reportGroup?.hasSuffix("bordered|unknown") == true)
     }
 
     @Test func groupsSFSymbolInventoryByModuleAndSymbol() {

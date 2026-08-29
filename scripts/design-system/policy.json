@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "sourceRoots": [
     "xmnote"
   ],
@@ -624,6 +624,39 @@
       }
     ]
   },
+  "buttonColorPolicy": {
+    "ruleID": "DSR004",
+    "borderedStyleNames": [
+      "bordered"
+    ],
+    "prominentStyleNames": [
+      "borderedProminent"
+    ],
+    "brandDerivedColorSymbols": [
+      "appTint",
+      "primaryActionFill",
+      "stateActionForeground",
+      "linkForeground",
+      "selectionAccent",
+      "selectionForeground",
+      "feedbackSuccess"
+    ],
+    "neutralColorSymbols": [
+      "textPrimary",
+      "textSecondary",
+      "iconPrimary",
+      "iconSecondary",
+      "menuActionForeground",
+      "menuSelectedForeground"
+    ],
+    "feedbackColorSymbols": [
+      "feedbackError",
+      "feedbackWarning"
+    ],
+    "normalTextMinimumContrast": 4.5,
+    "largeTextMinimumContrast": 3.0,
+    "essentialGlyphMinimumContrast": 3.0
+  },
   "componentCatalogPolicy": {
     "ruleID": "DS011",
     "root": "xmnote/UIComponents",
@@ -768,6 +801,13 @@
       "enforcement": "report",
       "reason": "读取主态受 LoadingGate 约束，局部进度或写入反馈可能仍合理。",
       "correctPath": "根据读取、写入或局部进度语义选择 LoadingGate、LoadingStateView 或保留局部 ProgressView"
+    },
+    {
+      "id": "DSR004",
+      "title": "操作按钮前景—背景配对审查",
+      "enforcement": "report",
+      "reason": "原生按钮样式会消费环境 tint；品牌前景与品牌弱填充可能同时出现，突出按钮也需要实际对比度证据。",
+      "correctPath": "按按钮角色显式选择品牌填充与中性前景、中性次级配对或反馈语义，并验证浅色、深色和高对比度"
     }
   ]
 }
