@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer/AppState、ReadCalendarShareViewModel、分享卡与系统年月选择/弹窗/XMActivityShareSheet
- * [OUTPUT]: 对外提供 ReadCalendarShareView，完成支持短内容回弹的三类预览、48 模板、排行、书籍排除重算、会员拦截、保存与分享
+ * [INPUT]: 依赖 RepositoryContainer/AppState、ReadCalendarShareViewModel、分享卡、XMSystemSearchBar/XMScrollEdgeChrome 与系统年月选择/弹窗/XMActivityShareSheet
+ * [OUTPUT]: 对外提供 ReadCalendarShareView，完成支持短内容回弹的三类预览、48 模板、排行、可搜索书籍排除重算、会员拦截、保存与分享
  * [POS]: ReadCalendar 分享页面壳层，采用 iOS 原生 push、Sheet 与系统分享/相册能力表达 Android 业务规则
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -32,6 +32,8 @@ struct ReadCalendarShareView: View {
     @State private var premiumBlock: PremiumBlock?
     @State private var pendingShareFileURL: URL?
     @State private var isExporting = false
+    @State private var excludedBookSearchText = ""
+    @State private var isExcludedBookSearchActive = false
 
     /// 注入入口月份、初始成品类型与会员页导航回调。
     init(
@@ -342,7 +344,13 @@ struct ReadCalendarShareView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { activeSheet = nil }
+                    Button {
+                        activeSheet = nil
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .tint(Color.textSecondary)
+                    .accessibilityLabel("关闭")
                 }
             }
         }
@@ -352,43 +360,96 @@ struct ReadCalendarShareView: View {
 
     private var bookFilter: some View {
         NavigationStack {
-            List(viewModel.filterBooks) { book in
-                Button {
-                    Task {
-                        await viewModel.toggleExcludedBook(
-                            book.bookId,
-                            using: repositories.readCalendarRepository
+            XMScrollEdgeChrome(
+                presentation: .overlaySoft,
+                edges: [.top, .bottom],
+                topBar: {
+                    XMSystemSearchBar(
+                        text: $excludedBookSearchText,
+                        isActive: $isExcludedBookSearchActive,
+                        prompt: "搜索要排除的书籍",
+                        accessibilityIdentifier: "read-calendar-share.excluded-books.search"
+                    )
+                    .padding(.top, Spacing.cozy)
+                    .padding(.bottom, Spacing.half)
+                },
+                bottomBar: {
+                    Color.surfaceSheet
+                        .frame(height: Spacing.half)
+                        .allowsHitTesting(false)
+                }
+            ) {
+                Group {
+                    if visibleFilterBooks.isEmpty {
+                        XMContentStateView(
+                            role: .noResults,
+                            title: "没有匹配的书籍",
+                            message: excludedBookSearchText.isEmpty
+                                ? "当前范围没有可排除的书籍"
+                                : "未找到与“\(excludedBookSearchText)”匹配的书籍"
                         )
-                    }
-                } label: {
-                    HStack(spacing: Spacing.base) {
-                        XMBookCover.fixedWidth(
-                            34,
-                            urlString: book.coverURL,
-                            border: .init(color: .surfaceBorderDefault, width: StrokeWidth.hairline)
-                        )
-                        Text(book.name)
-                            .font(AppTypography.body)
-                            .foregroundStyle(Color.textPrimary)
-                        Spacer()
-                        if viewModel.excludedBookIDs.contains(book.bookId) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(Color.appTint)
+                    } else {
+                        List(visibleFilterBooks) { book in
+                            Button {
+                                Task {
+                                    await viewModel.toggleExcludedBook(
+                                        book.bookId,
+                                        using: repositories.readCalendarRepository
+                                    )
+                                }
+                            } label: {
+                                HStack(spacing: Spacing.base) {
+                                    XMBookCover.fixedWidth(
+                                        34,
+                                        urlString: book.coverURL,
+                                        border: .init(color: .surfaceBorderDefault, width: StrokeWidth.hairline)
+                                    )
+                                    Text(book.name)
+                                        .font(AppTypography.body)
+                                        .foregroundStyle(Color.textPrimary)
+                                    Spacer()
+                                    XMSelectionIndicator(
+                                        style: .checkbox,
+                                        isSelected: viewModel.excludedBookIDs.contains(book.bookId),
+                                        font: AppTypography.body
+                                    )
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
                         }
+                        .listStyle(.plain)
+                        .scrollContentBackground(.hidden)
                     }
                 }
-                .buttonStyle(.plain)
             }
+            .background(Color.surfaceSheet.ignoresSafeArea())
             .navigationTitle("排除书籍")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") { activeSheet = nil }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
+                        activeSheet = nil
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .tint(Color.textSecondary)
+                    .accessibilityLabel("关闭")
                 }
             }
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+    }
+
+    private var visibleFilterBooks: [ReadCalendarBookContribution] {
+        let keyword = excludedBookSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !keyword.isEmpty else { return viewModel.filterBooks }
+        return viewModel.filterBooks.filter {
+            $0.name.localizedCaseInsensitiveContains(keyword)
+        }
     }
 
     private func commitPendingMonth() {

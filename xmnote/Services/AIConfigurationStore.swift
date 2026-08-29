@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Foundation/UserDefaults 原子保存完整 AI 配置，依赖 Security 迁移并清理旧 Keychain 凭据
- * [OUTPUT]: 对外提供 AIConfigurationStore，异步读取、更新、备份和整组恢复 ai.configuration.v2
+ * [OUTPUT]: 对外提供 AIConfigurationStore，异步读取 iOS 产品投影、更新、备份和整组恢复 ai.configuration.v2
  * [POS]: Services 层 AI 配置存储边界，被 AIRepository 与 iOS 偏好备份协调器使用，禁止 ViewModel 直接访问持久化容器
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -71,11 +71,16 @@ actor AIConfigurationStore {
         self.legacyKeychain = keychain
     }
 
-    /// 读取 v2 配置并仅汇总各供应商是否存在密钥；首次调用会串行迁移 v1 与旧 Keychain，取消时不提交半份快照。
+    /// 读取 v2 配置并返回 iOS 原生产品投影；SiliconFlow 原值只读保留，首次调用仍串行迁移旧存储且取消时不提交半份快照。
     func fetchSnapshot() async throws -> AIConfigurationSnapshot {
         let stored = try await loadOrMigrate().preferenceSnapshot
+        var productConfiguration = stored.configuration.iOSProductNormalized
+        if productConfiguration.isEnabled,
+           stored.apiKey(for: productConfiguration.provider).isEmpty {
+            productConfiguration.isEnabled = false
+        }
         return AIConfigurationSnapshot(
-            configuration: stored.configuration,
+            configuration: productConfiguration,
             providersWithStoredKey: Set(
                 AIProvider.allCases.filter { !stored.apiKey(for: $0).isEmpty }
             )

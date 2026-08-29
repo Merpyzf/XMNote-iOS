@@ -65,18 +65,27 @@ struct BookReadingProgressSheet: View {
                     }
                 }
             }
+            .disabled(isSaving)
             .navigationTitle("更新阅读进度")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
-                        .disabled(isSaving)
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .tint(Color.textSecondary)
+                    .disabled(isSaving)
+                    .accessibilityLabel("关闭")
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") {
+                    XMSheetConfirmationAction(
+                        isDisabled: !isFormComplete,
+                        isConfirming: isSaving
+                    ) {
                         Task { await save() }
                     }
-                    .disabled(!isFormComplete || isSaving)
                 }
             }
         }

@@ -30,16 +30,8 @@ struct AIConfigurationPromptEditSheet: View {
         XMSheetScaffold(
             title: kind.title,
             onClose: requestDismiss,
-            bottomBar: {
-                Button("保存", action: save)
-                    .font(AppTypography.subheadlineSemibold)
-                    .frame(maxWidth: .infinity)
-                    .frame(minHeight: InteractionMetrics.minimumTouchTarget)
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!canSave)
-                    .padding(.horizontal, Spacing.screenEdge)
-                    .padding(.vertical, Spacing.cozy)
-            }
+            isConfirmationDisabled: !canSave,
+            confirmationAction: save
         ) {
             VStack(alignment: .leading, spacing: Spacing.section) {
                 promptEditor(

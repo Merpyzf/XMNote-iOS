@@ -5,6 +5,7 @@
 
 ## 成员清单
 
+- `AnimatedPresencePrototype.swift`: `List` 动态内容展开收起原型，验证固有高度裁切、内容保留与相邻间距同步动画
 - `InlineTabBar.swift`: 行内标签栏原型组件（指示器动画方案）
 - `QuoteInlineTabBar.swift`: 引号标签栏原型组件（顶部导航视觉方案）
 

@@ -23,7 +23,6 @@ struct RelatedCategoryListView: View {
     @State private var bootstrapLoadingGate = LoadingGate()
     @State private var pendingDelete: RelatedDeleteRequest?
     @State private var relatedPlaceholder: RelatedPlaceholderSession?
-    @State private var isRestoringPlaceholder = false
 
     var body: some View {
         Group {
@@ -42,9 +41,8 @@ struct RelatedCategoryListView: View {
         .sheet(item: $relatedPlaceholder) { session in
             BookRelatedPlaceholderSheet(
                 item: session.workspaceItem,
-                isWriting: isRestoringPlaceholder,
                 onEdit: { openBookEditor(session.book) },
-                onRestore: { restorePlaceholder(session.book) }
+                onRestore: { try await restorePlaceholder(session.book) }
             )
         }
         .task {
@@ -246,24 +244,12 @@ struct RelatedCategoryListView: View {
         }
     }
 
-    /// 相关占位书只在用户明确确认后恢复为有效书架书；恢复成功再进入完整详情。
-    private func restorePlaceholder(_ book: RelatedBookListItem) {
-        guard !isRestoringPlaceholder else { return }
-        Task {
-            isRestoringPlaceholder = true
-            toastCenter.processing("正在加入书架…")
-            let toastID = toastCenter.current?.id
-            defer { isRestoringPlaceholder = false }
-            do {
-                try await repositories.contentRepository.restoreRelatedBookPlaceholder(
-                    bookID: book.relatedBookID
-                )
-                toastCenter.dismiss(id: toastID)
-                onOpenBookRoute(.detail(bookId: book.relatedBookID))
-            } catch {
-                toastCenter.error("加入书架失败：\(error.localizedDescription)")
-            }
-        }
+    /// 相关占位书只在用户明确确认后恢复；错误抛回 Sheet 留场展示，成功后才进入完整详情。
+    private func restorePlaceholder(_ book: RelatedBookListItem) async throws {
+        try await repositories.contentRepository.restoreRelatedBookPlaceholder(
+            bookID: book.relatedBookID
+        )
+        onOpenBookRoute(.detail(bookId: book.relatedBookID))
     }
 
     /// 删除时即时禁用重复入口并展示处理中状态；成功由观察流的行移除表达。

@@ -68,31 +68,32 @@ struct XMBookRatingSheet: View {
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    if isSubmitting {
-                        LoadingStateView("正在保存评分…", style: .inline)
-                            .frame(maxWidth: .infinity)
-                            .transition(.opacity)
-                    }
                 }
                 .padding(.horizontal, Spacing.screenEdge)
                 .padding(.vertical, Spacing.section)
             }
+            .disabled(isSubmitting)
             .background(Color.surfaceSheet.ignoresSafeArea())
             .navigationTitle("书籍评分")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") {
+                    Button {
                         dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
                     }
+                    .tint(Color.textSecondary)
                     .disabled(isSubmitting)
+                    .accessibilityLabel("关闭")
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") {
-                        submitRating()
-                    }
-                    .disabled(!hasChanges || isSubmitting)
+                    XMSheetConfirmationAction(
+                        isDisabled: !hasChanges,
+                        isConfirming: isSubmitting,
+                        action: submitRating
+                    )
                 }
             }
             .interactiveDismissDisabled(isSubmitting)

@@ -67,17 +67,27 @@ struct RelatedBookRelationEditorSheet: View {
                         .foregroundStyle(Color.feedbackError)
                 }
             }
+            .disabled(isSaving)
             .navigationTitle("编辑关联书籍")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .tint(Color.textSecondary)
+                    .disabled(isSaving)
+                    .accessibilityLabel("关闭")
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") {
+                    XMSheetConfirmationAction(
+                        isDisabled: false,
+                        isConfirming: isSaving
+                    ) {
                         Task { await save() }
                     }
-                    .disabled(isSaving)
                 }
             }
         }
@@ -97,6 +107,7 @@ struct RelatedBookRelationEditorSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
+        .interactiveDismissDisabled(isSaving)
     }
 
     /// 在主 Actor 上提交草稿；异步失败保留 Sheet 现场并展示原因。

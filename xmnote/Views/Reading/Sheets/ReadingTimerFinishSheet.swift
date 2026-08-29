@@ -81,9 +81,8 @@ struct ReadingTimerFinishSheet: View {
                 guard !coordinator.isWriting else { return }
                 dismiss()
             },
-            bottomBar: {
-                finishActionBar
-            }
+            isConfirming: coordinator.isWriting,
+            confirmationAction: submit
         ) {
             VStack(alignment: .leading, spacing: Spacing.section) {
                 XMSettingsSection("本次记录") {
@@ -176,6 +175,8 @@ struct ReadingTimerFinishSheet: View {
                 if let remainingCoordinatorError {
                     XMInlineStatusBanner(remainingCoordinatorError, tone: .error)
                 }
+
+                finishSecondaryActions
             }
             .padding(.horizontal, Spacing.screenEdge)
             .padding(.bottom, Spacing.contentEdge)
@@ -231,68 +232,31 @@ struct ReadingTimerFinishSheet: View {
         }
     }
 
-    private var finishActionBar: some View {
-        VStack(spacing: Spacing.cozy) {
-            Button {
-                submit()
-            } label: {
-                HStack(spacing: Spacing.cozy) {
-                    Spacer(minLength: 0)
-                    if coordinator.isWriting {
-                        LoadingStateView(style: .inline)
-                            .controlSize(.small)
-                    } else {
-                        Text("保存记录")
-                            .font(AppTypography.bodyMedium)
-                    }
-                    Spacer(minLength: 0)
-                }
-                .frame(minHeight: InteractionMetrics.minimumTouchTarget)
-                .foregroundStyle(.white)
-                .background(
-                    Capsule()
-                        .fill(Color.appTint)
-                )
-            }
-            .buttonStyle(.plain)
-            .disabled(coordinator.isWriting)
-
+    private var finishSecondaryActions: some View {
+        HStack(spacing: Spacing.base) {
             if canContinue {
                 Button {
                     onContinue()
                 } label: {
-                    Text("继续计时")
-                        .font(AppTypography.bodyMedium)
-                        .frame(maxWidth: .infinity, minHeight: InteractionMetrics.minimumTouchTarget)
-                        .foregroundStyle(Color.textPrimary)
-                        .background(
-                            Capsule()
-                                .fill(Color.surfaceCard)
-                        )
+                    Label("继续计时", systemImage: "play")
+                        .font(AppTypography.subheadlineMedium)
+                        .frame(minHeight: InteractionMetrics.minimumTouchTarget)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.bordered)
                 .disabled(coordinator.isWriting)
             }
 
             Button(role: .destructive) {
                 onDiscard()
             } label: {
-                Text("放弃本次")
-                    .font(AppTypography.bodyMedium)
-                    .frame(maxWidth: .infinity, minHeight: InteractionMetrics.minimumTouchTarget)
-                    .foregroundStyle(Color.feedbackError)
-                    .background(
-                        Capsule()
-                            .fill(Color.surfaceCard)
-                    )
+                Label("放弃本次", systemImage: "trash")
+                    .font(AppTypography.subheadlineMedium)
+                    .frame(minHeight: InteractionMetrics.minimumTouchTarget)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.bordered)
             .disabled(coordinator.isWriting)
         }
-        .padding(.horizontal, Spacing.screenEdge)
-        .padding(.top, Spacing.base)
-        .padding(.bottom, Spacing.cozy)
-        .background(Color.surfacePage)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var positionPlaceholder: String {

@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 SourceManagementViewModel 提供名称编辑状态与提交动作，依赖 DesignTokens/LoadingStateView 渲染来源轻编辑表单
+ * [INPUT]: 依赖 SourceManagementViewModel 提供名称编辑状态与提交动作，依赖 DesignTokens、xmSheetContentPanel 与 LoadingStateView 渲染来源轻编辑表单
  * [OUTPUT]: 对外提供 SourceNameEditSheet，承接来源新增与重命名的输入、校验和写入反馈
  * [POS]: Views/Personal/Sheets 的书籍来源管理业务 Sheet，被 SourceManagementView 通过 sheet(item:) 呈现
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -9,9 +9,12 @@ import SwiftUI
 
 /// 来源名称编辑 Sheet，提供比中心弹窗更完整的字数校验和写入反馈。
 struct SourceNameEditSheet: View {
+    private static let maximumNameLength = 100
+
     @Bindable var viewModel: SourceManagementViewModel
     let edit: SourceManagementNameEdit
     @FocusState private var isNameFocused: Bool
+    @State private var hasEditedName = false
 
     private var isWriting: Bool {
         switch viewModel.activeWriteAction {
@@ -26,43 +29,50 @@ struct SourceNameEditSheet: View {
         XMSheetScaffold(
             title: edit.title,
             onClose: { viewModel.dismissNameEdit() },
-            leadingAction: {
-                Button("取消") { viewModel.dismissNameEdit() }
-                    .disabled(isWriting)
-            },
-            trailingAction: {
-                Button("保存") { viewModel.submitNameEdit() }
-                    .disabled(!viewModel.canSubmitNameEdit || isWriting)
-            }
+            isConfirmationDisabled: !viewModel.canSubmitNameEdit,
+            isConfirming: isWriting,
+            confirmationAction: { viewModel.submitNameEdit() }
         ) {
             VStack(spacing: Spacing.section) {
-                CardContainer(cornerRadius: CornerRadius.containerMedium, showsBorder: false) {
-                    VStack(alignment: .leading, spacing: Spacing.base) {
-                        TextField("请输入来源名称", text: nameBinding)
-                            .font(AppTypography.body)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .focused($isNameFocused)
-                            .disabled(isWriting)
-                            .submitLabel(.done)
-                            .onSubmit {
-                                viewModel.submitNameEdit()
+                VStack(alignment: .leading, spacing: Spacing.half) {
+                    CardContainer(shape: ConcentricRectangle.xmSheetContentPanel, showsBorder: false) {
+                        VStack(alignment: .leading, spacing: Spacing.base) {
+                            TextField("请输入来源名称", text: nameBinding)
+                                .font(AppTypography.body)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .focused($isNameFocused)
+                                .disabled(isWriting)
+                                .submitLabel(.done)
+                                .onSubmit {
+                                    viewModel.submitNameEdit()
+                                }
+                                .onChange(of: viewModel.nameEditText) {
+                                    hasEditedName = true
+                                }
+
+                            Divider()
+
+                            HStack(alignment: .firstTextBaseline, spacing: Spacing.base) {
+                                Spacer(minLength: Spacing.base)
+                                Text("\(characterCount)/\(Self.maximumNameLength)")
+                                    .font(AppTypography.caption2Medium)
+                                    .foregroundStyle(isCharacterLimitExceeded ? Color.feedbackError : Color.textHint)
+                                    .monospacedDigit()
+                                    .accessibilityLabel("已输入 \(characterCount) 个字符，最多 \(Self.maximumNameLength) 个字符")
                             }
-
-                        Divider()
-
-                        HStack(alignment: .firstTextBaseline, spacing: Spacing.base) {
-                            Text(validationText)
-                                .font(AppTypography.caption)
-                                .foregroundStyle(validationColor)
-                                .lineLimit(2)
-                            Spacer(minLength: Spacing.base)
-                            Text("\(viewModel.normalizedNameEditText.count)/100")
-                                .font(AppTypography.caption2Medium)
-                                .foregroundStyle(Color.textHint)
                         }
+                        .padding(Spacing.contentEdge)
                     }
-                    .padding(Spacing.contentEdge)
+
+                    if let validationText {
+                        Text(validationText)
+                            .font(AppTypography.caption)
+                            .foregroundStyle(Color.feedbackError)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, Spacing.contentEdge)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
 
                 if !edit.isCreating {
@@ -94,20 +104,21 @@ struct SourceNameEditSheet: View {
         )
     }
 
-    private var validationText: String {
+    private var validationText: String? {
         if let message = viewModel.writeError {
             return message
         }
-        if let message = viewModel.nameEditValidationMessage {
+        if hasEditedName, let message = viewModel.nameEditValidationMessage {
             return message
         }
-        return "名称可用"
+        return nil
     }
 
-    private var validationColor: Color {
-        if viewModel.writeError != nil || viewModel.nameEditValidationMessage != nil {
-            return Color.feedbackError
-        }
-        return Color.textSecondary
+    private var characterCount: Int {
+        viewModel.normalizedNameEditText.count
+    }
+
+    private var isCharacterLimitExceeded: Bool {
+        characterCount > Self.maximumNameLength
     }
 }

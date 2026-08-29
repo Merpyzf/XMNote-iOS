@@ -45,7 +45,8 @@ struct ReadingGoalEditorSheet: View {
                     guard !isSaving else { return }
                     onCancel()
                 },
-                bottomBar: { saveButton }
+                isConfirming: isSaving,
+                confirmationAction: onConfirm
             ) {
                 dailyGoalForm
             }
@@ -84,31 +85,26 @@ struct ReadingGoalEditorSheet: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("取消", action: onCancel)
+                        Button(action: onCancel) {
+                            Image(systemName: "xmark")
+                                .font(.body.weight(.semibold))
+                        }
                             .tint(Color.textSecondary)
                             .disabled(isSaving)
+                            .accessibilityLabel("关闭")
                     }
                     ToolbarItem(placement: .confirmationAction) {
-                        Button(isSaving ? "保存中…" : "保存", action: onConfirm)
-                            .tint(Color.appTint)
-                            .disabled(isSaving)
+                        XMSheetConfirmationAction(
+                            isDisabled: false,
+                            isConfirming: isSaving,
+                            action: onConfirm
+                        )
                     }
                 }
         }
         .presentationDetents(presentationDetents)
         .presentationDragIndicator(.visible)
         .interactiveDismissDisabled(isSaving)
-    }
-
-    private var saveButton: some View {
-        Button(isSaving ? "保存中…" : "保存", action: onConfirm)
-            .font(AppTypography.subheadlineSemibold)
-            .frame(maxWidth: .infinity)
-            .frame(minHeight: InteractionMetrics.minimumTouchTarget)
-            .buttonStyle(.borderedProminent)
-            .disabled(isSaving)
-            .padding(.horizontal, Spacing.screenEdge)
-            .padding(.vertical, Spacing.cozy)
     }
 
     private var yearlyGoalPicker: some View {

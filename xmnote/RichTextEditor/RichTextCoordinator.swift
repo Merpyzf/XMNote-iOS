@@ -39,7 +39,7 @@ final class RichTextCoordinator: NSObject, UITextViewDelegate {
     /// 监听输入变更并同步富文本内容与格式状态。
     func textViewDidChange(_ textView: UITextView) {
         guard let editorView = textView as? RichTextEditorView else { return }
-        parent.attributedText = editorView.attributedText
+        parent.attributedText = editorView.canonicalAttributedText()
         parent.onTextChange?()
     }
 
@@ -149,8 +149,7 @@ final class RichTextCoordinator: NSObject, UITextViewDelegate {
             if let lastFont = lastAttrs[.font] as? UIFont {
                 let traits = lastFont.fontDescriptor.symbolicTraits
                 if traits.contains(.traitBold) || traits.contains(.traitItalic) {
-                    let baseFont = editorView.baseFont
-                    typing[.font] = baseFont
+                    typing[.font] = editorView.displayBaseFont
                 }
             }
 
@@ -347,7 +346,7 @@ final class RichTextCoordinator: NSObject, UITextViewDelegate {
     /// 格式操作后手动同步 attributedText binding，防止 updateUIView 用旧值覆盖
     private func syncAttributedText(from editorView: RichTextEditorView) {
         isSyncingToBinding = true
-        parent.attributedText = editorView.attributedText
+        parent.attributedText = editorView.canonicalAttributedText()
         isSyncingToBinding = false
     }
 

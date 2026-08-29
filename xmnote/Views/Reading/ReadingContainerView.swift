@@ -34,7 +34,6 @@ struct ReadingContainerView: View {
     @State private var didBootstrapFromScene = false
     let onAddBook: () -> Void
     let onAddNote: () -> Void
-    let onOpenDebugCenter: (() -> Void)?
     let onOpenReadCalendar: (Date) -> Void
     let onOpenBookDetail: (Int64) -> Void
     let onStartReading: (Int64) -> Void
@@ -45,7 +44,6 @@ struct ReadingContainerView: View {
     init(
         onAddBook: @escaping () -> Void = {},
         onAddNote: @escaping () -> Void = {},
-        onOpenDebugCenter: (() -> Void)? = nil,
         onOpenReadCalendar: @escaping (Date) -> Void = { _ in },
         onOpenBookDetail: @escaping (Int64) -> Void = { _ in },
         onStartReading: @escaping (Int64) -> Void = { _ in },
@@ -54,7 +52,6 @@ struct ReadingContainerView: View {
     ) {
         self.onAddBook = onAddBook
         self.onAddNote = onAddNote
-        self.onOpenDebugCenter = onOpenDebugCenter
         self.onOpenReadCalendar = onOpenReadCalendar
         self.onOpenBookDetail = onOpenBookDetail
         self.onStartReading = onStartReading
@@ -81,7 +78,6 @@ struct ReadingContainerView: View {
                 AddMenuCircleButton(
                     onAddBook: onAddBook,
                     onAddNote: onAddNote,
-                    onOpenDebugCenter: onOpenDebugCenter,
                     usesGlassStyle: true
                 )
             }

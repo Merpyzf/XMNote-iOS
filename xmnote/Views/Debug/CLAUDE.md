@@ -11,6 +11,8 @@
 - `ReadCalendarCoverStackTestView.swift`: 阅读日历封面堆栈可视化调试页面
 - `NoteReviewPagingTestView.swift`: 书摘回顾分页卡组可视化调试页面
 - `RichTextTestView.swift`: 富文本编辑器调试页面
+- `SheetCatalogTestView.swift`: 生产 Sheet 目录与隔离验收入口，常驻提供真实目标打开操作并对照实现详情展开方式
+- `SheetProductionValidationTestView.swift`: 生产 Sheet 目标的独立调试宿主，承载隔离快照与真实呈现配置验证
 - `StatePresentationTestView.swift`: 通用状态组件全量视觉、环境覆盖与阶段切换验收页
 - `SystemColorsTestView.swift`: 系统语义色与自定义语义色调试页面
 

@@ -143,6 +143,16 @@
       "guidePath": null
     },
     {
+      "path": "xmnote/UIComponents/Controls/Menu/XMPopupButton.swift",
+      "symbols": ["XMPopupButton"],
+      "status": "canonical", "category": "formInteraction", "layer": "controls", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "pressed", "disabled"],
+      "dependencies": ["DesignSystem", "XMMinimumHitTarget", "XMMenuStyle", "SwiftUI.Layout", "SwiftUI.Menu"],
+      "useWhen": "紧凑入口需要显示单行当前离散值，并通过原生 Menu 切换选项且让 Popup 指示器严格跟随调用方语义字体高度", "avoidWhen": "工具栏纯图标菜单、复合设置行、异步内容容器、玻璃胶囊、自定义多行标签或非离散值操作菜单",
+      "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Controls/Menu/XMPopupButton.swift"},
+      "guidePath": null
+    },
+    {
       "path": "xmnote/UIComponents/Controls/Rating/XMFluentStarIcon.swift",
       "symbols": ["XMStarredAppearance", "XMFluentStarIcon", "XMFluentStarShape"],
       "status": "canonical", "category": "foundationVisual", "layer": "controls", "framework": "swiftui", "usageScope": "crossFeature",
@@ -170,6 +180,16 @@
       "dependencies": ["DesignSystem", "SwiftUI.TextField"],
       "useWhen": "滚动内容内需要常驻搜索、清除、取消和键盘提交", "avoidWhen": "系统导航栏 searchable、全局路由搜索或多字段高级筛选",
       "previewPolicy": {"kind": "hosted", "path": "xmnote/Views/Debug/DesignSystemGalleryView.swift", "reason": "需要可交互 Binding、焦点和动态字体宿主"},
+      "guidePath": null
+    },
+    {
+      "path": "xmnote/UIComponents/Controls/Search/XMSystemSearchBar.swift",
+      "symbols": ["XMSystemSearchBar"],
+      "status": "canonical", "category": "formInteraction", "layer": "controls", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "focused", "disabled", "empty"],
+      "dependencies": ["SwiftUI", "UIKit.UISearchBar"],
+      "useWhen": "Sheet 或固定内容顶栏需要系统 minimal 搜索外观、框内清除、原生键盘提交与第一响应者同步", "avoidWhen": "导航栏 searchable 已足够、需要最近搜索复合能力、多字段高级筛选或自定义内容区取消操作",
+      "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Controls/Search/XMSystemSearchBar.swift"},
       "guidePath": null
     },
     {
@@ -614,11 +634,11 @@
     },
     {
       "path": "xmnote/UIComponents/Sheet/XMSheetScaffold.swift",
-      "symbols": ["XMSheetScaffoldLayout", "XMSheetScaffold"],
+      "symbols": ["XMSheetScaffoldLayout", "standardContentTopSpacing", "XMSheetScaffold", "xmSheetContentPanel"],
       "status": "canonical", "category": "layout", "layer": "sheet", "framework": "swiftui", "usageScope": "crossFeature",
       "stateCoverage": ["normal", "pressed", "disabled", "loading", "error"],
-      "dependencies": ["DesignSystem", "TopBarActionIcon", "XMScrollEdgeChrome"],
-      "useWhen": "业务 Sheet 需要标准标题、关闭或双侧操作、滚动回弹和固定栏", "avoidWhen": "系统选择器、中心弹窗或没有业务 Sheet 关系的页面",
+      "dependencies": ["DesignSystem", "SwiftUI.ConcentricRectangle", "TopBarActionIcon", "XMScrollEdgeChrome"],
+      "useWhen": "业务 Sheet 需要标准标题、普通内容的标题区后间距、关闭或双侧操作、滚动回弹、固定栏或内部复合内容面板的同心轮廓；contentTopBar 场景自动排除标准内容顶部间距", "avoidWhen": "系统选择器、中心弹窗、普通列表行或没有业务 Sheet 关系的页面",
       "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Sheet/XMSheetScaffold.swift"},
       "guidePath": "docs/component-guides/XMSheetScaffold使用说明.md"
     },

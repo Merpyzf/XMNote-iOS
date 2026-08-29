@@ -45,7 +45,6 @@ struct NoteContainerView: View {
     let onOpenBookRoute: (BookRoute) -> Void
     let onOpenContentRoute: (ContentRoute) -> Void
     let onOpenContentViewer: (ContentViewerSourceContext, ContentViewerItemID) -> Void
-    let onOpenDebugCenter: (() -> Void)?
 
     /// 注入新增书籍/笔记回调，让顶部快捷入口把用户操作上抛到外层页面。
     init(
@@ -54,8 +53,7 @@ struct NoteContainerView: View {
         onOpenNoteRoute: @escaping (NoteRoute) -> Void = { _ in },
         onOpenBookRoute: @escaping (BookRoute) -> Void = { _ in },
         onOpenContentRoute: @escaping (ContentRoute) -> Void = { _ in },
-        onOpenContentViewer: @escaping (ContentViewerSourceContext, ContentViewerItemID) -> Void = { _, _ in },
-        onOpenDebugCenter: (() -> Void)? = nil
+        onOpenContentViewer: @escaping (ContentViewerSourceContext, ContentViewerItemID) -> Void = { _, _ in }
     ) {
         self.onAddBook = onAddBook
         self.onAddNote = onAddNote
@@ -63,7 +61,6 @@ struct NoteContainerView: View {
         self.onOpenBookRoute = onOpenBookRoute
         self.onOpenContentRoute = onOpenContentRoute
         self.onOpenContentViewer = onOpenContentViewer
-        self.onOpenDebugCenter = onOpenDebugCenter
     }
 
     var body: some View {
@@ -78,8 +75,7 @@ struct NoteContainerView: View {
                     onOpenNoteRoute: onOpenNoteRoute,
                     onOpenBookRoute: onOpenBookRoute,
                     onOpenContentRoute: onOpenContentRoute,
-                    onOpenContentViewer: onOpenContentViewer,
-                    onOpenDebugCenter: onOpenDebugCenter
+                    onOpenContentViewer: onOpenContentViewer
                 )
             } else {
                 Color.clear
@@ -145,7 +141,6 @@ private struct NoteContentView: View {
     let onOpenBookRoute: (BookRoute) -> Void
     let onOpenContentRoute: (ContentRoute) -> Void
     let onOpenContentViewer: (ContentViewerSourceContext, ContentViewerItemID) -> Void
-    let onOpenDebugCenter: (() -> Void)?
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -167,7 +162,6 @@ private struct NoteContentView: View {
                     AddMenuCircleButton(
                         onAddBook: onAddBook,
                         onAddNote: onAddNote,
-                        onOpenDebugCenter: onOpenDebugCenter,
                         usesGlassStyle: true,
                         presentation: .pillSegment,
                         iconSize: NoteTopBarMetrics.leadingIconSize

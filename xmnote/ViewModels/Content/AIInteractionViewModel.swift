@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 AIRepositoryProtocol 执行流式释义/AI 标签及标签确认写回，依赖 AIMarkdownPlainTextConverter 准备编辑器想法草稿
- * [OUTPUT]: 对外提供 AITextResultRequest、AIExplanationIdeaEditRequest、AITextResultViewModel 与分阶段 AIAutoTagViewModel，驱动 Content 业务 Sheet、编辑器交接、模型切换与生成完成态
+ * [OUTPUT]: 对外提供 AITextResultRequest、AIExplanationIdeaEditRequest、AITextResultViewModel 与分阶段 AIAutoTagViewModel，驱动 Content 业务 Sheet、同服务商模型切换、编辑器交接与生成完成态
  * [POS]: ViewModels/Content 的 AI 交互状态层，被 viewer、书评详情与相关内容详情复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -69,13 +69,23 @@ final class AITextResultViewModel {
         modelSwitchTask?.cancel()
     }
 
-    var availableProviders: [AIProvider] {
-        AIProvider.allCases.filter { providersWithStoredKey.contains($0) }
+    var modelTitle: String {
+        configuration?.selectedModelTitle ?? ""
     }
 
-    var modelDescription: String {
-        guard let configuration else { return "" }
-        return "\(configuration.provider.displayName) · \(configuration.selectedModelTitle)"
+    var currentProviderModels: [AIModelOption] {
+        guard let configuration,
+              AIProvider.iOSProductProviders.contains(configuration.provider) else { return [] }
+        return configuration.provider.modelOptions
+    }
+
+    var canSelectModel: Bool {
+        guard let configuration else { return false }
+        return AIProvider.iOSProductProviders.contains(configuration.provider)
+            && providersWithStoredKey.contains(configuration.provider)
+            && currentProviderModels.count > 1
+            && !isSwitchingModel
+            && !isPreparingIdeaEditor
     }
 
     var canOpenIdeaEditor: Bool {
@@ -94,6 +104,19 @@ final class AITextResultViewModel {
     /// 判断菜单项是否对应当前持久化配置，供系统菜单显示中性勾选状态。
     func isCurrentModel(provider: AIProvider, modelID: String) -> Bool {
         configuration?.provider == provider && configuration?.selectedModelID == modelID
+    }
+
+    /// 判断菜单项是否对应当前 iOS 产品模型，不向标题区暴露服务商选择。
+    func isCurrentModel(modelID: String) -> Bool {
+        guard let provider = configuration?.provider else { return false }
+        return isCurrentModel(provider: provider, modelID: modelID)
+    }
+
+    /// 将标题菜单选择收敛为同服务商模型切换，并复用完整保存、取消和重新生成生命周期。
+    func switchCurrentProviderModel(modelID: String) {
+        guard let provider = configuration?.provider,
+              AIProvider.iOSProductProviders.contains(provider) else { return }
+        switchModel(provider: provider, modelID: modelID)
     }
 
     /// 启动或重试流式生成；每轮先递增 revision，再取消旧任务，确保取消后的迟到回调无法串写新结果。
@@ -179,7 +202,7 @@ final class AITextResultViewModel {
                 try await repository.saveConfiguration(updatedConfiguration, apiKey: nil)
                 try Task.checkCancellation()
                 guard let self, self.generationRevision == switchRevision else { return }
-                self.configuration = updatedConfiguration.normalized
+                self.configuration = updatedConfiguration.iOSProductNormalized
                 self.isSwitchingModel = false
                 self.modelSwitchTask = nil
                 self.startGeneration()
@@ -241,7 +264,7 @@ final class AITextResultViewModel {
 
     /// 接收 Repository 快照并只保留密钥存在状态，明文凭据不会进入页面状态。
     private func apply(_ snapshot: AIConfigurationSnapshot) {
-        configuration = snapshot.configuration.normalized
+        configuration = snapshot.configuration.iOSProductNormalized
         providersWithStoredKey = snapshot.providersWithStoredKey
     }
 }

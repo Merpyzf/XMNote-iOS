@@ -119,6 +119,27 @@ final class NoteReviewViewModel {
         observeExternalAppConfigurationChanges()
     }
 
+#if DEBUG
+    /// 仅为测试中心建立固定设置快照；不启动数据观察，也不会触发 Repository 读写。
+    init(
+        validationSettings: NoteReviewSettings,
+        tagOptions: [NoteReviewTagOption],
+        selectedBooks: [BookPickerBook],
+        repository: any NoteRepositoryProtocol,
+        externalAppIntegrationRepository: any ExternalAppIntegrationRepositoryProtocol,
+        aiRepository: any AIRepositoryProtocol
+    ) {
+        self.repository = repository
+        self.externalAppIntegrationRepository = externalAppIntegrationRepository
+        self.aiRepository = aiRepository
+        self.settings = validationSettings
+        self.tagOptions = tagOptions
+        self.selectedBooks = selectedBooks
+        self.contentState = .content
+        self.hasLoadedOnce = true
+    }
+#endif
+
     /// 释放全部观察与数据刷新任务，确保页面销毁后取消数据库迭代和仍在途的补刷查询。
     isolated deinit {
         settingObservationTask?.cancel()

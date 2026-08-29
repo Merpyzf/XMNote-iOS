@@ -110,18 +110,27 @@ struct BookReadingStatusSheet: View {
                     }
                 }
             }
+            .disabled(isSaving)
             .navigationTitle(editingItem == nil ? "新增阅读状态" : "编辑阅读状态")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
-                        .disabled(isSaving)
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .tint(Color.textSecondary)
+                    .disabled(isSaving)
+                    .accessibilityLabel("关闭")
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") {
+                    XMSheetConfirmationAction(
+                        isDisabled: selectedStatusID == nil,
+                        isConfirming: isSaving
+                    ) {
                         Task { await save() }
                     }
-                    .disabled(selectedStatusID == nil || isSaving)
                 }
             }
         }

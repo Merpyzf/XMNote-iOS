@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 BookReadingDetailContent、七项分享设置、ReadCalendarShareImageRenderer、XMActivityShareSheet 与 InteractionMetrics
- * [OUTPUT]: 对外提供随内容滚动的单向氛围背景 BookReadingDetailShareSheet 和 BookReadingDetailShareContent，预览并生成同构阅读详情长图
+ * [INPUT]: 依赖 BookReadingDetailContent、七项分享设置、ReadCalendarShareImageRenderer、XMActivityShareSheet、XMScrollEdgeChrome 与 XMSheetConfirmationAction
+ * [OUTPUT]: 对外提供系统关闭/顶部异步确认、上下 soft 滚动边缘及随内容滚动氛围背景的 BookReadingDetailShareSheet 和 BookReadingDetailShareContent，预览并生成同构阅读详情长图
  * [POS]: Views/Book/Sheets 阅读详情分享业务 Sheet，临时文件生命周期在此收口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -38,55 +38,64 @@ struct BookReadingDetailShareSheet: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                theme.neutralBackground
-                    .ignoresSafeArea()
-
-                GeometryReader { geometry in
-                    let topSafeAreaExtent = max(geometry.safeAreaInsets.top, 0)
-
-                    ScrollView {
-                        VStack(spacing: Spacing.none) {
-                            BookReadingDetailContent(
-                                snapshot: snapshot,
-                                mode: .share(setting),
-                                theme: theme,
-                                ratingValue: .constant(Double(snapshot.book.score) / 10),
-                                expandedMonthIDs: $expandedMonthIDs
-                            )
+            XMScrollEdgeChrome(
+                presentation: .overlaySoft,
+                edges: [.top, .bottom]
+            ) {
+                ScrollView {
+                    VStack(spacing: Spacing.none) {
+                        shareOptionsControl
                             .padding(.horizontal, Spacing.screenEdge)
-                            .padding(.top, Spacing.cozy + topSafeAreaExtent)
-                            .padding(.bottom, Spacing.double)
-                            .frame(maxWidth: .infinity)
+                            .padding(.top, Spacing.cozy)
+                            .padding(.bottom, Spacing.cozy)
 
-                            if let errorMessage {
-                                Text(errorMessage)
-                                    .font(AppTypography.footnote)
-                                    .foregroundStyle(Color.feedbackError)
-                                    .padding(.horizontal, Spacing.screenEdge)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                        }
-                        .background(alignment: .top) {
-                            BookReadingDetailAtmosphere(theme: theme)
+                        BookReadingDetailContent(
+                            snapshot: snapshot,
+                            mode: .share(setting),
+                            theme: theme,
+                            ratingValue: .constant(Double(snapshot.book.score) / 10),
+                            expandedMonthIDs: $expandedMonthIDs
+                        )
+                        .padding(.horizontal, Spacing.screenEdge)
+                        .padding(.bottom, Spacing.double)
+                        .frame(maxWidth: .infinity)
+
+                        if let errorMessage {
+                            Text(errorMessage)
+                                .font(AppTypography.footnote)
+                                .foregroundStyle(Color.feedbackError)
+                                .padding(.horizontal, Spacing.screenEdge)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
-                    .scrollBounceBehavior(.always)
-                    .ignoresSafeArea(.container, edges: [.top, .bottom])
+                    .background(alignment: .top) {
+                        BookReadingDetailAtmosphere(theme: theme)
+                    }
                 }
+                .scrollBounceBehavior(.always)
             }
-            .safeAreaInset(edge: .bottom, spacing: Spacing.none) {
-                bottomBar
-                    .padding(.horizontal, Spacing.screenEdge)
-                    .padding(.vertical, Spacing.cozy)
-            }
+            .background(theme.neutralBackground.ignoresSafeArea())
             .navigationTitle("分享阅读详情")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("关闭") { dismiss() }
-                        .disabled(isGenerating)
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .tint(Color.textSecondary)
+                    .disabled(isGenerating)
+                    .accessibilityLabel("关闭")
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    XMSheetConfirmationAction(
+                        isDisabled: false,
+                        isConfirming: isGenerating,
+                        action: generate
+                    )
+                    .accessibilityHint("生成阅读详情长图并打开系统分享")
                 }
             }
         }
@@ -107,44 +116,20 @@ struct BookReadingDetailShareSheet: View {
         .onDisappear { discardGeneratedFile() }
     }
 
-    @ViewBuilder
-    private var bottomBar: some View {
-        if #available(iOS 26.0, *) {
-            bottomBarContent
-                .glassEffect(.regular, in: .capsule)
-        } else {
-            bottomBarContent
-                .background(.regularMaterial, in: Capsule())
-        }
-    }
-
-    private var bottomBarContent: some View {
-        HStack(spacing: Spacing.cozy) {
+    private var shareOptionsControl: some View {
+        HStack {
             Button {
                 isShowingOptions = true
             } label: {
-                Label("内容", systemImage: "slider.horizontal.3")
+                Label("分享内容", systemImage: "slider.horizontal.3")
                     .font(AppTypography.subheadlineMedium)
-                    .frame(minHeight: InteractionMetrics.minimumTouchTarget)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.bordered)
+            .tint(Color.textSecondary)
             .disabled(isGenerating)
 
-            Button(action: generate) {
-                Label(
-                    isGenerating ? "正在生成…" : "分享长图",
-                    systemImage: isGenerating ? "photo.badge.arrow.down" : "square.and.arrow.up"
-                )
-                .font(AppTypography.subheadlineSemibold)
-                .frame(
-                    maxWidth: .infinity,
-                    minHeight: InteractionMetrics.minimumTouchTarget
-                )
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(isGenerating)
+            Spacer(minLength: Spacing.none)
         }
-        .padding(Spacing.half)
     }
 
     private var optionsSheet: some View {
@@ -163,8 +148,14 @@ struct BookReadingDetailShareSheet: View {
             .navigationTitle("分享内容")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") { isShowingOptions = false }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
+                        isShowingOptions = false
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .tint(Color.textSecondary)
+                    .accessibilityLabel("关闭")
                 }
             }
         }

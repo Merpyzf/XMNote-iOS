@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 BookPickerRepositoryProtocol 提供本地书籍查询与结果解析，依赖 BookSearchRepositoryProtocol 提供在线搜索、远端结果补齐与创建回填
- * [OUTPUT]: 对外提供 BookPickerViewModel、稳定本地结果快照、BookPickerSelectedItem、BookPickerVisibleScope、BookPickerStatus 与 BookPickerRemoteTapOutcome，驱动通用书籍选择流状态机
+ * [INPUT]: 依赖 BookPickerRepositoryProtocol 提供本地书籍查询与结果解析，依赖 BookSearchRepositoryProtocol 提供在线搜索、远端结果补齐与创建回填；Debug 可注入固定远端预选
+ * [OUTPUT]: 对外提供 BookPickerViewModel、稳定本地结果快照、混合选择与异步解析状态，驱动通用书籍选择流及测试中心确定性确认模拟
  * [POS]: ViewModels/Book 的书籍选择状态编排器，被 BookPickerView 与测试共同消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -471,6 +471,20 @@ final class BookPickerViewModel {
     func isRemoteResultSelected(_ result: BookSearchResult) -> Bool {
         selectedRemoteResults.contains(where: { $0.id == result.id })
     }
+
+    #if DEBUG
+    /// 为固定测试场景注入远端多选草稿；仅接受当前配置支持的来源，并保持本地预选在前、远端预选在后的提交顺序。
+    func seedRemoteSelectionsForDebug(_ results: [BookSearchResult]) {
+        guard isMultipleSelectionEnabled, supportsDirectRemoteSelection else { return }
+        var knownResultIDs = Set(selectedRemoteResults.map(\.id))
+        for result in results
+            where configuration.onlineSources.contains(result.source)
+                && knownResultIDs.insert(result.id).inserted {
+            selectedRemoteResults.append(result)
+            selectionOrder.append(.remote(result.id))
+        }
+    }
+    #endif
 
     /// 从共享多选草稿移除本地或远端项；远端项只删除身份引用，不执行详情补齐。
     func removeSelection(_ item: BookPickerSelectedItem) {

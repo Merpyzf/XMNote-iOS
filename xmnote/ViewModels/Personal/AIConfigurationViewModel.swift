@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 AIRepositoryProtocol 读取/保存 AI 配置并更新本机偏好中的供应商凭据
- * [OUTPUT]: 对外提供 AIConfigurationViewModel 与 AIConfigurationFeedback，驱动供应商、模型、密钥和三类 Prompt 配置
+ * [INPUT]: 依赖 AIRepositoryProtocol 读取 iOS 产品投影、保存 AI 配置并更新本机偏好中的 DeepSeek 凭据
+ * [OUTPUT]: 对外提供 AIConfigurationViewModel 与 AIConfigurationFeedback，驱动 iOS 当前开放的 DeepSeek 模型、密钥和三类 Prompt 配置
  * [POS]: ViewModels/Personal 的 AI 设置状态编排器，被 AIConfigurationView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -21,7 +21,7 @@ nonisolated struct AIConfigurationFeedback: Identifiable, Equatable, Sendable {
 
 @MainActor
 @Observable
-/// AI 设置状态源；明文 API Key 仅保留用户本次输入，不从持久化快照回填到界面状态。
+/// AI 设置状态源；iOS 当前只编辑 DeepSeek，SiliconFlow 由领域与存储层兼容保留，明文 API Key 不从持久化快照回填。
 final class AIConfigurationViewModel {
     var configuration: AIConfiguration = .androidAlignedDefault
     var apiKeyDraft = ""
@@ -99,13 +99,6 @@ final class AIConfigurationViewModel {
                 message: "读取 AI 配置失败：\(error.localizedDescription)"
             )
         }
-    }
-
-    /// 切换供应商并清空当前明文输入；各供应商模型和凭据保持隔离。
-    func selectProvider(_ provider: AIProvider) {
-        guard configuration.provider != provider else { return }
-        configuration.provider = provider
-        apiKeyDraft = ""
     }
 
     /// 更新当前供应商模型，其他供应商已选模型不受影响。
@@ -189,7 +182,7 @@ final class AIConfigurationViewModel {
     }
 
     private func apply(_ snapshot: AIConfigurationSnapshot) {
-        let normalized = snapshot.configuration.normalized
+        let normalized = snapshot.configuration.iOSProductNormalized
         configuration = normalized
         persistedConfiguration = normalized
         providersWithStoredKey = snapshot.providersWithStoredKey
