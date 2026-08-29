@@ -14,6 +14,7 @@
 - 设计规范：`docs/architecture/通用状态展示设计规范.md`；组件接入：`docs/component-guides/XMStatePresentation使用说明.md`。
 - 生产组件：`xmnote/UIComponents/Feedback/StatePresentation/`；静态闸门：`scripts/verify_state_presentations.sh`。
 - 页面、Sheet 与列表背景使用 `XMContentStateView`，卡片/局部容器使用 `XMCompactStateView`，保留内容时的失败提示使用 `XMInlineStatusBanner`。
+- 状态正文采用 Regular 低权重排版、`stateActionForeground` 纯文字动作和中性内容表层；错误/警告语义色只用于必要图标，内容层不得叠加 Liquid Glass、胶囊或装饰背景。静态闸门同时阻止错误层级、低对比动作、重复入口和模板化状态文案回流。
 - 现有组件不能满足新 UI 时，优先配置参数或扩展既有 `Style`；只有两个独立生产场景证明相同语义与结构后，才允许新增公共状态组件，并同步测试目录与治理登记。
 
 ### iOS 设计系统兼容入口

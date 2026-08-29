@@ -27,14 +27,15 @@ ReadingHeatmapWidgetView { date in
 - 外层使用 `CardContainer(cornerRadius: CornerRadius.containerLarge, showsBorder: false)`，与在读首页主卡视觉保持一致。
 - 卡内统一使用 `Spacing.base` 作为图表内容边距。
 - 右上角帮助入口采用 `24pt` 视觉尺寸 + `32pt` 命中区，避免小图标误触。
-- 加载态使用卡内居中 `ProgressView`，错误态使用底部内联“错误文案 + 重试”组合，不弹系统级中断提示。
+- 首读加载由 `LoadingGate` 控制延迟显隐，并在卡内使用 `LoadingStateView(style: .inline)`；不直接拼装 `ProgressView`。
+- 读取或刷新失败时保留 `HeatmapChart`，在图表下方使用中性表层的 `XMInlineStatusBanner(tone: .warning)`，并提供纯文字“重试”，不弹系统级中断提示。
 - 页面回到前台时，若跨天则自动刷新，保证“今天”热力图语义正确。
 
 ## 状态说明
 - `isLoading = true`
-  - 展示中心加载指示器。
+  - `LoadingGate` 达到反馈阈值后，在现有热力图卡内居中展示 `LoadingStateView(style: .inline)`；短读取不闪现加载反馈。
 - `errorMessage != nil`
-  - 在热力图底部展示错误提示和“重试”按钮。
+  - 继续渲染当前 `HeatmapChart`，在底部展示 warning `XMInlineStatusBanner` 与纯文字“重试”动作；错误不接管整张卡片。
 - 正常态
   - 渲染 `HeatmapChart`，支持点击日期进入阅读日历。
 

@@ -27,7 +27,7 @@
 - `XMSettingsComponents使用说明.md`: 卡片式配置页面的 Page、Section、Group、Divider 与已验证行型接入边界。
 - `XMSheetScaffold使用说明.md`: 通用业务 Sheet 标题、滚动区及固定顶栏/底栏接入指南。
 - `XMSettingsSheetComponents使用说明.md`: 已拆分旧组件的迁移映射，仅用于阻止历史链接恢复旧实现。
-- `XMStatePresentation使用说明.md`: XMContentStateView、XMCompactStateView、XMInlineStatusBanner 与加载状态组件族接入、测试中心验收和双生产场景扩展准入指南。
+- `XMStatePresentation使用说明.md`: XMContentStateView、XMCompactStateView、XMInlineStatusBanner 与加载状态组件族的安静空态、Regular 排版、纯文字动作、中性 Banner、生产场景测试中心验收和双场景扩展准入指南。
 - `NoteReviewPagingDeck使用说明.md`: Note 页面私有 NoteReviewPagingDeck 书摘回顾分页卡组接入指南。
 - `TopSwitcher使用说明.md`: TopSwitcher 顶部标题/标签切换组件接入指南与参数说明。
 - `XMInlineTabBar使用说明.md`: Note 页面私有 XMInlineTabBar 内容区子页面切换指南。

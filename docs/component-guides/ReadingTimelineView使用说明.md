@@ -59,8 +59,8 @@ private func segmentedPage(for tab: ReadingSubTab) -> some View {
         )
     case .statistics:
         XMContentStateView(
-            role: .empty,
-            title: "暂无统计数据",
+            role: .instruction,
+            title: "统计功能暂未开放",
             systemImage: "chart.bar"
         )
     }
@@ -79,6 +79,14 @@ private func segmentedPage(for tab: ReadingSubTab) -> some View {
     }
 }
 ```
+
+## 状态边界
+
+- 首次状态源尚未注入或仍在首读时，使用 `ReadingTimelineBootstrapShellView` 与列表占位保持日历、筛选和列表几何稳定，不把加载误呈现为空数据。
+- 首次读取失败且没有可用时间线内容时，列表区域使用 `XMCompactStateView(role: .failure)`，标题为“暂时无法加载时间线”，并提供纯文字“重试”。
+- 首读完成后，当选中日期与分类没有匹配事件时，列表区域使用 `XMCompactStateView(role: .noResults)`，标题为“当日没有匹配事件”。
+- 已有内容仍可信但日期、分类或外部写入后的刷新失败时，保留当前时间线并使用 `XMInlineStatusBanner` 提供纯文字“重试”；不得用页面级失败替换已有内容。
+- “统计”页属于尚未开放的功能说明，使用中性 `.instruction` 与“统计功能暂未开放”，不伪装成数据为空。
 
 ## 常见问题
 

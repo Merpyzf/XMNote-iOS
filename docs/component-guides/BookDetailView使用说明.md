@@ -91,6 +91,15 @@ BookDetailView(
 - `BookWorkspaceCollectionHostView` 常驻四个 `UICollectionView`，统一管理共享 Header、Scope Bar、分页、吸顶和滚动位置。
 - 高频连续几何不写回 SwiftUI；业务选中态只在分页落定后提交。
 
+### 四域状态与视口定位
+
+- 目录、书摘、相关和书评均由 Collection 快照显式表达加载、空数据、搜索无结果和读取失败，状态正文统一复用 `XMCompactStateView`；加载反馈复用 `LoadingStateView`。
+- 普通空态只陈述事实，例如“暂无目录”；当前域存在搜索词时使用 `.noResults`，例如“没有匹配的目录”。两者不能混用。
+- 状态属于 Tab 内局部内容，不升级为页面级大状态，也不在状态内部重复顶部或工具栏已有动作。
+- 状态行高度由宿主使用当前可见高度、`adjustedContentInset`、书籍 Header 和 Scope Bar 的真实测量值计算，并以页面私有的 280pt 为下限。状态正文因此几何居中在 Scope Bar 下方与底部系统栏上方，不使用固定偏移。
+- 空状态 section 只保留水平页面边距，不增加额外纵向 inset，也不制造虚假滚动范围；书籍 Header 保持展开且继续保留系统回弹。
+- 安全区、动态字体、底部栏或共享 Chrome 几何变化时，宿主只重配状态 Cell，并沿用现有视口锚点无动画恢复，避免四个 Tab 切换时跳位。
+
 ## 书籍头部规则
 
 - 书名、作者、出版社、出版日期、封面和阅读状态组成身份区。

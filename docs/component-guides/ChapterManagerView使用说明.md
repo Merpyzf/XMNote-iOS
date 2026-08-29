@@ -34,6 +34,13 @@ case .chapterManager(let bookID, let focusChapterID):
 
 读取状态使用延迟显示的 `LoadingGate`；所有结构写入即时显示门闩，移动操作失败时保留解释，成功后可在限定时间撤销。
 
+## 页面状态
+
+- 初次读取由 `LoadingGate` 延迟显示 `LoadingStateView`，避免瞬时读取闪烁。
+- 目录为空时使用页面级 `XMContentStateView(.empty)`，只显示“暂无目录”。新增章节由顶部既有入口负责，空态不得重复新增按钮或解释文案。
+- 初次读取失败时使用 `XMContentStateView(.failure)`，显示“暂时无法加载目录”和纯文字“重试”；按钮只提供透明的最小命中区，不绘制胶囊、背景或边框。
+- 已有目录内容与写入反馈继续由列表及其业务操作承载，不以页面空态覆盖可信内容。
+
 ## 常见问题
 
 ### 排序能跨父章节拖动吗？
