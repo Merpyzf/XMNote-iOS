@@ -192,8 +192,7 @@ struct DesignSystemGalleryView: View {
 
                 XMCompactStateView(
                     role: .empty,
-                    title: "暂无内容",
-                    systemImage: "tray"
+                    title: "暂无内容"
                 )
                     .frame(height: 96)
 

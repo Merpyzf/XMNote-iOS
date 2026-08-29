@@ -59,8 +59,8 @@ struct DebugCenterView: View {
         ),
         DebugItem(
             icon: "rectangle.stack",
-            title: "通用状态展示",
-            subtitle: "完整、紧凑、Inline、加载与五阶段的浅深色和动态字体验收",
+            title: "状态展示",
+            subtitle: "真实生产场景、公共状态组件与业务专用状态的统一验收入口",
             destination: AnyView(StatePresentationTestView())
         ),
         DebugItem(
