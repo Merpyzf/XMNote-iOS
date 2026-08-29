@@ -39,14 +39,17 @@ struct LoadingStateView: View {
         }
     }
 
-    @ViewBuilder
     private var progressContent: some View {
-        if let message, !message.isEmpty {
-            ProgressView(message)
-                .font(AppTypography.body)
-        } else {
-            ProgressView()
+        Group {
+            if let message, !message.isEmpty {
+                ProgressView(message)
+            } else {
+                ProgressView()
+            }
         }
+        .font(AppTypography.body)
+        .foregroundStyle(Color.textSecondary)
+        .tint(Color.textHint)
     }
 }
 

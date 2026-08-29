@@ -248,8 +248,7 @@ struct LoadPhaseHost<
             empty: {
                 XMCompactStateView(
                     role: .empty,
-                    title: $0,
-                    systemImage: "tray"
+                    title: $0
                 )
             },
             failure: { Text($0).foregroundStyle(Color.feedbackError) }
@@ -263,8 +262,7 @@ struct LoadPhaseHost<
             empty: {
                 XMCompactStateView(
                     role: .empty,
-                    title: $0,
-                    systemImage: "tray"
+                    title: $0
                 )
             },
             failure: { Text($0).foregroundStyle(Color.feedbackError) }

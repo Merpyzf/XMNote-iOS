@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 SwiftUI 与 UIKit 的系统动态颜色能力，以及集中式 Color 构造器
- * [OUTPUT]: 对外提供 XMNote 跨模块稳定语义颜色，包含与 Android 对齐的搜索关键字命中语义
+ * [OUTPUT]: 对外提供 XMNote 跨模块稳定语义颜色，包含与 Android 对齐的搜索关键字命中语义与可访问的轻量状态动作前景
  * [POS]: Utilities/DesignSystem 的颜色语义层，只表达用途，不承载页面布局
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -126,6 +126,13 @@ extension Color {
     static let buttonDisabled = Color.controlFillSecondary
     /// 主按钮禁用态内容色，复用中性提示文字并保持弱于可用状态。
     static let buttonDisabledForeground = Color.textHint
+    /// 页面状态、局部状态与 Banner 的小字号文字动作色；独立于品牌填充色，保证 grouped 表层上的正文级对比度。
+    static let stateActionForeground = Color.xmAdaptive(
+        light: Color.xmHex(0x1B6F37),
+        dark: Color.xmHex(0x65D98D),
+        highContrastLight: Color.xmHex(0x11632A),
+        highContrastDark: Color.xmHex(0x8BE5AA)
+    )
     /// 编辑类 swipe 动作填充色，保持既有 SwiftUI 标准蓝色，避免继承 App 品牌 tint。
     static let editActionFill = Color.blue
     /// 遮罩层

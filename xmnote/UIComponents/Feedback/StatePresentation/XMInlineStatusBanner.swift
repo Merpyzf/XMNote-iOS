@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 XMStateAction 与设计系统状态令牌，接收保留内容时的局部反馈文案和可选动作
- * [OUTPUT]: 对外提供 XMInlineStatusBanner，统一中性提示、警告与失败横幅
+ * [INPUT]: 依赖 XMStateAction、XMMinimumHitTarget 与设计系统状态令牌，接收保留内容时的局部反馈文案和可选动作
+ * [OUTPUT]: 对外提供 XMInlineStatusBanner，统一中性提示、警告与失败横幅及尾部文字动作
  * [POS]: UIComponents/Feedback/StatePresentation 的非阻断反馈组件，由页面决定插入位置和外边距
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -69,16 +69,9 @@ struct XMInlineStatusBanner: View {
         .padding(.horizontal, Spacing.base)
         .padding(.vertical, Spacing.cozy)
         .background(
-            tone.color.opacity(StatePresentationMetrics.toneBackgroundOpacity),
+            Color.controlFillSecondary,
             in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
         )
-        .overlay {
-            RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                .stroke(
-                    tone.color.opacity(StatePresentationMetrics.toneBorderOpacity),
-                    lineWidth: StrokeWidth.hairline
-                )
-        }
         .accessibilityElement(children: .contain)
     }
 
@@ -89,7 +82,7 @@ struct XMInlineStatusBanner: View {
             Spacer(minLength: 0)
 
             if let action {
-                actionButton(action)
+                actionButton(action, hitTargetAnchor: .trailing)
             }
         }
     }
@@ -99,7 +92,7 @@ struct XMInlineStatusBanner: View {
             statusMessage
 
             if let action {
-                actionButton(action)
+                actionButton(action, hitTargetAnchor: .leading)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -108,26 +101,30 @@ struct XMInlineStatusBanner: View {
     private var statusMessage: some View {
         HStack(alignment: .firstTextBaseline, spacing: Spacing.cozy) {
             Image(systemName: systemImage ?? tone.defaultSystemImage)
-                .font(.system(size: iconSize, weight: .semibold))
+                .font(.system(size: iconSize, weight: .regular))
                 .foregroundStyle(tone.color)
                 .accessibilityHidden(true)
 
             Text(message)
                 .font(StatePresentationTypography.bannerMessage)
-                .foregroundStyle(Color.textPrimary)
+                .foregroundStyle(Color.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .accessibilityElement(children: .combine)
     }
 
-    /// 使用系统无边框动作保持横幅紧凑，同时提供不小于 44pt 的点击热区。
-    private func actionButton(_ action: XMStateAction) -> some View {
+    /// 使用系统无边框动作保持横幅紧凑，并按横向或纵向布局扩展点击热区。
+    private func actionButton(
+        _ action: XMStateAction,
+        hitTargetAnchor: XMMinimumHitTargetAnchor
+    ) -> some View {
         Button(action: action.perform) {
             XMStateActionLabel(action: action)
                 .font(StatePresentationTypography.bannerAction)
-                .frame(minHeight: InteractionMetrics.minimumTouchTarget)
         }
         .buttonStyle(.borderless)
+        .tint(Color.stateActionForeground)
+        .xmMinimumHitTarget(anchor: hitTargetAnchor)
         .disabled(!action.isEnabled)
     }
 }
@@ -136,9 +133,9 @@ struct XMInlineStatusBanner: View {
     VStack(spacing: Spacing.base) {
         XMInlineStatusBanner("部分内容暂时无法更新", tone: .warning)
         XMInlineStatusBanner(
-            "加载失败，请稍后重试",
+            "内容更新失败",
             tone: .error,
-            action: XMStateAction("重试", systemImage: "arrow.clockwise") {}
+            action: XMStateAction("重试") {}
         )
     }
     .padding()

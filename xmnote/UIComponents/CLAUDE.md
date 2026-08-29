@@ -22,12 +22,13 @@
 
 - 生产路径的完整空态、无搜索结果和无内容失败统一使用 `XMContentStateView`；禁止在该目录外直接构造 `ContentUnavailableView`。
 - 卡片、分区和局部容器使用 `XMCompactStateView`；已有可信内容的刷新或写入失败使用 `XMInlineStatusBanner`。
+- 状态标题保持 Regular，动作使用 `stateActionForeground` 的纯文字无边框样式，Banner 保持中性表层，仅由图标承载警告或错误语义色。
 - `StatePresentation` 只统一展示，不持有 Repository、ViewModel 或全局业务状态机；新公共视觉须由两个独立生产场景证明相同语义与结构。
 - 新公共组件必须加入 `StatePresentationCatalogView`，并同步机器目录、术语表、组件文档清单与指南。
 
 ## 发现与验收
 
-- 机器目录：`scripts/design-system/component-catalog.json` schema v3；当前登记 canonical 51 项、support 9 项。
+- 机器目录：`scripts/design-system/component-catalog.json` schema v3；当前登记 canonical 55 项、support 9 项。
 - 查询：`python3 scripts/design-system/ds.py catalog [--symbol <名称>]`。
 - 修改前上下文：`python3 scripts/design-system/ds.py context --paths <Swift 路径>`。
 - 所有非 Vendor Swift 文件必须登记分类、层级、复用范围、状态、依赖边界与 Preview 策略。

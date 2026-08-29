@@ -868,7 +868,7 @@ private enum XMAttachmentUploadTypography {
         AppTypography.uiFixed(
             baseSize: 12,
             textStyle: .footnote,
-            weight: .semibold,
+            weight: .regular,
             minimumPointSize: 12
         )
     }
@@ -1208,12 +1208,15 @@ private extension XMAttachmentUploadCell {
         var retryTitle = AttributedString(XMAttachmentUploadStripStrings.default.retryTitle)
         retryTitle.font = XMAttachmentUploadTypography.retryUIFont
         retryConfiguration.attributedTitle = retryTitle
-        retryConfiguration.baseForegroundColor = UIColor.xmResolved(Color.feedbackError)
-        retryConfiguration.contentInsets = NSDirectionalEdgeInsets(top: 4, leading: 10, bottom: 4, trailing: 10)
+        retryConfiguration.image = UIImage(
+            systemName: "exclamationmark.circle",
+            withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .regular)
+        )
+        retryConfiguration.imagePadding = 4
+        retryConfiguration.baseForegroundColor = UIColor.xmResolved(Color.stateActionForeground)
+        retryConfiguration.contentInsets = .zero
         retryButton.configuration = retryConfiguration
-        retryButton.backgroundColor = UIColor.black.withAlphaComponent(0.72)
-        retryButton.layer.cornerRadius = 13
-        retryButton.layer.cornerCurve = .continuous
+        retryButton.backgroundColor = .clear
         retryButton.isHidden = true
         retryButton.addTarget(self, action: #selector(handleControlTouchDown), for: .touchDown)
         retryButton.addTarget(self, action: #selector(handleControlTouchUp), for: [.touchDragExit, .touchCancel, .touchUpOutside, .touchUpInside])
