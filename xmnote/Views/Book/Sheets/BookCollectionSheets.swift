@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 BookCollectionDetail、BookCollectionFormPresentation、BookCollectionRecommendEdit、BookCollectionBookMetadataEdit、XMBookCoverAppearance、InteractionMetrics 与页面私有顶部栏布局承载书单详情、书单编辑、书籍元信息编辑和关系备注编辑上下文
+ * [INPUT]: 依赖 BookCollectionDetail、BookCollectionFormPresentation、BookCollectionRecommendEdit、BookCollectionBookMetadataEdit、XMBookCoverAppearance、xmSheetContentPanel 与系统 Sheet 工具栏承载书单详情、书单编辑、书籍元信息编辑和关系备注编辑上下文
  * [OUTPUT]: 对外提供 BookCollectionSummarySheet、BookCollectionFormSheet、BookCollectionBookMetadataEditSheet 与 BookCollectionRecommendSheet，承载书单简介查看、创建/编辑、中性封面辅助操作、书籍元信息和收藏理由/年度点评编辑的任务面板
  * [POS]: Book 模块业务 Sheet，替代书单文本输入类中心弹窗
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -7,11 +7,6 @@
 
 import PhotosUI
 import SwiftUI
-
-/// 书单 Sheet 顶部栏左侧占位保持与右侧操作槽等宽，避免标题因单侧操作发生偏移。
-private enum BookCollectionSheetTopBarLayout {
-    static let leadingActionPlaceholderSize: CGFloat = InteractionMetrics.minimumTouchTarget
-}
 
 /// 书单完整简介面板，在详情 Header 截断时承载完整标题、简介与阅读进度。
 struct BookCollectionSummarySheet: View {
@@ -23,21 +18,7 @@ struct BookCollectionSummarySheet: View {
         XMSheetScaffold(
             title: "书单简介",
             subtitle: kindSubtitle,
-            onClose: { dismiss() },
-            leadingAction: {
-                Color.clear
-                    .frame(
-                        width: BookCollectionSheetTopBarLayout.leadingActionPlaceholderSize,
-                        height: BookCollectionSheetTopBarLayout.leadingActionPlaceholderSize
-                    )
-            },
-            trailingAction: {
-                BookCollectionSheetTopTextButton(
-                    title: "完成",
-                    foregroundColor: .appTint.opacity(0.82),
-                    action: { dismiss() }
-                )
-            }
+            onClose: { dismiss() }
         ) {
             VStack(alignment: .leading, spacing: Spacing.section) {
                 summaryCard
@@ -80,9 +61,9 @@ struct BookCollectionSummarySheet: View {
             )
         }
         .padding(Spacing.contentEdge)
-        .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
+        .background(Color.surfaceCard, in: ConcentricRectangle.xmSheetContentPanel)
         .overlay {
-            RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
+            ConcentricRectangle.xmSheetContentPanel
                 .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
         }
         .accessibilityElement(children: .contain)
@@ -163,21 +144,9 @@ struct BookCollectionFormSheet: View {
             title: presentation.title,
             subtitle: "标题与简介",
             onClose: { dismiss() },
-            leadingAction: {
-                BookCollectionSheetTopTextButton(
-                    title: "取消",
-                    foregroundColor: .textSecondary,
-                    action: { dismiss() }
-                )
-            },
-            trailingAction: {
-                BookCollectionSheetTopTextButton(
-                    title: saveTitle,
-                    foregroundColor: .appTint.opacity(0.82),
-                    isDisabled: !canSave || isSaving,
-                    action: submit
-                )
-            }
+            isConfirmationDisabled: !canSave,
+            isConfirming: isSaving,
+            confirmationAction: submit
         ) {
             VStack(alignment: .leading, spacing: Spacing.section) {
                 fieldGroup(title: "标题") {
@@ -243,10 +212,6 @@ struct BookCollectionFormSheet: View {
         !trimmedTitle.isEmpty
     }
 
-    private var saveTitle: String {
-        presentation.mode == .create ? "创建" : "保存"
-    }
-
     private func submit() {
         guard canSave, !isSaving else { return }
         onSave(trimmedTitle, trimmedDescription)
@@ -295,21 +260,8 @@ struct BookCollectionRecommendSheet: View {
             title: presentation.editActionTitle(hasText: !edit.item.recommend.isEmpty),
             subtitle: presentation.title,
             onClose: { dismiss() },
-            leadingAction: {
-                BookCollectionSheetTopTextButton(
-                    title: "取消",
-                    foregroundColor: .textSecondary,
-                    action: { dismiss() }
-                )
-            },
-            trailingAction: {
-                BookCollectionSheetTopTextButton(
-                    title: "保存",
-                    foregroundColor: .appTint.opacity(0.82),
-                    isDisabled: isSaving,
-                    action: submit
-                )
-            }
+            isConfirming: isSaving,
+            confirmationAction: submit
         ) {
             VStack(alignment: .leading, spacing: Spacing.section) {
                 bookContext
@@ -443,21 +395,9 @@ struct BookCollectionBookMetadataEditSheet: View {
             title: "编辑书籍信息",
             subtitle: edit.item.isPlaceholder ? "未加入书架" : "书单内书籍",
             onClose: { dismiss() },
-            leadingAction: {
-                BookCollectionSheetTopTextButton(
-                    title: "取消",
-                    foregroundColor: .textSecondary,
-                    action: { dismiss() }
-                )
-            },
-            trailingAction: {
-                BookCollectionSheetTopTextButton(
-                    title: "保存",
-                    foregroundColor: .appTint.opacity(0.82),
-                    isDisabled: !canSave || isSaving,
-                    action: submit
-                )
-            }
+            isConfirmationDisabled: !canSave,
+            isConfirming: isSaving,
+            confirmationAction: submit
         ) {
             VStack(alignment: .leading, spacing: Spacing.section) {
                 coverSection
@@ -559,9 +499,9 @@ struct BookCollectionBookMetadataEditSheet: View {
             }
         }
         .padding(Spacing.base)
-        .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
+        .background(Color.surfaceCard, in: ConcentricRectangle.xmSheetContentPanel)
         .overlay {
-            RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
+            ConcentricRectangle.xmSheetContentPanel
                 .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
         }
     }
@@ -739,21 +679,8 @@ struct BookCollectionAnnualDescriptionSheet: View {
             title: "编辑年度说明",
             subtitle: subtitle,
             onClose: { dismiss() },
-            leadingAction: {
-                BookCollectionSheetTopTextButton(
-                    title: "取消",
-                    foregroundColor: .textSecondary,
-                    action: { dismiss() }
-                )
-            },
-            trailingAction: {
-                BookCollectionSheetTopTextButton(
-                    title: "保存",
-                    foregroundColor: .appTint.opacity(0.82),
-                    isDisabled: isSaving,
-                    action: submit
-                )
-            }
+            isConfirming: isSaving,
+            confirmationAction: submit
         ) {
             VStack(alignment: .leading, spacing: Spacing.section) {
                 Text("写下这一年的阅读主题、收获或给自己的提醒。单本书的记录仍放在年度点评里。")
@@ -826,21 +753,9 @@ struct BookCollectionWereadImportSheet: View {
             title: "导入微信读书书单",
             subtitle: "粘贴链接",
             onClose: { dismiss() },
-            leadingAction: {
-                BookCollectionSheetTopTextButton(
-                    title: "取消",
-                    foregroundColor: .textSecondary,
-                    action: { dismiss() }
-                )
-            },
-            trailingAction: {
-                BookCollectionSheetTopTextButton(
-                    title: "解析",
-                    foregroundColor: .appTint.opacity(0.82),
-                    isDisabled: trimmedLink.isEmpty || isLoading,
-                    action: submit
-                )
-            }
+            isConfirmationDisabled: trimmedLink.isEmpty,
+            isConfirming: isLoading,
+            confirmationAction: submit
         ) {
             VStack(alignment: .leading, spacing: Spacing.section) {
                 Text("从微信读书分享书单后，把链接粘贴到这里。解析完成后会先展示预览，由你确认是否导入。")
@@ -911,21 +826,8 @@ struct BookCollectionWereadImportPreviewSheet: View {
             title: "确认导入",
             subtitle: "\(preview.books.count) 本书",
             onClose: { dismiss() },
-            leadingAction: {
-                BookCollectionSheetTopTextButton(
-                    title: "取消",
-                    foregroundColor: .textSecondary,
-                    action: { dismiss() }
-                )
-            },
-            trailingAction: {
-                BookCollectionSheetTopTextButton(
-                    title: "导入",
-                    foregroundColor: .appTint.opacity(0.82),
-                    isDisabled: isSaving,
-                    action: submit
-                )
-            }
+            isConfirming: isSaving,
+            confirmationAction: submit
         ) {
             VStack(alignment: .leading, spacing: Spacing.section) {
                 previewHeader
@@ -980,9 +882,9 @@ struct BookCollectionWereadImportPreviewSheet: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(Spacing.base)
-        .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
+        .background(Color.surfaceCard, in: ConcentricRectangle.xmSheetContentPanel)
         .overlay {
-            RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
+            ConcentricRectangle.xmSheetContentPanel
                 .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
         }
     }
@@ -1034,27 +936,5 @@ struct BookCollectionWereadImportPreviewSheet: View {
     private func submit() {
         guard !isSaving else { return }
         onConfirm(preview)
-    }
-}
-
-/// 书单 Sheet 顶部文字按钮，复用批量面板的文字密度但保持文件私有边界。
-private struct BookCollectionSheetTopTextButton: View {
-    let title: String
-    let foregroundColor: Color
-    var isDisabled = false
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(AppTypography.subheadlineMedium)
-                .foregroundStyle(isDisabled ? Color.textHint : foregroundColor)
-                .frame(
-                    minWidth: InteractionMetrics.minimumTouchTarget,
-                    minHeight: InteractionMetrics.minimumTouchTarget
-                )
-        }
-        .buttonStyle(.plain)
-        .disabled(isDisabled)
     }
 }

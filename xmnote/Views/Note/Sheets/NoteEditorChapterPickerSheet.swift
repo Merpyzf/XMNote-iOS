@@ -15,6 +15,7 @@ struct NoteEditorChapterPickerSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var searchText = ""
+    @State private var isSearchActive = false
 
     private var visibleChapters: [NoteEditorChapterOption] {
         let keyword = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -24,74 +25,36 @@ struct NoteEditorChapterPickerSheet: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                if searchText.isEmpty {
-                    Button {
-                        onSelect(nil)
-                    } label: {
-                        HStack {
-                            Text("不设置章节")
-                                .font(AppTypography.body)
-                                .foregroundStyle(Color.textPrimary)
-                            Spacer()
-                            if selectedChapterID == 0 {
-                                XMSelectionIndicator(
-                                    style: .checkmarkOnly,
-                                    isSelected: true,
-                                    font: AppTypography.body,
-                                    showsUnselectedBase: false
-                                )
-                            }
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityValue(selectedChapterID == 0 ? "已选择" : "未选择")
+            XMScrollEdgeChrome(
+                presentation: .overlaySoft,
+                edges: [.top, .bottom],
+                topBar: {
+                    XMSystemSearchBar(
+                        text: $searchText,
+                        isActive: $isSearchActive,
+                        prompt: "搜索章节",
+                        accessibilityIdentifier: "note.editor.chapter.search"
+                    )
+                    .padding(.top, Spacing.cozy)
+                    .padding(.bottom, Spacing.half)
+                },
+                bottomBar: {
+                    Color.surfaceSheet
+                        .frame(height: Spacing.half)
+                        .allowsHitTesting(false)
                 }
-
-                if visibleChapters.isEmpty {
+            ) {
+                List {
                     if searchText.isEmpty {
-                        XMCompactStateView(
-                            role: .empty,
-                            title: "暂无章节"
-                        )
-                    } else {
-                        XMCompactStateView(
-                            role: .noResults,
-                            title: "没有匹配的章节"
-                        )
-                    }
-                } else {
-                    ForEach(visibleChapters) { chapter in
                         Button {
-                            onSelect(chapter)
+                            onSelect(nil)
                         } label: {
-                            HStack(spacing: Spacing.base) {
-                                VStack(alignment: .leading, spacing: Spacing.compact) {
-                                    HStack(spacing: Spacing.compact) {
-                                        Text(chapter.title)
-                                            .font(
-                                                chapter.displayLevel == 1
-                                                    ? AppTypography.bodyMedium
-                                                    : AppTypography.body
-                                            )
-                                            .foregroundStyle(Color.textPrimary)
-                                            .lineLimit(2)
-                                        if chapter.isStarred == true {
-                                            Image(systemName: "star.fill")
-                                                .imageScale(.small)
-                                                .foregroundStyle(XMStarredAppearance.foreground)
-                                                .accessibilityHidden(true)
-                                        }
-                                    }
-                                    if !searchText.isEmpty, !chapter.parentPathText.isEmpty {
-                                        Text(chapter.parentPathText)
-                                            .font(AppTypography.caption)
-                                            .foregroundStyle(Color.textSecondary)
-                                            .lineLimit(1)
-                                    }
-                                }
-                                Spacer(minLength: Spacing.compact)
-                                if selectedChapterID == chapter.id {
+                            HStack {
+                                Text("不设置章节")
+                                    .font(AppTypography.body)
+                                    .foregroundStyle(Color.textPrimary)
+                                Spacer()
+                                if selectedChapterID == 0 {
                                     XMSelectionIndicator(
                                         style: .checkmarkOnly,
                                         isSelected: true,
@@ -100,26 +63,88 @@ struct NoteEditorChapterPickerSheet: View {
                                     )
                                 }
                             }
-                            .padding(.leading, CGFloat(chapter.displayLevel - 1) * Spacing.base)
-                            .frame(minHeight: InteractionMetrics.minimumTouchTarget)
-                            .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel(chapter.pathText ?? chapter.title)
-                        .accessibilityValue(selectedChapterID == chapter.id ? "已选择" : "未选择")
-                        .accessibilityAddTraits(selectedChapterID == chapter.id ? .isSelected : [])
+                        .accessibilityValue(selectedChapterID == 0 ? "已选择" : "未选择")
+                    }
+
+                    if visibleChapters.isEmpty {
+                        if searchText.isEmpty {
+                            XMCompactStateView(
+                                role: .empty,
+                                title: "暂无章节"
+                            )
+                        } else {
+                            XMCompactStateView(
+                                role: .noResults,
+                                title: "没有匹配的章节"
+                            )
+                        }
+                    } else {
+                        ForEach(visibleChapters) { chapter in
+                            Button {
+                                onSelect(chapter)
+                            } label: {
+                                HStack(spacing: Spacing.base) {
+                                    VStack(alignment: .leading, spacing: Spacing.compact) {
+                                        HStack(spacing: Spacing.compact) {
+                                            Text(chapter.title)
+                                                .font(
+                                                    chapter.displayLevel == 1
+                                                        ? AppTypography.bodyMedium
+                                                        : AppTypography.body
+                                                )
+                                                .foregroundStyle(Color.textPrimary)
+                                                .lineLimit(2)
+                                            if chapter.isStarred == true {
+                                                Image(systemName: "star.fill")
+                                                    .imageScale(.small)
+                                                    .foregroundStyle(XMStarredAppearance.foreground)
+                                                    .accessibilityHidden(true)
+                                            }
+                                        }
+                                        if !searchText.isEmpty, !chapter.parentPathText.isEmpty {
+                                            Text(chapter.parentPathText)
+                                                .font(AppTypography.caption)
+                                                .foregroundStyle(Color.textSecondary)
+                                                .lineLimit(1)
+                                        }
+                                    }
+                                    Spacer(minLength: Spacing.compact)
+                                    if selectedChapterID == chapter.id {
+                                        XMSelectionIndicator(
+                                            style: .checkmarkOnly,
+                                            isSelected: true,
+                                            font: AppTypography.body,
+                                            showsUnselectedBase: false
+                                        )
+                                    }
+                                }
+                                .padding(.leading, CGFloat(chapter.displayLevel - 1) * Spacing.base)
+                                .frame(minHeight: InteractionMetrics.minimumTouchTarget)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel(chapter.pathText ?? chapter.title)
+                            .accessibilityValue(selectedChapterID == chapter.id ? "已选择" : "未选择")
+                            .accessibilityAddTraits(selectedChapterID == chapter.id ? .isSelected : [])
+                        }
                     }
                 }
             }
+            .background(Color.surfaceSheet.ignoresSafeArea())
             .navigationTitle("章节")
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $searchText, prompt: "搜索章节")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") {
+                    Button {
                         dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
                     }
+                    .tint(Color.textSecondary)
+                    .accessibilityLabel("关闭")
                 }
             }
         }

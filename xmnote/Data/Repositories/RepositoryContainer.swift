@@ -2,8 +2,8 @@ import Foundation
 import Observation
 
 /**
- * [INPUT]: 依赖 DatabaseManager 提供数据库实例，依赖各 Repository 实现完成组装
- * [OUTPUT]: 对外提供 RepositoryContainer，集中暴露目录、搜索录入、AI、S3、图片额度、备份、标签选择布局偏好、标签/书籍分组/来源管理、阅读首页/计时/日历/单书详情与外部应用集成仓储
+ * [INPUT]: 依赖 DatabaseManager 提供数据库实例，依赖各 Repository 实现与可注入 UserDefaults 完成生产或 Debug 隔离组装
+ * [OUTPUT]: 对外提供 RepositoryContainer，集中暴露业务仓储，并在 Debug 提供 Sheet 数据副本的隔离组装入口
  * [POS]: App 级依赖注入容器，被视图层通过 Environment 获取并创建 ViewModel
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -43,30 +43,58 @@ final class RepositoryContainer {
     let noteImportRepository: any NoteImportRepositoryProtocol
 
     /// 在应用启动阶段一次性组装所有仓储依赖，并注入共享数据库管理器。
-    init(databaseManager: DatabaseManager) {
+    convenience init(databaseManager: DatabaseManager) {
+        self.init(databaseManager: databaseManager, userDefaults: .standard)
+    }
+
+    #if DEBUG
+    /// 为 Sheet 校准页组装数据库与轻量偏好均隔离的生产仓储集合。
+    convenience init(
+        sheetPreviewDatabaseManager databaseManager: DatabaseManager,
+        userDefaults: UserDefaults
+    ) {
+        self.init(databaseManager: databaseManager, userDefaults: userDefaults)
+    }
+    #endif
+
+    /// 集中组装可注入轻量偏好的仓储；生产固定使用标准容器，Debug 快照传入临时 suite。
+    private init(databaseManager: DatabaseManager, userDefaults: UserDefaults) {
         let backupServerRepository = BackupServerRepository(databaseManager: databaseManager)
         let aliyunDriveProvider = try? AliyunDriveBackupRemoteProvider(
             configuration: AliyunDriveOpenPlatformConfiguration()
         )
         let s3ConfigRepository = S3ConfigRepository(databaseManager: databaseManager)
         let s3UploadRepository = S3UploadRepository(configRepository: s3ConfigRepository)
-        let appBackendConfigRepository = AppBackendConfigRepository()
+        let appBackendConfigRepository = AppBackendConfigRepository(userDefaults: userDefaults)
         let bookRemoteSearchService = BookRemoteSearchService()
         let noteImageUploadQuotaRepository = NoteImageUploadQuotaRepository(
             configRepository: s3ConfigRepository,
-            appBackendConfigRepository: appBackendConfigRepository
+            appBackendConfigRepository: appBackendConfigRepository,
+            userDefaults: userDefaults
         )
         let coverImageLoader = NukeCoverImageLoader()
-        let bookSearchRepository = BookSearchRepository(service: bookRemoteSearchService)
+        let bookSearchRepository = BookSearchRepository(
+            service: bookRemoteSearchService,
+            userDefaults: userDefaults
+        )
         let defaultOCRPreferences = OCRRepository.androidAlignedDebugDefaults
 
         let noteRepository = NoteRepository(
             databaseManager: databaseManager,
-            s3UploadRepository: s3UploadRepository
+            userDefaults: userDefaults,
+            s3UploadRepository: s3UploadRepository,
+            noteReviewSettingStore: NoteReviewSettingStore(defaults: userDefaults)
         )
-        self.bookRepository = BookRepository(databaseManager: databaseManager)
+        self.bookRepository = BookRepository(
+            databaseManager: databaseManager,
+            displaySettingStore: BookshelfDisplaySettingStore(defaults: userDefaults),
+            bookCollectionDisplaySettingStore: BookCollectionDisplaySettingStore(defaults: userDefaults)
+        )
         self.noteRepository = noteRepository
-        self.contentRepository = ContentRepository(databaseManager: databaseManager)
+        self.contentRepository = ContentRepository(
+            databaseManager: databaseManager,
+            userDefaults: userDefaults
+        )
         self.aiRepository = AIRepository(
             databaseManager: databaseManager,
             noteRepository: noteRepository
@@ -76,27 +104,38 @@ final class RepositoryContainer {
             remoteSearchService: bookRemoteSearchService,
             appBackendConfigRepository: appBackendConfigRepository
         )
-        self.globalSearchRepository = GlobalSearchRepository(databaseManager: databaseManager)
-        self.tagSelectionLayoutPreferenceRepository = TagSelectionLayoutPreferenceRepository()
+        self.globalSearchRepository = GlobalSearchRepository(
+            databaseManager: databaseManager,
+            userDefaults: userDefaults
+        )
+        self.tagSelectionLayoutPreferenceRepository = TagSelectionLayoutPreferenceRepository(
+            defaults: userDefaults
+        )
         self.tagManagementRepository = TagManagementRepository(databaseManager: databaseManager)
-        self.externalAppIntegrationRepository = ExternalAppIntegrationRepository(databaseManager: databaseManager)
+        self.externalAppIntegrationRepository = ExternalAppIntegrationRepository(
+            databaseManager: databaseManager,
+            settingStore: ExternalAppIntegrationSettingStore(defaults: userDefaults)
+        )
         self.bookGroupManagementRepository = BookGroupManagementRepository(databaseManager: databaseManager)
         self.sourceManagementRepository = SourceManagementRepository(databaseManager: databaseManager)
         self.bookSearchRepository = bookSearchRepository
         self.bookEditorRepository = BookEditorRepository(
             databaseManager: databaseManager,
+            userDefaults: userDefaults,
             s3UploadRepository: s3UploadRepository,
             coverImageLoader: coverImageLoader
         )
         self.ocrRepository = OCRRepository(
             runtimeBridge: BaiduOCRSDKRuntimeBridge(),
+            userDefaults: userDefaults,
             defaultPreferences: defaultOCRPreferences
         )
         self.backupServerRepository = backupServerRepository
         self.backupRepository = BackupRepository(
             databaseManager: databaseManager,
             serverRepository: backupServerRepository,
-            aliyunDriveProvider: aliyunDriveProvider
+            aliyunDriveProvider: aliyunDriveProvider,
+            userDefaults: userDefaults
         )
         self.s3ConfigRepository = s3ConfigRepository
         self.s3UploadRepository = s3UploadRepository
@@ -104,19 +143,27 @@ final class RepositoryContainer {
         self.noteImageUploadQuotaRepository = noteImageUploadQuotaRepository
         self.statisticsRepository = StatisticsRepository(databaseManager: databaseManager)
         self.readCalendarRepository = ReadCalendarRepository(databaseManager: databaseManager)
-        self.bookReadingDetailRepository = BookReadingDetailRepository(databaseManager: databaseManager)
+        self.bookReadingDetailRepository = BookReadingDetailRepository(
+            databaseManager: databaseManager,
+            settingStore: BookReadingDetailSettingStore(defaults: userDefaults)
+        )
         self.readingDashboardRepository = ReadingDashboardRepository(databaseManager: databaseManager)
-        self.readingTimerRepository = ReadingTimerRepository(databaseManager: databaseManager)
+        self.readingTimerRepository = ReadingTimerRepository(
+            databaseManager: databaseManager,
+            userDefaults: userDefaults
+        )
         self.coverImageLoader = coverImageLoader
         self.readCalendarColorRepository = ReadCalendarColorRepository(imageLoader: coverImageLoader)
         self.timelineRepository = TimelineRepository(databaseManager: databaseManager)
         self.wereadImportRepository = WereadImportRepository(
             databaseManager: databaseManager,
+            defaults: userDefaults,
             bookSearchRepository: bookSearchRepository,
             s3UploadRepository: s3UploadRepository
         )
         self.noteImportRepository = NoteImportRepository(
             databaseManager: databaseManager,
+            defaults: userDefaults,
             bookSearchRepository: bookSearchRepository
         )
     }

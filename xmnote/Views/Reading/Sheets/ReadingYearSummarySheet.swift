@@ -1,7 +1,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 ReadingYearSummary 提供年度已读聚合数据，依赖 XMBookCover 与 ReadDurationFormatter 渲染书籍条目
+ * [INPUT]: 依赖 ReadingYearSummary 提供年度已读聚合数据，依赖 XMBookCover、ReadDurationFormatter 与 xmSheetContentPanel 渲染年度摘要和书籍条目
  * [OUTPUT]: 对外提供 ReadingYearSummarySheet（首页年度已读摘要弹层）
  * [POS]: Reading/Sheets 业务弹层，负责展示年度已读书籍列表与年度目标编辑入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -17,13 +17,7 @@ struct ReadingYearSummarySheet: View {
     var body: some View {
         XMSheetScaffold(
             title: "\(summary.year) 年已读",
-            onClose: { dismiss() },
-            leadingAction: {
-                Button("关闭") { dismiss() }
-            },
-            trailingAction: {
-                Button("调整目标", action: onEditGoal)
-            }
+            onClose: { dismiss() }
         ) {
             Group {
                 if summary.books.isEmpty {
@@ -54,7 +48,7 @@ struct ReadingYearSummarySheet: View {
     }
 
     private var summaryHeader: some View {
-        CardContainer(cornerRadius: CornerRadius.containerMedium) {
+        CardContainer(shape: ConcentricRectangle.xmSheetContentPanel) {
             VStack(alignment: .leading, spacing: Spacing.half) {
                 HStack(alignment: .firstTextBaseline, spacing: Spacing.half) {
                     Text("已读 \(summary.readCount) 本")
@@ -67,6 +61,15 @@ struct ReadingYearSummarySheet: View {
                 Text(ReadingDashboardFormatting.yearSummarySubtitle(summary: summary))
                     .font(AppTypography.caption)
                     .foregroundStyle(Color.textSecondary)
+
+                Button(action: onEditGoal) {
+                    Label("调整年度目标", systemImage: "target")
+                        .font(AppTypography.subheadlineMedium)
+                        .frame(minHeight: InteractionMetrics.minimumTouchTarget)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.appTint)
+                .accessibilityHint("打开年度阅读目标编辑")
             }
             .padding(Spacing.base)
         }

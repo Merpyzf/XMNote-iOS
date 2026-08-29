@@ -22,6 +22,7 @@ struct NoteChapterSelectionSheet: View {
     @State private var isCreating = false
     @State private var errorMessage: String?
     @State private var searchText = ""
+    @State private var isSearchActive = false
 
     init(
         title: String = "移动到章节",
@@ -119,15 +120,40 @@ struct NoteChapterSelectionSheet: View {
                 }
             }
             .listStyle(.plain)
+            .disabled(isCreating)
+            .safeAreaBar(edge: .top, spacing: Spacing.none) {
+                XMSystemSearchBar(
+                    text: $searchText,
+                    isActive: $isSearchActive,
+                    prompt: "搜索章节",
+                    accessibilityIdentifier: "note.batch.chapter.search",
+                    isEnabled: !isCreating
+                )
+                .padding(.top, Spacing.cozy)
+                .padding(.bottom, Spacing.half)
+            }
+            .safeAreaBar(edge: .bottom, spacing: Spacing.none) {
+                Color.surfaceSheet
+                    .frame(height: Spacing.half)
+                    .allowsHitTesting(false)
+            }
+            .scrollEdgeEffectStyle(.soft, for: [.top, .bottom])
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $searchText, prompt: "搜索章节")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .tint(Color.textSecondary)
+                    .disabled(isCreating)
+                    .accessibilityLabel("关闭")
                 }
             }
         }
+        .interactiveDismissDisabled(isCreating)
     }
 
     private var visibleOptions: [NoteEditorChapterOption] {

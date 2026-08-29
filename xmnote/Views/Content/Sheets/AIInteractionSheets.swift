@@ -1,99 +1,11 @@
 /**
- * [INPUT]: 依赖 AITextResultViewModel/AIAutoTagViewModel、AIRepositoryProtocol、AIMarkdownResultView、系统 Sheet/Liquid Glass、LoadingGate、xmMinimumHitTarget 与现有反馈组件
- * [OUTPUT]: 对外提供 AITextResultSheet、AIAutoTagSheet 及可复现等待/空结果/失败状态的业务展示单元，承接流式结果、固定底部确认和标签写回生命周期
+ * [INPUT]: 依赖 AITextResultViewModel/AIAutoTagViewModel、AIRepositoryProtocol、AIMarkdownResultView、XMPopupButton、系统 NavigationStack/Toolbar/safeAreaBar、iOS 26 Liquid Glass、LoadingGate、xmMinimumHitTarget 与现有反馈组件
+ * [OUTPUT]: 对外提供 AITextResultSheet、AIAutoTagSheet 及可复现等待/空结果/失败状态的业务展示单元；AI 释义承接模型切换、流式结果和编辑器请求，AI 标签承接系统确认与写回生命周期
  * [POS]: Views/Content/Sheets 的 AI 业务 Sheet，被通用 viewer 及单页详情入口复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
-
-private enum AIInteractionSheetLayout {
-    static let titleHorizontalReserve = InteractionMetrics.minimumTouchTarget + Spacing.base
-    static let chromeMinHeight = InteractionMetrics.minimumTouchTarget
-    static let headerActionSlotSize: CGFloat = InteractionMetrics.minimumTouchTarget
-    static let closeVisualSize: CGFloat = 32
-    static let closeFillOpacity = 0.82
-}
-
-/// 宽幅品牌主操作按钮，仅服务 AI 结果 Sheet 的确认动作。
-private struct AIPrimaryActionButton: View {
-    let title: String
-    let containerInsetCompensation: CGSize
-    let action: () -> Void
-
-    /// 使用动态标题和同步触发动作创建主操作；容器补偿仅抵消系统额外控件内距。
-    init(
-        _ title: String,
-        containerInsetCompensation: CGSize = .zero,
-        action: @escaping () -> Void
-    ) {
-        self.title = title
-        self.containerInsetCompensation = containerInsetCompensation
-        self.action = action
-    }
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-        }
-        .buttonStyle(
-            AIPrimaryActionButtonStyle(
-                minimumControlHeight: AIPrimaryActionButtonMetrics.minimumControlHeight
-                    + containerInsetCompensation.height
-            )
-        )
-        .buttonSizing(.fitted)
-        .frame(
-            width: AIPrimaryActionButtonMetrics.controlWidth
-                + containerInsetCompensation.width
-        )
-        .frame(minHeight: AIPrimaryActionButtonMetrics.minimumControlHeight)
-        .fixedSize(horizontal: true, vertical: true)
-    }
-}
-
-/// 将 AI 品牌填充、禁用语义和按压反馈收敛到业务按钮内部。
-private struct AIPrimaryActionButtonStyle: ButtonStyle {
-    @Environment(\.isEnabled) private var isEnabled
-
-    let minimumControlHeight: CGFloat
-
-    /// 构造尺寸稳定的按钮表层，按压时仅调整不透明度。
-    func makeBody(configuration: Configuration) -> some View {
-        let shape = RoundedRectangle(
-            cornerRadius: CornerRadius.blockLarge,
-            style: .continuous
-        )
-
-        configuration.label
-            .font(AppTypography.headlineSemibold)
-            .foregroundStyle(
-                isEnabled
-                    ? Color.primaryActionForeground
-                    : Color.buttonDisabledForeground
-            )
-            .multilineTextAlignment(.center)
-            .padding(.horizontal, Spacing.screenEdge)
-            .frame(maxWidth: .infinity, minHeight: minimumControlHeight)
-            .background(
-                isEnabled ? Color.primaryActionFill : Color.buttonDisabled,
-                in: shape
-            )
-            .contentShape(shape)
-            .opacity(
-                isEnabled && configuration.isPressed
-                    ? AIPrimaryActionButtonMetrics.pressedOpacity
-                    : 1
-            )
-    }
-}
-
-/// 参考当前 AI 结果 Sheet 宽度校准的局部主操作规格。
-private enum AIPrimaryActionButtonMetrics {
-    static let controlWidth: CGFloat = 340
-    static let minimumControlHeight: CGFloat = 46
-    static let pressedOpacity = 0.86
-}
 
 /// 流式 AI 释义 Sheet；整条书摘释义可由用户明确交给既有编辑器继续确认。
 struct AITextResultSheet: View {
@@ -105,7 +17,6 @@ struct AITextResultSheet: View {
     @State private var loadingGate = LoadingGate()
     @State private var markdownInteractionController = AIMarkdownInteractionController()
     @State private var hasStartedGeneration = false
-    @State private var selectedPresentationDetent: PresentationDetent = .medium
 
     private let onIdeaEditorRequested: @MainActor (AIExplanationIdeaEditRequest) -> Void
 
@@ -125,48 +36,61 @@ struct AITextResultSheet: View {
     }
 
     var body: some View {
-        ScrollView {
-            resultContent
-                .animation(
-                    reduceMotion ? nil : .smooth(duration: 0.18),
-                    value: viewModel.content.isEmpty
+        NavigationStack {
+            ScrollView {
+                resultContent
+                    .animation(
+                        reduceMotion ? nil : .smooth(duration: 0.18),
+                        value: viewModel.content.isEmpty
+                    )
+                    .padding(.horizontal, Spacing.screenEdge)
+                    .padding(.top, Spacing.cozy)
+                    .padding(.bottom, Spacing.double)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .scrollIndicators(.hidden)
+            .scrollBounceBehavior(.always)
+            .scrollEdgeEffectStyle(.soft, for: [.top, .bottom])
+            .scrollPosition($markdownInteractionController.scrollPosition)
+            .safeAreaBar(edge: .bottom, spacing: Spacing.none) {
+                ideaActionBarHost
+            }
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                let distanceFromBottom = geometry.contentSize.height
+                    - geometry.contentOffset.y
+                    - geometry.containerSize.height
+                return distanceFromBottom <= Spacing.double
+            } action: { _, isAtBottom in
+                markdownInteractionController.updateIsAtBottom(
+                    isAtBottom,
+                    isPositionedByUser: markdownInteractionController.scrollPosition.isPositionedByUser
                 )
-                .padding(.horizontal, Spacing.screenEdge)
-                .padding(.top, Spacing.cozy)
-                .padding(.bottom, Spacing.double)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .scrollIndicators(.hidden)
-        .scrollBounceBehavior(.always)
-        .scrollEdgeEffectStyle(.soft, for: [.top, .bottom])
-        .scrollPosition($markdownInteractionController.scrollPosition)
-        .safeAreaBar(edge: .top, spacing: Spacing.none) {
-            topChrome
-        }
-        .safeAreaBar(edge: .bottom, spacing: Spacing.none) {
-            if viewModel.request.noteIDForIdeaEditor != nil {
-                ideaActionBar
+            }
+            .onChange(of: markdownInteractionController.scrollPosition.isPositionedByUser) { _, newValue in
+                markdownInteractionController.updateIsPositionedByUser(newValue)
+            }
+            .navigationTitle("AI 释义")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    navigationTitleContent
+                }
+
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
+                        viewModel.cancelGeneration()
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .tint(Color.textSecondary)
+                    .disabled(viewModel.isPreparingIdeaEditor)
+                    .accessibilityLabel("关闭")
+                }
             }
         }
-        .onScrollGeometryChange(for: Bool.self) { geometry in
-            let distanceFromBottom = geometry.contentSize.height
-                - geometry.contentOffset.y
-                - geometry.containerSize.height
-            return distanceFromBottom <= Spacing.double
-        } action: { _, isAtBottom in
-            markdownInteractionController.updateIsAtBottom(
-                isAtBottom,
-                isPositionedByUser: markdownInteractionController.scrollPosition.isPositionedByUser
-            )
-        }
-        .onChange(of: markdownInteractionController.scrollPosition.isPositionedByUser) { _, newValue in
-            markdownInteractionController.updateIsPositionedByUser(newValue)
-        }
         .interactiveDismissDisabled(viewModel.isPreparingIdeaEditor)
-        .presentationDetents(
-            [.medium, .large],
-            selection: $selectedPresentationDetent
-        )
+        .presentationDetents([.medium, .large])
         .onAppear {
             markdownInteractionController.configure(
                 toastCenter: toastCenter,
@@ -210,107 +134,110 @@ struct AITextResultSheet: View {
             reduceMotion ? nil : .smooth(duration: 0.2),
             value: viewModel.errorMessage
         )
-        .animation(
-            reduceMotion ? nil : .smooth(duration: 0.18),
-            value: viewModel.hasCompletedSuccessfully
-        )
     }
 
-    private var topChrome: some View {
-        ZStack {
-            HStack {
-                Color.clear
-                    .frame(
-                        width: AIInteractionSheetLayout.headerActionSlotSize,
-                        height: AIInteractionSheetLayout.headerActionSlotSize
-                    )
+    private var navigationTitleContent: some View {
+        VStack(spacing: Spacing.micro) {
+            Text("AI 释义")
+                .font(AppTypography.headlineSemibold)
+                .foregroundStyle(Color.textPrimary)
+                .lineLimit(1)
 
-                Spacer(minLength: Spacing.none)
-
-                closeButton
-            }
-            .frame(minHeight: AIInteractionSheetLayout.chromeMinHeight)
-
-            VStack(spacing: Spacing.micro) {
-                Text("AI 释义")
-                    .font(AppTypography.headlineSemibold)
-                    .foregroundStyle(Color.textPrimary)
-                    .lineLimit(1)
-
-                modelMenu
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, AIInteractionSheetLayout.titleHorizontalReserve)
+            navigationModelSubtitle
         }
-        .padding(.horizontal, Spacing.screenEdge)
-        .padding(.top, Spacing.double)
-        .padding(.bottom, Spacing.section)
+    }
+
+    @ViewBuilder
+    private var navigationModelSubtitle: some View {
+        if viewModel.isSwitchingModel {
+            navigationSubtitleText("正在切换模型…")
+        } else if viewModel.modelTitle.isEmpty {
+            navigationSubtitleText("正在连接模型…")
+        } else if viewModel.canSelectModel {
+            modelMenu
+        } else {
+            navigationSubtitleText(viewModel.modelTitle)
+        }
     }
 
     private var modelMenu: some View {
-        Menu {
-            ForEach(viewModel.availableProviders) { provider in
-                Section(provider.displayName) {
-                    ForEach(provider.modelOptions) { model in
-                        Button {
-                            viewModel.switchModel(provider: provider, modelID: model.id)
-                        } label: {
-                            if viewModel.isCurrentModel(provider: provider, modelID: model.id) {
-                                Label(model.title, systemImage: "checkmark")
-                            } else {
-                                Text(model.title)
-                            }
-                        }
-                    }
+        XMPopupButton(
+            viewModel.modelTitle,
+            font: AppTypography.caption2,
+            truncationMode: .middle,
+            hitTargetAnchor: .top
+        ) {
+            ForEach(viewModel.currentProviderModels) { model in
+                Button {
+                    viewModel.switchCurrentProviderModel(modelID: model.id)
+                } label: {
+                    XMMenuLabel(
+                        model.title,
+                        isSelected: viewModel.isCurrentModel(modelID: model.id)
+                    )
                 }
             }
-        } label: {
-            Text(modelMenuTitle)
-                .font(AppTypography.caption2)
-                .foregroundStyle(Color.textSecondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .xmMinimumHitTarget(anchor: .top)
         }
-        .buttonStyle(.plain)
-        .xmMenuNeutralTint()
-        .disabled(viewModel.availableProviders.isEmpty || viewModel.isSwitchingModel)
-        .accessibilityLabel("当前模型，\(modelMenuTitle)")
-        .accessibilityHint("打开菜单切换 AI 模型")
+        .disabled(!viewModel.canSelectModel)
+        .accessibilityLabel("当前模型，\(viewModel.modelTitle)")
+        .accessibilityHint("打开菜单切换 DeepSeek 模型")
     }
 
-    private var modelMenuTitle: String {
-        if viewModel.isSwitchingModel {
-            return "正在切换模型…"
-        }
-        return viewModel.modelDescription.isEmpty ? "正在连接模型…" : viewModel.modelDescription
+    private func navigationSubtitleText(_ text: String) -> some View {
+        Text(text)
+            .font(AppTypography.caption2)
+            .foregroundStyle(Color.textSecondary)
+            .lineLimit(1)
+            .truncationMode(.middle)
     }
 
-    private var closeButton: some View {
-        Button {
-            viewModel.cancelGeneration()
-            dismiss()
-        } label: {
-            TopBarActionIcon(
-                systemName: "xmark",
-                iconSize: 13,
-                containerSize: AIInteractionSheetLayout.closeVisualSize,
-                weight: .bold,
-                foregroundColor: .textSecondary
-            )
-            .background(
-                Color.controlFillSecondary.opacity(AIInteractionSheetLayout.closeFillOpacity),
-                in: Circle()
-            )
-            .frame(
-                width: InteractionMetrics.minimumTouchTarget,
-                height: InteractionMetrics.minimumTouchTarget
-            )
-            .contentShape(Rectangle())
+    @ViewBuilder
+    private var ideaActionBarHost: some View {
+        Group {
+            if shouldShowIdeaAction {
+                ideaActionBar
+                    .glassEffectTransition(reduceMotion ? .identity : .materialize)
+                    .transition(reduceMotion ? .opacity : .identity)
+            }
         }
-        .buttonStyle(.plain)
-        .disabled(viewModel.isPreparingIdeaEditor)
-        .accessibilityLabel("关闭")
+        .animation(ideaActionAppearanceAnimation, value: shouldShowIdeaAction)
+    }
+
+    private var ideaActionBar: some View {
+        Button(action: requestIdeaEditor) {
+            HStack(spacing: Spacing.half) {
+                if viewModel.isPreparingIdeaEditor {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(Color.primaryActionForeground)
+                }
+
+                Text(viewModel.isPreparingIdeaEditor ? "正在打开…" : "记录到想法")
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.glassProminent)
+        .controlSize(.extraLarge)
+        .tint(Color.appTint)
+        .disabled(!viewModel.canOpenIdeaEditor)
+        .accessibilityLabel(viewModel.isPreparingIdeaEditor ? "正在打开想法编辑器" : "记录到想法")
+        .accessibilityHint("打开书摘编辑器，将本次 AI 释义作为未保存想法继续编辑")
+        .padding(.horizontal, Spacing.screenEdge)
+        .padding(.vertical, Spacing.cozy)
+    }
+
+    private var shouldShowIdeaAction: Bool {
+        viewModel.request.noteIDForIdeaEditor != nil
+            && viewModel.hasCompletedSuccessfully
+            && !viewModel.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !viewModel.isGenerating
+            && !viewModel.isSwitchingModel
+    }
+
+    private var ideaActionAppearanceAnimation: Animation {
+        reduceMotion
+            ? .easeOut(duration: 0.12)
+            : .smooth(duration: 0.28)
     }
 
     @ViewBuilder
@@ -324,12 +251,15 @@ struct AITextResultSheet: View {
                         interactionController: markdownInteractionController
                     )
 
-                    if viewModel.hasCompletedSuccessfully,
-                       viewModel.request.noteIDForIdeaEditor == nil {
+                    if viewModel.hasCompletedSuccessfully {
                         aiDisclosure
                             .transition(.opacity)
                     }
                 }
+                .animation(
+                    reduceMotion ? nil : .smooth(duration: 0.18),
+                    value: viewModel.hasCompletedSuccessfully
+                )
 
                 if let errorMessage = viewModel.errorMessage, !viewModel.isGenerating {
                     resultError(message: errorMessage)
@@ -382,36 +312,6 @@ struct AITextResultSheet: View {
             .frame(maxWidth: .infinity, alignment: .center)
     }
 
-    private var ideaActionBar: some View {
-        AICompletedActionBar(
-            disclosure: "内容由 AI 生成，请注意甄别",
-            isVisible: shouldShowIdeaAction
-        ) {
-            AIPrimaryActionButton(
-                viewModel.isPreparingIdeaEditor ? "正在打开…" : "记录到想法",
-                containerInsetCompensation: primaryActionContainerInsetCompensation
-            ) {
-                requestIdeaEditor()
-            }
-            .disabled(!viewModel.canOpenIdeaEditor)
-            .accessibilityHint("打开书摘编辑器，将本次 AI 释义作为未保存想法继续编辑")
-        }
-    }
-
-    private var shouldShowIdeaAction: Bool {
-        viewModel.request.noteIDForIdeaEditor != nil
-            && viewModel.hasCompletedSuccessfully
-            && !viewModel.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !viewModel.isGenerating
-            && !viewModel.isSwitchingModel
-    }
-
-    private var primaryActionContainerInsetCompensation: CGSize {
-        selectedPresentationDetent == .medium
-            ? AICompletedActionBarMetrics.mediumDetentControlInsetCompensation
-            : .zero
-    }
-
     /// 转换任务继承当前主执行器；仅在请求准备成功后交给来源页，并由 Sheet 自己触发退场。
     private func requestIdeaEditor() {
         Task {
@@ -454,59 +354,6 @@ private struct AIGenerationWaitingView: View {
     }
 }
 
-/// 完成态底部操作组；保持透明底板与稳定占位，仅通过透明度回应流式会话终态。
-private struct AICompletedActionBar<Action: View>: View {
-    let disclosure: String
-    let isVisible: Bool
-    @ViewBuilder let action: Action
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    /// 接收稳定完成态与具体按钮视图，不持有业务状态或异步任务。
-    init(
-        disclosure: String,
-        isVisible: Bool,
-        @ViewBuilder action: () -> Action
-    ) {
-        self.disclosure = disclosure
-        self.isVisible = isVisible
-        self.action = action()
-    }
-
-    var body: some View {
-        VStack(spacing: Spacing.cozy) {
-            Text(disclosure)
-                .font(AppTypography.caption)
-                .foregroundStyle(Color.textSecondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .center)
-
-            action
-                .frame(maxWidth: .infinity)
-        }
-        .padding(.horizontal, Spacing.none)
-        .padding(.top, Spacing.cozy)
-        .padding(.bottom, Spacing.cozy)
-        .background(Color.clear)
-        .opacity(isVisible ? 1 : 0)
-        .allowsHitTesting(isVisible)
-        .accessibilityHidden(!isVisible)
-        .animation(visibilityAnimation, value: isVisible)
-    }
-
-    private var visibilityAnimation: Animation {
-        reduceMotion
-            ? .easeOut(duration: 0.12)
-            : .smooth(duration: 0.24)
-    }
-}
-
-/// 系统半高 Sheet 会在 safeAreaBar 内额外收紧控件轮廓，此处集中保存像素校准补偿。
-private enum AICompletedActionBarMetrics {
-    static let mediumDetentControlInsetCompensation = CGSize(width: 14, height: 2)
-}
-
 /// AI 标签 Sheet，先展示实时 Markdown 输出，完成解析后再交给用户选择并确认写回。
 struct AIAutoTagSheet: View {
     @Environment(\.dismiss) private var dismiss
@@ -517,7 +364,6 @@ struct AIAutoTagSheet: View {
     @State private var loadingGate = LoadingGate()
     @State private var markdownInteractionController = AIMarkdownInteractionController()
     @State private var hasStartedGeneration = false
-    @State private var selectedPresentationDetent: PresentationDetent = .medium
 
     private let onApplyWillBegin: @MainActor () -> Void
     private let onApplyFailed: @MainActor () -> Void
@@ -544,42 +390,73 @@ struct AIAutoTagSheet: View {
     }
 
     var body: some View {
-        ScrollView {
-            suggestionContent
-                .padding(.horizontal, Spacing.screenEdge)
-                .padding(.top, Spacing.cozy)
-                .padding(.bottom, Spacing.double)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .scrollIndicators(.hidden)
-        .scrollBounceBehavior(.always)
-        .scrollEdgeEffectStyle(.soft, for: [.top, .bottom])
-        .scrollPosition($markdownInteractionController.scrollPosition)
-        .safeAreaBar(edge: .top, spacing: Spacing.none) {
-            topChrome
-        }
-        .safeAreaBar(edge: .bottom, spacing: Spacing.none) {
-            autoTagActionBar
-        }
-        .onScrollGeometryChange(for: Bool.self) { geometry in
-            let distanceFromBottom = geometry.contentSize.height
-                - geometry.contentOffset.y
-                - geometry.containerSize.height
-            return distanceFromBottom <= Spacing.double
-        } action: { _, isAtBottom in
-            markdownInteractionController.updateIsAtBottom(
-                isAtBottom,
-                isPositionedByUser: markdownInteractionController.scrollPosition.isPositionedByUser
-            )
-        }
-        .onChange(of: markdownInteractionController.scrollPosition.isPositionedByUser) { _, newValue in
-            markdownInteractionController.updateIsPositionedByUser(newValue)
+        NavigationStack {
+            ScrollView {
+                suggestionContent
+                    .padding(.horizontal, Spacing.screenEdge)
+                    .padding(.top, Spacing.cozy)
+                    .padding(.bottom, Spacing.double)
+            }
+            .disabled(viewModel.isApplying)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .scrollIndicators(.hidden)
+            .scrollBounceBehavior(.always)
+            .scrollEdgeEffectStyle(.soft, for: [.top, .bottom])
+            .scrollPosition($markdownInteractionController.scrollPosition)
+            .safeAreaBar(edge: .top, spacing: Spacing.none) {
+                Text(normalizedBookTitle)
+                    .font(AppTypography.caption)
+                    .foregroundStyle(Color.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, Spacing.screenEdge)
+                    .padding(.vertical, Spacing.cozy)
+            }
+            .safeAreaBar(edge: .bottom, spacing: Spacing.none) {
+                Color.surfaceSheet
+                    .frame(height: Spacing.half)
+                    .allowsHitTesting(false)
+            }
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                let distanceFromBottom = geometry.contentSize.height
+                    - geometry.contentOffset.y
+                    - geometry.containerSize.height
+                return distanceFromBottom <= Spacing.double
+            } action: { _, isAtBottom in
+                markdownInteractionController.updateIsAtBottom(
+                    isAtBottom,
+                    isPositionedByUser: markdownInteractionController.scrollPosition.isPositionedByUser
+                )
+            }
+            .onChange(of: markdownInteractionController.scrollPosition.isPositionedByUser) { _, newValue in
+                markdownInteractionController.updateIsPositionedByUser(newValue)
+            }
+            .navigationTitle("AI 标签")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
+                        viewModel.cancelLoading()
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .tint(Color.textSecondary)
+                    .disabled(viewModel.isApplying)
+                    .accessibilityLabel("关闭")
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    XMSheetConfirmationAction(
+                        isDisabled: viewModel.phaseKind != .ready || !viewModel.hasSelectedSuggestion,
+                        isConfirming: viewModel.isApplying,
+                        action: applyTags
+                    )
+                }
+            }
         }
         .interactiveDismissDisabled(viewModel.isApplying)
-        .presentationDetents(
-            [.medium, .large],
-            selection: $selectedPresentationDetent
-        )
+        .presentationDetents([.medium, .large])
         .onAppear {
             markdownInteractionController.configure(
                 toastCenter: toastCenter,
@@ -624,68 +501,6 @@ struct AIAutoTagSheet: View {
             reduceMotion ? nil : .smooth(duration: 0.18),
             value: viewModel.applyErrorMessage
         )
-    }
-
-    private var topChrome: some View {
-        ZStack {
-            HStack {
-                Color.clear
-                    .frame(
-                        width: AIInteractionSheetLayout.headerActionSlotSize,
-                        height: AIInteractionSheetLayout.headerActionSlotSize
-                    )
-
-                Spacer(minLength: Spacing.none)
-
-                closeButton
-            }
-            .frame(minHeight: AIInteractionSheetLayout.chromeMinHeight)
-
-            VStack(spacing: Spacing.micro) {
-                Text("AI 标签")
-                    .font(AppTypography.headlineSemibold)
-                    .foregroundStyle(Color.textPrimary)
-                    .lineLimit(1)
-
-                Text(normalizedBookTitle)
-                    .font(AppTypography.caption2)
-                    .foregroundStyle(Color.textSecondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, AIInteractionSheetLayout.titleHorizontalReserve)
-        }
-        .padding(.horizontal, Spacing.screenEdge)
-        .padding(.top, Spacing.double)
-        .padding(.bottom, Spacing.section)
-    }
-
-    private var closeButton: some View {
-        Button {
-            viewModel.cancelLoading()
-            dismiss()
-        } label: {
-            TopBarActionIcon(
-                systemName: "xmark",
-                iconSize: 13,
-                containerSize: AIInteractionSheetLayout.closeVisualSize,
-                weight: .bold,
-                foregroundColor: .textSecondary
-            )
-            .background(
-                Color.controlFillSecondary.opacity(AIInteractionSheetLayout.closeFillOpacity),
-                in: Circle()
-            )
-            .frame(
-                width: InteractionMetrics.minimumTouchTarget,
-                height: InteractionMetrics.minimumTouchTarget
-            )
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(viewModel.isApplying)
-        .accessibilityLabel("关闭")
     }
 
     @ViewBuilder
@@ -750,27 +565,6 @@ struct AIAutoTagSheet: View {
             }
 
         }
-    }
-
-    private var autoTagActionBar: some View {
-        AICompletedActionBar(
-            disclosure: "内容由 AI 生成，请注意甄别",
-            isVisible: viewModel.phaseKind == .ready
-        ) {
-            AIPrimaryActionButton(
-                viewModel.isApplying ? "应用中…" : "应用标签",
-                containerInsetCompensation: primaryActionContainerInsetCompensation
-            ) {
-                applyTags()
-            }
-            .disabled(!viewModel.hasSelectedSuggestion || viewModel.isApplying)
-        }
-    }
-
-    private var primaryActionContainerInsetCompensation: CGSize {
-        selectedPresentationDetent == .medium
-            ? AICompletedActionBarMetrics.mediumDetentControlInsetCompensation
-            : .zero
     }
 
     private func generationError(message: String) -> some View {

@@ -238,7 +238,6 @@ struct MainTabView: View {
                                 onAddNote: {
                                     navigationCoordinator.present(.noteEditor(mode: .create, seed: .empty))
                                 },
-                                onOpenDebugCenter: { append(DebugRoute.debugCenter, to: .reading) },
                                 onOpenReadCalendar: { date in
                                     navigationCoordinator.present(
                                         .readCalendar(initialDate: date)
@@ -304,7 +303,6 @@ struct MainTabView: View {
                                 onAddNote: {
                                     navigationCoordinator.present(.noteEditor(mode: .create, seed: .empty))
                                 },
-                                onOpenDebugCenter: { append(DebugRoute.debugCenter, to: .books) },
                                 onOpenBookRoute: { openBookRoute($0, from: .tab(.books)) },
                                 onOpenNoteRoute: { openNoteRoute($0, from: .tab(.books)) },
                                 onOpenTagManagement: { append(PersonalRoute.tagManagement, to: .books) },
@@ -353,8 +351,7 @@ struct MainTabView: View {
                                             keyword: ""
                                         )
                                     )
-                                },
-                                onOpenDebugCenter: { append(DebugRoute.debugCenter, to: .notes) }
+                                }
                             )
                             .environment(runtime.databaseManager)
                             .environment(runtime.repositories)
@@ -389,8 +386,7 @@ struct MainTabView: View {
                                     navigationCoordinator.present(
                                         .readCalendar(initialDate: nil)
                                     )
-                                },
-                                onOpenDebugCenter: { append(DebugRoute.debugCenter, to: .profile) }
+                                }
                             )
                             .environment(runtime.databaseManager)
                             .environment(runtime.repositories)
@@ -1530,6 +1526,7 @@ struct MainTabView: View {
             if let runtime {
                 DebugCenterView()
                     .environment(runtime.repositories)
+                    .environment(runtime.databaseManager)
             }
             #else
             Text("测试入口仅在 Debug 构建可用")
@@ -1577,10 +1574,6 @@ struct MainTabView: View {
         case .task:
             navigationCoordinator.taskPath.append(.note(route))
         }
-    }
-
-    private func append(_ route: DebugRoute, to tab: AppTab) {
-        navigationCoordinator.push(.debug(route), in: tab)
     }
 
     private func append(_ route: ContentRoute, to tab: AppTab) {

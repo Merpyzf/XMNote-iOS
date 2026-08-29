@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 或 Debug 仓储替身提供本地书与在线搜索，依赖 BookPickerViewModel 维护共享选择草稿及 XMSheetScaffold 动态副标题槽位
- * [OUTPUT]: 对外提供 BookPickerView，使用统一标题副标题层级、原生系统搜索、稳定结果快照与可降级结构过渡承载选择流
+ * [INPUT]: 依赖 RepositoryContainer 或 Debug 仓储替身提供本地书与在线搜索，Debug 可附带固定远端预选；依赖 BookPickerViewModel 维护共享选择草稿，并复用 XMScrollEdgeChrome 协调固定控件与滚动内容
+ * [OUTPUT]: 对外提供生产与测试中心共用的 iOS 26 系统样式 BookPickerView，并支持确定性异步确认验证
  * [POS]: Book 模块业务 Sheet，负责统一书籍选择流，不承担具体业务页保存逻辑
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -11,6 +11,7 @@ import SwiftUI
 private struct BookPickerRepositoryOverride {
     let bookRepository: any BookPickerRepositoryProtocol
     let searchRepository: any BookSearchRepositoryProtocol
+    let preselectedRemoteResults: [BookSearchResult]
 }
 
 /// 书籍选择页的局部强调排版，承接搜索结果中高亮字重的专属规格。
@@ -41,13 +42,15 @@ struct BookPickerView: View {
         configuration: BookPickerConfiguration,
         bookRepository: any BookPickerRepositoryProtocol,
         searchRepository: any BookSearchRepositoryProtocol,
+        preselectedRemoteResults: [BookSearchResult] = [],
         onComplete: @escaping (BookPickerResult) -> Void
     ) {
         self.configuration = configuration
         self.onComplete = onComplete
         self.repositoryOverride = BookPickerRepositoryOverride(
             bookRepository: bookRepository,
-            searchRepository: searchRepository
+            searchRepository: searchRepository,
+            preselectedRemoteResults: preselectedRemoteResults
         )
     }
     #endif
@@ -59,7 +62,8 @@ struct BookPickerView: View {
                 configuration: configuration,
                 onComplete: onComplete,
                 bookRepository: repositoryOverride.bookRepository,
-                searchRepository: repositoryOverride.searchRepository
+                searchRepository: repositoryOverride.searchRepository,
+                initialRemoteSelections: repositoryOverride.preselectedRemoteResults
             )
         } else {
             BookPickerEnvironmentResolver(
@@ -82,7 +86,8 @@ private struct BookPickerEnvironmentResolver: View {
             configuration: configuration,
             onComplete: onComplete,
             bookRepository: repositories.bookRepository,
-            searchRepository: repositories.bookSearchRepository
+            searchRepository: repositories.bookSearchRepository,
+            initialRemoteSelections: []
         )
     }
 }
@@ -93,39 +98,31 @@ private struct BookPickerResolvedView: View {
     let onComplete: (BookPickerResult) -> Void
     let bookRepository: any BookPickerRepositoryProtocol
     let searchRepository: any BookSearchRepositoryProtocol
+    let initialRemoteSelections: [BookSearchResult]
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var viewModel: BookPickerViewModel?
-    @State private var activeSheet: ActiveSheet?
     @State private var isSearchActive = false
     @State private var isPreparingSeed = false
     @State private var didComplete = false
     @State private var pendingScrollBookID: Int64?
+    @State private var appleNavigationPath: [AppleRoute] = []
     @State private var localLoadingGate = LoadingGate()
     @State private var confirmationTask: Task<Void, Never>?
 
-    private enum ActiveSheet: String, Identifiable {
+    private enum AppleRoute: Hashable {
         case selectedBooks
-
-        var id: String { rawValue }
     }
 
     var body: some View {
         ZStack {
             if let viewModel {
-                pickerScaffold(viewModel)
+                appleRecommendedPickerScaffold(viewModel)
             } else {
-                XMSheetScaffold(
-                    title: configuration.title,
-                    onClose: handleCancel
-                ) {
-                    LoadingStateView("正在准备书籍选择…", style: .card)
-                        .frame(maxWidth: .infinity)
-                        .padding(.horizontal, Spacing.screenEdge)
-                        .padding(.top, Spacing.section)
-                }
+                loadingPresentation
             }
 
             if let viewModel, let blockingOverlayMessage = blockingOverlayMessage(for: viewModel) {
@@ -136,14 +133,7 @@ private struct BookPickerResolvedView: View {
         .task {
             await prepareViewModelIfNeeded()
         }
-        .sheet(item: $activeSheet) { sheet in
-            switch sheet {
-            case .selectedBooks:
-                if let viewModel {
-                    BookPickerSelectedBooksSheet(viewModel: viewModel)
-                }
-            }
-        }
+        .interactiveDismissDisabled(isAppleRecommendedConfirmationRunning)
         .onDisappear {
             localLoadingGate.hideImmediately()
             confirmationTask?.cancel()
@@ -151,52 +141,138 @@ private struct BookPickerResolvedView: View {
         }
     }
 
-    @ViewBuilder
-    private func pickerScaffold(_ viewModel: BookPickerViewModel) -> some View {
-        if viewModel.isMultipleSelectionEnabled {
-            XMSheetScaffold(
-                title: configuration.title,
-                onClose: handleCancel,
-                scrollEdgePresentation: .overlaySoft,
-                titleSubtitle: {
-                    BookPickerSelectionSubtitle(
-                        count: viewModel.selectedCount,
-                        allowsEmptySelection: viewModel.allowsEmptyMultipleConfirmation,
-                        onOpenSelection: { activeSheet = .selectedBooks }
-                    )
-                },
-                contentTopBar: {
-                    searchBar(viewModel)
+    private var loadingPresentation: some View {
+        NavigationStack {
+            loadingContent
+                .background(Color.surfaceSheet.ignoresSafeArea())
+                .navigationTitle(configuration.title)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        appleRecommendedCloseButton(isDisabled: false)
+                    }
+                }
+        }
+    }
+
+    private var loadingContent: some View {
+        LoadingStateView("正在准备书籍选择…", style: .card)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, Spacing.screenEdge)
+            .padding(.top, Spacing.section)
+    }
+
+    private func appleRecommendedPickerScaffold(_ viewModel: BookPickerViewModel) -> some View {
+        NavigationStack(path: $appleNavigationPath) {
+            XMScrollEdgeChrome(
+                presentation: .overlaySoft,
+                edges: [.top, .bottom],
+                topBar: {
+                    appleRecommendedContentTopBar(viewModel)
                 },
                 bottomBar: {
-                    multipleSelectionBar(viewModel)
+                    appleRecommendedBottomEdgeBar
                 }
             ) {
-                scrollableContent(viewModel)
+                appleRecommendedResultsList(viewModel)
             }
-        } else {
-            XMSheetScaffold(
-                title: configuration.title,
-                onClose: handleCancel,
-                scrollEdgePresentation: .overlaySoft,
-                contentTopBar: {
-                    searchBar(viewModel)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.surfaceSheet.ignoresSafeArea())
+            .allowsHitTesting(!viewModel.isResolvingRemoteSelections)
+            .navigationTitle(configuration.title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                appleRecommendedToolbar(viewModel)
+            }
+            .navigationDestination(for: AppleRoute.self) { route in
+                switch route {
+                case .selectedBooks:
+                    BookPickerSelectedBooksScreen(viewModel: viewModel)
                 }
-            ) {
-                scrollableContent(viewModel)
             }
         }
     }
 
-    private func searchBar(_ viewModel: BookPickerViewModel) -> some View {
-        XMInlineSearchField(
+    @ViewBuilder
+    private func appleRecommendedContentTopBar(_ viewModel: BookPickerViewModel) -> some View {
+        VStack(spacing: Spacing.none) {
+            appleRecommendedSearchBar(viewModel)
+
+            if appleRecommendedShowsSupportBar(viewModel) {
+                appleRecommendedSupportBar(viewModel)
+            }
+        }
+        .padding(.top, Spacing.cozy)
+        .padding(.bottom, Spacing.half)
+    }
+
+    private var appleRecommendedBottomEdgeBar: some View {
+        Color.surfaceSheet
+            .frame(height: Spacing.half)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+
+    @ToolbarContentBuilder
+    private func appleRecommendedToolbar(_ viewModel: BookPickerViewModel) -> some ToolbarContent {
+        ToolbarItem(placement: .cancellationAction) {
+            appleRecommendedCloseButton(isDisabled: viewModel.isResolvingRemoteSelections)
+        }
+
+        if viewModel.isMultipleSelectionEnabled {
+            ToolbarItem(placement: .confirmationAction) {
+                appleRecommendedConfirmationButton(viewModel)
+            }
+        }
+    }
+
+    private func appleRecommendedCloseButton(isDisabled: Bool) -> some View {
+        Button("关闭", systemImage: "xmark", action: handleCancel)
+            .labelStyle(.iconOnly)
+            .tint(Color.textSecondary)
+            .disabled(isDisabled)
+            .accessibilityIdentifier("book.picker.cancel")
+    }
+
+    private func appleRecommendedConfirmationButton(_ viewModel: BookPickerViewModel) -> some View {
+        Button {
+            confirmMultipleSelection(viewModel)
+        } label: {
+            Image(systemName: "checkmark")
+                .opacity(viewModel.isResolvingRemoteSelections ? 0 : 1)
+                .overlay {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(Color.primaryActionForeground)
+                        .opacity(viewModel.isResolvingRemoteSelections ? 1 : 0)
+                }
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(Color.appTint)
+        .disabled(!canConfirmMultipleSelection(viewModel))
+        .accessibilityLabel(
+            viewModel.isResolvingRemoteSelections
+                ? "正在确认"
+                : "确认"
+        )
+        .accessibilityValue("已选择 \(viewModel.selectedCount) 本书")
+        .accessibilityIdentifier("book.picker.confirm")
+    }
+
+    private var isAppleRecommendedConfirmationRunning: Bool {
+        viewModel?.isResolvingRemoteSelections == true
+    }
+
+    private func appleRecommendedSearchBar(_ viewModel: BookPickerViewModel) -> some View {
+        XMSystemSearchBar(
             text: Binding(
                 get: { viewModel.query },
                 set: { viewModel.updateQuery($0) }
             ),
             isActive: $isSearchActive,
             prompt: "搜索书名、作者、ISBN",
-            cancelPresentation: .hidden,
+            accessibilityIdentifier: "book.picker.search",
+            isEnabled: !viewModel.isResolvingRemoteSelections,
             onSubmit: {
                 guard viewModel.visibleScope == .online else { return }
                 Task {
@@ -204,21 +280,122 @@ private struct BookPickerResolvedView: View {
                 }
             }
         )
-        .disabled(viewModel.isResolvingRemoteSelections)
-        .padding(.horizontal, Spacing.screenEdge)
-        .padding(.bottom, Spacing.section)
+        .padding(.horizontal, Spacing.cozy)
     }
 
-    private func scrollableContent(_ viewModel: BookPickerViewModel) -> some View {
-        ScrollViewReader { proxy in
-            VStack(alignment: .leading, spacing: Spacing.base) {
-                if showsControls(viewModel) {
-                    controlsSection(viewModel)
+    private func appleRecommendedShowsSupportBar(_ viewModel: BookPickerViewModel) -> Bool {
+        viewModel.isMultipleSelectionEnabled || appleRecommendedShowsSourceMenu(viewModel)
+    }
+
+    @ViewBuilder
+    private func appleRecommendedSupportBar(_ viewModel: BookPickerViewModel) -> some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: Spacing.compact) {
+                    appleRecommendedSourceMenu(viewModel)
+
+                    if viewModel.isMultipleSelectionEnabled {
+                        appleRecommendedSelectionSummary(viewModel)
+                    }
                 }
-                resultsSection(viewModel)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.bottom, Spacing.base)
+            } else {
+                HStack(spacing: Spacing.base) {
+                    appleRecommendedSourceMenu(viewModel)
+
+                    Spacer(minLength: Spacing.none)
+
+                    if viewModel.isMultipleSelectionEnabled {
+                        appleRecommendedSelectionSummary(viewModel)
+                    }
+                }
             }
-            .padding(.horizontal, Spacing.screenEdge)
-            .padding(.bottom, Spacing.section)
+        }
+        .frame(minHeight: InteractionMetrics.minimumTouchTarget)
+        .padding(.horizontal, Spacing.screenEdge)
+        .disabled(viewModel.isResolvingRemoteSelections)
+    }
+
+    private func appleRecommendedShowsSourceMenu(_ viewModel: BookPickerViewModel) -> Bool {
+        switch configuration.scope {
+        case .local:
+            return false
+        case .both:
+            return viewModel.supportsScopeSwitch
+        case .online:
+            return viewModel.supportsOnline && configuration.onlineSources.count > 1
+        }
+    }
+
+    @ViewBuilder
+    private func appleRecommendedSourceMenu(_ viewModel: BookPickerViewModel) -> some View {
+        if appleRecommendedShowsSourceMenu(viewModel) {
+            BookPickerAppleSourceMenu(
+                scope: configuration.scope,
+                visibleScope: viewModel.visibleScope,
+                selectedOnlineSource: viewModel.selectedOnlineSource,
+                onlineSources: configuration.onlineSources,
+                onSelectLocal: {
+                    viewModel.switchVisibleScope(.local)
+                },
+                onSelectOnlineSource: { source in
+                    selectAppleRecommendedOnlineSource(source, viewModel: viewModel)
+                }
+            )
+        }
+    }
+
+    private func selectAppleRecommendedOnlineSource(
+        _ source: BookSearchSource,
+        viewModel: BookPickerViewModel
+    ) {
+        viewModel.selectOnlineSource(source)
+        viewModel.switchVisibleScope(.online)
+    }
+
+    @ViewBuilder
+    private func appleRecommendedSelectionSummary(_ viewModel: BookPickerViewModel) -> some View {
+        if viewModel.selectedCount > 0 {
+            Button {
+                isSearchActive = false
+                appleNavigationPath.append(.selectedBooks)
+            } label: {
+                HStack(spacing: Spacing.compact) {
+                    Text("已选 \(viewModel.selectedCount) 本")
+                        .contentTransition(.numericText())
+
+                    Image(systemName: "chevron.right")
+                        .font(AppTypography.captionSemibold)
+                        .foregroundStyle(Color.iconSecondary)
+                        .accessibilityHidden(true)
+                }
+                .font(AppTypography.footnote)
+                .foregroundStyle(Color.textSecondary)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .xmMinimumHitTarget(anchor: .leading)
+            .accessibilityLabel("已选 \(viewModel.selectedCount) 本书")
+            .accessibilityHint("查看并管理已选书籍")
+            .accessibilityIdentifier("book.picker.selection-summary")
+        } else {
+            Text(viewModel.allowsEmptyMultipleConfirmation ? "全部书籍" : "已选 0 本")
+                .font(AppTypography.footnote)
+                .foregroundStyle(Color.textSecondary)
+                .accessibilityIdentifier("book.picker.selection-summary")
+        }
+    }
+
+    private func appleRecommendedResultsList(_ viewModel: BookPickerViewModel) -> some View {
+        ScrollViewReader { proxy in
+            List {
+                appleRecommendedResultRows(viewModel)
+            }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .background(Color.surfaceSheet)
+            .scrollBounceBehavior(.always)
             .onAppear {
                 syncLocalLoadingGate(viewModel)
                 scrollToPendingBookIfNeeded(using: proxy, viewModel: viewModel)
@@ -230,6 +407,212 @@ private struct BookPickerResolvedView: View {
                 scrollToPendingBookIfNeeded(using: proxy, viewModel: viewModel)
             }
         }
+    }
+
+    @ViewBuilder
+    private func appleRecommendedResultRows(_ viewModel: BookPickerViewModel) -> some View {
+        switch viewModel.status {
+        case .localLoading:
+            if localLoadingGate.isVisible {
+                appleRecommendedSkeletonRows()
+            } else {
+                Color.clear
+                    .frame(minHeight: Spacing.section * 2)
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.surfaceSheet)
+                    .accessibilityHidden(true)
+            }
+        case .localResults:
+            ForEach(viewModel.localBooks) { book in
+                let isUnavailable = viewModel.isBookUnavailable(book)
+                Button {
+                    if let result = viewModel.handleLocalBookTap(book) {
+                        finish(result)
+                    }
+                } label: {
+                    BookPickerAppleBookRow(
+                        title: book.title,
+                        author: book.author,
+                        detail: book.press,
+                        coverURL: book.coverURL,
+                        keyword: viewModel.localSnapshotQuery,
+                        isSelected: viewModel.isBookSelected(book),
+                        showsSelectionIndicator: viewModel.isMultipleSelectionEnabled,
+                        statusText: isUnavailable ? viewModel.unavailableLocalBookMessage : nil
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(isUnavailable || viewModel.isResolvingRemoteSelections)
+                .accessibilityHint(
+                    isUnavailable
+                        ? (viewModel.unavailableLocalBookMessage ?? "当前不可选择")
+                        : localAccessibilityHint(for: viewModel)
+                )
+                .accessibilityIdentifier("book.picker.local.\(book.id)")
+                .id(book.id)
+                .modifier(
+                    BookPickerAppleListRowModifier(
+                        showsSeparator: book.id != viewModel.localBooks.last?.id
+                    )
+                )
+            }
+        case .localEmptyLibrary:
+            appleRecommendedStateRow(
+                role: .empty,
+                title: "还没有书籍",
+                message: "先创建一本书，后续书摘才能关联到阅读对象",
+                systemImage: "books.vertical",
+                action: localStatePrimaryAction(viewModel),
+                secondaryAction: localStateSecondaryAction(viewModel)
+            )
+        case .localNoResults:
+            appleRecommendedStateRow(
+                role: .noResults,
+                title: "没有找到匹配的书",
+                message: localNoResultsMessage,
+                systemImage: "magnifyingglass",
+                action: localStatePrimaryAction(viewModel),
+                secondaryAction: localStateSecondaryAction(viewModel)
+            )
+        case .onlineIdle:
+            appleRecommendedStateRow(
+                role: .instruction,
+                title: "输入关键词开始搜索",
+                message: "输入书名、作者或 ISBN 后，将在当前在线来源中搜索",
+                systemImage: "text.magnifyingglass",
+                action: creationStateAction(viewModel),
+                secondaryAction: nil
+            )
+        case .onlineLoading:
+            appleRecommendedSkeletonRows()
+        case .onlineResults:
+            ForEach(viewModel.remoteResults) { result in
+                Button {
+                    Task {
+                        await handleRemoteResultTap(result, viewModel: viewModel)
+                    }
+                } label: {
+                    BookPickerAppleBookRow(
+                        title: result.title,
+                        author: result.author,
+                        detail: appleRecommendedRemoteDetail(for: result),
+                        coverURL: result.coverURL,
+                        keyword: viewModel.trimmedQuery,
+                        isSelected: viewModel.isRemoteResultSelected(result),
+                        showsSelectionIndicator: viewModel.isMultipleSelectionEnabled && viewModel.supportsDirectRemoteSelection,
+                        statusText: nil
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(viewModel.isResolvingRemoteSelections)
+                .accessibilityHint(remoteAccessibilityHint(for: viewModel))
+                .modifier(
+                    BookPickerAppleListRowModifier(
+                        showsSeparator: result.id != viewModel.remoteResults.last?.id
+                    )
+                )
+            }
+        case .onlineFailure(let message):
+            appleRecommendedStateRow(
+                role: .failure,
+                title: "当前来源搜索失败",
+                message: message,
+                systemImage: "wifi.exclamationmark",
+                action: XMStateAction("重试") {
+                    Task {
+                        await viewModel.submitOnlineSearch()
+                    }
+                },
+                secondaryAction: creationStateAction(viewModel)
+            )
+        case .onlineNoResults:
+            appleRecommendedStateRow(
+                role: .noResults,
+                title: "没有找到匹配的书",
+                message: onlineNoResultsMessage,
+                systemImage: "magnifyingglass",
+                action: creationStateAction(viewModel),
+                secondaryAction: nil
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func appleRecommendedSkeletonRows() -> some View {
+        ForEach(0..<3, id: \.self) { index in
+            BookPickerAppleBookSkeletonRow()
+                .modifier(BookPickerAppleListRowModifier(showsSeparator: index < 2))
+        }
+    }
+
+    private func appleRecommendedStateRow(
+        role: XMStateRole,
+        title: String,
+        message: String,
+        systemImage: String,
+        action: XMStateAction?,
+        secondaryAction: XMStateAction?
+    ) -> some View {
+        VStack(spacing: Spacing.base) {
+            XMContentStateView(
+                role: role,
+                title: title,
+                message: message,
+                systemImage: systemImage,
+                action: action
+            )
+            .frame(minHeight: BookPickerGroupedSurfaceLayout.unavailableMinimumHeight)
+
+            if let secondaryAction {
+                Button(action: secondaryAction.perform) {
+                    XMStateActionLabel(action: secondaryAction)
+                        .frame(minHeight: InteractionMetrics.minimumTouchTarget)
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(Color.textPrimary)
+            }
+        }
+        .listRowInsets(BookPickerAppleListLayout.stateInsets)
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.surfaceSheet)
+    }
+
+    private func localStatePrimaryAction(_ viewModel: BookPickerViewModel) -> XMStateAction? {
+        if viewModel.supportsOnline {
+            return XMStateAction("在线搜索") {
+                viewModel.switchToOnlineIfSupported()
+            }
+        }
+        return creationStateAction(viewModel)
+    }
+
+    private func localStateSecondaryAction(_ viewModel: BookPickerViewModel) -> XMStateAction? {
+        guard viewModel.supportsOnline else { return nil }
+        return creationStateAction(viewModel)
+    }
+
+    private func creationStateAction(_ viewModel: BookPickerViewModel) -> XMStateAction? {
+        guard viewModel.supportsCreationFlow else { return nil }
+        return XMStateAction(creationEntryLabel) {
+            openCreationFlow()
+        }
+    }
+
+    private func localAccessibilityHint(for viewModel: BookPickerViewModel) -> String {
+        viewModel.isMultipleSelectionEnabled
+            ? "双击切换书籍选择状态"
+            : "双击选择这本书"
+    }
+
+    private func appleRecommendedRemoteDetail(for result: BookSearchResult) -> String {
+        let structuredDetail = [result.press, result.pubDate, result.source.title]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " · ")
+        guard structuredDetail.isEmpty else { return structuredDetail }
+
+        let subtitle = result.subtitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        return subtitle.isEmpty ? result.source.title : "\(subtitle) · \(result.source.title)"
     }
 
     private func showsControls(_ viewModel: BookPickerViewModel) -> Bool {
@@ -523,21 +906,14 @@ private struct BookPickerResolvedView: View {
         .frame(maxWidth: .infinity, minHeight: BookPickerGroupedSurfaceLayout.unavailableMinimumHeight)
     }
 
-    private func multipleSelectionBar(_ viewModel: BookPickerViewModel) -> some View {
-        Button(multipleConfirmationTitle(for: viewModel)) {
-            confirmationTask?.cancel()
-            confirmationTask = Task {
-                guard let result = await viewModel.confirmMultipleSelection() else { return }
-                guard !Task.isCancelled else { return }
-                finish(result)
-            }
+    /// 在 MainActor 上启动一次多选确认；新请求会取消旧任务，Sheet 离场时同步取消，完成前检查取消状态避免过期结果回流。
+    private func confirmMultipleSelection(_ viewModel: BookPickerViewModel) {
+        confirmationTask?.cancel()
+        confirmationTask = Task {
+            guard let result = await viewModel.confirmMultipleSelection() else { return }
+            guard !Task.isCancelled else { return }
+            finish(result)
         }
-        .buttonStyle(BookPickerConfirmationButtonStyle())
-        .disabled(!canConfirmMultipleSelection(viewModel))
-        .accessibilityIdentifier("book.picker.confirm")
-        .padding(.horizontal, Spacing.screenEdge)
-        .padding(.top, Spacing.cozy)
-        .padding(.bottom, Spacing.base)
     }
 
     @ViewBuilder
@@ -581,10 +957,6 @@ private struct BookPickerResolvedView: View {
             && (viewModel.selectedCount > 0 || viewModel.allowsEmptyMultipleConfirmation)
     }
 
-    private func multipleConfirmationTitle(for viewModel: BookPickerViewModel) -> String {
-        viewModel.isResolvingRemoteSelections ? "正在整理…" : configuration.multipleConfirmationTitle
-    }
-
     private var localNoResultsMessage: String {
         switch configuration.creationAction {
         case .inlineManualEditor:
@@ -608,9 +980,6 @@ private struct BookPickerResolvedView: View {
     }
 
     private func blockingOverlayMessage(for viewModel: BookPickerViewModel) -> String? {
-        if viewModel.isResolvingRemoteSelections {
-            return "正在整理选中书籍…"
-        }
         if isPreparingSeed {
             return "正在补全书籍信息…"
         }
@@ -643,6 +1012,9 @@ private struct BookPickerResolvedView: View {
             bookRepository: bookRepository,
             searchRepository: searchRepository
         )
+        #if DEBUG
+        newViewModel.seedRemoteSelectionsForDebug(initialRemoteSelections)
+        #endif
         viewModel = newViewModel
         pendingScrollBookID = configuration.preselectedBooks.first?.id
         await newViewModel.loadIfNeeded()
@@ -762,6 +1134,39 @@ private struct BookPickerSelectionSubtitle: View {
                 displayedCount = newValue
             }
         }
+    }
+}
+
+/// Apple 推荐列表的页面私有几何，统一书籍行缩进和从封面后起始的系统分隔线。
+enum BookPickerAppleListLayout {
+    static let rowInsets = EdgeInsets(
+        top: Spacing.cozy,
+        leading: Spacing.screenEdge,
+        bottom: Spacing.cozy,
+        trailing: Spacing.screenEdge
+    )
+    static let stateInsets = EdgeInsets(
+        top: Spacing.none,
+        leading: Spacing.none,
+        bottom: Spacing.none,
+        trailing: Spacing.none
+    )
+    static let separatorLeading = BookPickerAppleBookRow.Layout.coverWidth + Spacing.base
+}
+
+/// 为 Apple 推荐书籍行统一应用系统 List 的缩进、表层与正文对齐分隔线。
+struct BookPickerAppleListRowModifier: ViewModifier {
+    let showsSeparator: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .listRowInsets(BookPickerAppleListLayout.rowInsets)
+            .listRowBackground(Color.surfaceSheet)
+            .listRowSeparator(showsSeparator ? .visible : .hidden)
+            .listRowSeparatorTint(Color.surfaceDividerSubtle)
+            .alignmentGuide(.listRowSeparatorLeading) { dimensions in
+                dimensions[.leading] + BookPickerAppleListLayout.separatorLeading
+            }
     }
 }
 
@@ -915,45 +1320,4 @@ struct BookPickerGroupedRowButtonStyle: ButtonStyle {
                 )
             )
     }
-}
-
-/// BookPicker 私有的底部确认样式；使用可用宽度，不把单一 Sheet 尺寸晋升为公共按钮合同。
-private struct BookPickerConfirmationButtonStyle: ButtonStyle {
-    @Environment(\.isEnabled) private var isEnabled
-
-    func makeBody(configuration: Configuration) -> some View {
-        let shape = RoundedRectangle(
-            cornerRadius: CornerRadius.blockLarge,
-            style: .continuous
-        )
-
-        configuration.label
-            .font(AppTypography.headlineSemibold)
-            .foregroundStyle(
-                isEnabled
-                    ? Color.primaryActionForeground
-                    : Color.buttonDisabledForeground
-            )
-            .multilineTextAlignment(.center)
-            .padding(.horizontal, Spacing.screenEdge)
-            .frame(
-                maxWidth: .infinity,
-                minHeight: BookPickerConfirmationMetrics.minimumControlHeight
-            )
-            .background(
-                isEnabled ? Color.primaryActionFill : Color.buttonDisabled,
-                in: shape
-            )
-            .contentShape(shape)
-            .opacity(
-                isEnabled && configuration.isPressed
-                    ? BookPickerConfirmationMetrics.pressedOpacity
-                    : 1
-            )
-    }
-}
-
-private enum BookPickerConfirmationMetrics {
-    static let minimumControlHeight: CGFloat = 46
-    static let pressedOpacity = 0.86
 }

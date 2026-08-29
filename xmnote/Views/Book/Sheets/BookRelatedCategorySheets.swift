@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 BookContentCategoryOption、XMSystemAlert 与设计令牌，接收书籍详情 ViewModel 提供的分类写入回调
- * [OUTPUT]: 对外提供 BookRelatedPlaceholderSheet、BookRelatedCategoryPickerSheet 与带中性操作菜单的 BookRelatedCategoryManagementSheet
+ * [INPUT]: 依赖 BookContentCategoryOption、XMSheetScaffold、XMSystemAlert 与设计令牌，接收书籍详情 ViewModel 提供的分类写入和异步占位书恢复回调
+ * [OUTPUT]: 对外提供带顶部原位确认反馈的 BookRelatedPlaceholderSheet、BookRelatedCategoryPickerSheet 与带中性操作菜单的 BookRelatedCategoryManagementSheet
  * [POS]: Book 模块业务 Sheet，分别承接新建相关内容的分类选择和书内/全局相关分类管理
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -10,14 +10,22 @@ import SwiftUI
 /// 在线相关书籍占位记录的可用查看页，允许用户显式恢复到书架后进入完整详情与编辑链路。
 struct BookRelatedPlaceholderSheet: View {
     let item: BookContentRelatedItem
-    let isWriting: Bool
     let onEdit: () -> Void
-    let onRestore: () -> Void
+    let onRestore: () async throws -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @State private var isRestoring = false
+    @State private var restoreErrorMessage: String?
+    @State private var restoreTask: Task<Void, Never>?
 
     var body: some View {
-        NavigationStack {
+        XMSheetScaffold(
+            title: "相关书籍",
+            onClose: { dismiss() },
+            isInteractionLocked: isRestoring,
+            isConfirming: isRestoring,
+            confirmationAction: restore
+        ) {
             VStack(alignment: .leading, spacing: Spacing.double) {
                 HStack(alignment: .top, spacing: Spacing.base) {
                     XMBookCover.fixedWidth(
@@ -44,16 +52,6 @@ struct BookRelatedPlaceholderSheet: View {
                 }
 
                 Button {
-                    onRestore()
-                    dismiss()
-                } label: {
-                    Label("加入书架", systemImage: "books.vertical")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(isWriting)
-
-                Button {
                     dismiss()
                     onEdit()
                 } label: {
@@ -61,25 +59,48 @@ struct BookRelatedPlaceholderSheet: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
-                .disabled(isWriting)
 
-                Text("可直接修改引用资料；加入书架后还能继续管理阅读状态、分组和标签。当前相关关系会保留。")
+                if let restoreErrorMessage {
+                    XMInlineStatusBanner(
+                        "加入书架失败：\(restoreErrorMessage)",
+                        tone: .error
+                    )
+                }
+
+                Text("点击右上角确认可加入书架；也可以直接修改引用资料。加入书架后还能继续管理阅读状态、分组和标签，当前相关关系会保留。")
                     .font(AppTypography.caption)
                     .foregroundStyle(Color.textSecondary)
                 Spacer(minLength: 0)
             }
             .padding(Spacing.screenEdge)
-            .background(Color.surfacePage)
-            .navigationTitle("相关书籍")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("关闭") { dismiss() }
-                }
-            }
         }
         .presentationDetents([.medium])
-        .interactiveDismissDisabled(isWriting)
+        .onDisappear {
+            restoreTask?.cancel()
+            restoreTask = nil
+        }
+    }
+
+    /// 在 Sheet 生命周期内执行恢复；确认期间锁定关闭与下滑，失败保留当前上下文供用户重试。
+    private func restore() {
+        guard !isRestoring else { return }
+        isRestoring = true
+        restoreErrorMessage = nil
+        restoreTask = Task { @MainActor in
+            defer {
+                isRestoring = false
+                restoreTask = nil
+            }
+            do {
+                try await onRestore()
+                try Task.checkCancellation()
+                dismiss()
+            } catch is CancellationError {
+                return
+            } catch {
+                restoreErrorMessage = error.localizedDescription
+            }
+        }
     }
 }
 
@@ -116,13 +137,22 @@ struct BookRelatedCategoryPickerSheet<ManagementDestination: View>: View {
             .navigationTitle("选择相关分类")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("管理") {
-                        path.append(.management)
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
                     }
+                    .tint(Color.textSecondary)
+                    .accessibilityLabel("关闭")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("取消") { dismiss() }
+                    Button {
+                        path.append(.management)
+                    } label: {
+                        Image(systemName: "gearshape")
+                    }
+                    .accessibilityLabel("管理分类")
                 }
             }
             .navigationDestination(for: BookRelatedCategoryPickerRoute.self) { route in
@@ -240,8 +270,15 @@ struct BookRelatedCategoryManagementSheet: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if presentation == .sheet {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("完成") { dismiss() }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .tint(Color.textSecondary)
+                    .disabled(isWriting)
+                    .accessibilityLabel("关闭")
                 }
             }
             ToolbarItemGroup(placement: .topBarTrailing) {

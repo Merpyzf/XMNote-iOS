@@ -18,6 +18,8 @@ description: 为 XMNote 的 iOS/SwiftUI/UIKit 界面提供项目级设计系统�
 
 文档快照、单个生产页面、Debug 实验和 Android 视觉都不能单独成为设计真相。来源冲突时先查真实 owner 与 Git 历史，不引用不存在的 token、旧组件名称或过期统计。
 
+已登记 canonical 条目的 catalog 元数据与其当前真实 owner 冲突时，核对 Git 历史和独立生产消费者；确认 owner 已迁移后，以当前 owner 的可执行接口与稳定职责为准，并报告 catalog 漂移，不能用过期 `useWhen/avoidWhen` 迫使页面恢复旧方案。这不赋予未登记文件或符号公共身份，也不授权在当前任务范围外顺手修改 catalog。
+
 ## 所有任务先走事实流程
 
 任何 UI 新增、修改、迁移、重构、适配、抛光或审查都先读取 [工作流](references/workflow.md)，并完成其中的修改前发现步骤。最少需要：
@@ -45,13 +47,16 @@ description: 为 XMNote 的 iOS/SwiftUI/UIKit 界面提供项目级设计系统�
 
 不要用公共 token 收藏单页数字，不要用参数膨胀的万能组件覆盖业务差异，也不要因为某种样式已经存在就默认它值得复用。
 
+当 canonical 骨架没有规定具体业务布局时，优先读取当前项目中用户任务、内容密度和交互关系最接近的成熟生产实现，复用其信息组织逻辑，不复制孤立尺寸，也不为满足抽象模板重新设计一套布局语言。骨架规则只统一跨场景稳定关系，业务内容继续由真实场景 owner 组织。
+
 ## 按任务读取参考
 
 - 整体信息层级、品牌表达、文案、适配或可访问性：读取 [设计语言](references/design-language.md)。
 - 字体角色、字号层级、行距、间距、圆角、描边或布局密度：读取 [排版、间距与布局](references/typography-and-layout.md)。
 - 颜色、表层、卡片、图标、品牌 tint、阴影或 Liquid Glass：读取 [颜色、表层、图标与材质](references/color-surfaces-and-material.md)。
 - 页面或局部空态、搜索/筛选无结果、加载、失败、内容失效、保留内容错误、状态组件治理或状态视觉评审：读取 [页面状态与反馈](references/state-presentation.md)。
-- 组件归位、Settings、Sheet、导航、Toast/Alert、点击热区或滚动：读取 [组件与交互](references/components-and-interaction.md)。
+- 业务 Sheet 的骨架、标题操作、内容边距、卡片、圆角、Detent、退出保护或专项例外：读取 [业务 Sheet](references/sheets.md)。
+- 组件归位、Settings、导航、Toast/Alert、点击热区或滚动：读取 [组件与交互](references/components-and-interaction.md)。
 - 评审、规范缺口、疑似丑陋设计或公共抽象提议：读取 [证据与评审](references/evidence-and-review.md)。
 
 只读取当前任务涉及的参考；一个任务跨越多个维度时组合读取。公共组件的实时清单始终通过 `ds.py catalog` 获取，不从参考文件猜测。

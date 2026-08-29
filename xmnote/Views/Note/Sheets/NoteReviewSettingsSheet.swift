@@ -483,11 +483,7 @@ private struct NoteReviewTagSelectionSheet: View {
             title: "选择标签",
             subtitle: draftSummary,
             onClose: { dismiss() },
-            bottomBar: {
-                actionBar
-                    .padding(.horizontal, Spacing.screenEdge)
-                    .padding(.vertical, Spacing.cozy)
-            }
+            confirmationAction: complete
         ) {
             VStack(spacing: Spacing.comfortable) {
                 if options.isEmpty {
@@ -499,6 +495,14 @@ private struct NoteReviewTagSelectionSheet: View {
                 } else {
                     tagGroup
                 }
+
+                Button("清空选择", role: .destructive) {
+                    draftIDs.removeAll()
+                }
+                .font(AppTypography.subheadlineMedium)
+                .frame(minHeight: InteractionMetrics.minimumTouchTarget)
+                .disabled(draftIDs.isEmpty)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.horizontal, Spacing.screenEdge)
             .padding(.bottom, Spacing.contentEdge)
@@ -546,31 +550,9 @@ private struct NoteReviewTagSelectionSheet: View {
         }
     }
 
-    private var actionBar: some View {
-        HStack(spacing: Spacing.base) {
-            Button {
-                draftIDs.removeAll()
-            } label: {
-                Text("清空")
-                    .font(AppTypography.subheadlineSemibold)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: InteractionMetrics.minimumTouchTarget)
-            }
-            .buttonStyle(.bordered)
-            .disabled(draftIDs.isEmpty)
-
-            Button {
-                onComplete(options.map(\.id).filter { draftIDs.contains($0) })
-                dismiss()
-            } label: {
-                Text("完成")
-                    .font(AppTypography.subheadlineSemibold)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: InteractionMetrics.minimumTouchTarget)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(Color.primaryActionFill)
-        }
+    private func complete() {
+        onComplete(options.map(\.id).filter { draftIDs.contains($0) })
+        dismiss()
     }
 
     private var draftSummary: String {

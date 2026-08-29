@@ -1,18 +1,52 @@
 /**
- * [INPUT]: 依赖 DesignSystem、TopBarActionIcon 与 XMScrollEdgeChrome，接收标题、可选动态副标题、关闭动作及类型安全的顶部/底部/标题栏内容槽位
- * [OUTPUT]: 对外提供统一标题与副标题层级、滚动回弹、安全区边缘及可选固定栏的 XMSheetScaffold
+ * [INPUT]: 依赖 DesignSystem 与 XMScrollEdgeChrome，接收标题、副标题、交互锁定、关闭动作及类型安全的顶部/底部/标题栏内容槽位
+ * [OUTPUT]: 对外提供基于 iOS 26 系统导航标题与副标题的统一 Sheet 根骨架、标准内容顶部间距、xmSheetContentPanel 同心圆角语义，并组合滚动回弹、安全区边缘及可选固定栏
  * [POS]: UIComponents/Sheet 的通用业务 Sheet 根骨架；Settings、Book、Tag 等模块共享，禁止 AnyView 类型擦除
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
 
+/// 集中持有业务 Sheet 内部稳定布局关系，避免调用方按页面重复校准系统标题区后的内容距离。
 enum XMSheetScaffoldLayout {
-    static let defaultTitleHorizontalReserve = InteractionMetrics.minimumTouchTarget + Spacing.base
-    static let textActionTitleHorizontalReserve: CGFloat = 96
-    static let closeVisualSize: CGFloat = 32
-    static let titleChromeMinHeight = InteractionMetrics.minimumTouchTarget
-    static let closeFillOpacity = 0.82
+    /// 普通滚动内容在系统标题安全区之后追加的标准距离；固定内容顶栏场景不消费该值。
+    static let standardContentTopSpacing = Spacing.base
+}
+
+extension Shape where Self == ConcentricRectangle {
+    /// Sheet 内部复合内容面板的统一轮廓；跟随系统容器逐角同心计算，并保持中型容器曲率下限。
+    static var xmSheetContentPanel: ConcentricRectangle {
+        ConcentricRectangle(
+            corners: .concentric(
+                minimum: .fixed(CornerRadius.containerMedium)
+            ),
+            isUniform: false
+        )
+    }
+}
+
+/// 为系统 Sheet 工具栏提供固定尺寸的确认与原位加载状态，避免各业务重复制造按钮壳层。
+struct XMSheetConfirmationAction: View {
+    let isDisabled: Bool
+    let isConfirming: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "checkmark")
+                .opacity(isConfirming ? 0 : 1)
+                .overlay {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(Color.primaryActionForeground)
+                        .opacity(isConfirming ? 1 : 0)
+                }
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(Color.appTint)
+        .disabled(isDisabled || isConfirming)
+        .accessibilityLabel(isConfirming ? "正在确认" : "确认")
+    }
 }
 
 /// 通用业务 Sheet 根骨架，组合标准标题栏、全轴回弹滚动区与可选固定内容栏。
@@ -34,9 +68,10 @@ struct XMSheetScaffold<
     let contentTopBar: ContentTopBar
     let bottomBar: BottomBar
 
-    private let closeVisualSize: CGFloat
+    private let isInteractionLocked: Bool
     private let scrollEdgePresentation: XMScrollEdgeChromePresentation
-    private let usesCustomTitleActions: Bool
+    private let hasCustomLeadingAction: Bool
+    private let hasTrailingAction: Bool
     private let showsCustomTitleSubtitle: Bool
     private let showsContentTopBar: Bool
     private let showsBottomBar: Bool
@@ -46,7 +81,7 @@ struct XMSheetScaffold<
         title: String,
         subtitle: String? = nil,
         onClose: @escaping () -> Void,
-        closeVisualSize: CGFloat = XMSheetScaffoldLayout.closeVisualSize,
+        isInteractionLocked: Bool = false,
         @ViewBuilder content: () -> Content
     ) where LeadingAction == EmptyView,
             TrailingAction == EmptyView,
@@ -62,11 +97,87 @@ struct XMSheetScaffold<
         self.titleSubtitle = EmptyView()
         self.contentTopBar = EmptyView()
         self.bottomBar = EmptyView()
-        self.closeVisualSize = closeVisualSize
+        self.isInteractionLocked = isInteractionLocked
         self.scrollEdgePresentation = .contained
-        self.usesCustomTitleActions = false
+        self.hasCustomLeadingAction = false
+        self.hasTrailingAction = false
         self.showsCustomTitleSubtitle = false
         self.showsContentTopBar = false
+        self.showsBottomBar = false
+    }
+
+    /// 创建带固定顶部控件的系统确认 Sheet；搜索或筛选控件进入 safe-area bar，滚动内容获得系统 soft edge。
+    init(
+        title: String,
+        subtitle: String? = nil,
+        onClose: @escaping () -> Void,
+        isInteractionLocked: Bool = false,
+        scrollEdgePresentation: XMScrollEdgeChromePresentation = .overlaySoft,
+        isConfirmationDisabled: Bool = false,
+        isConfirming: Bool = false,
+        confirmationAction: @escaping () -> Void,
+        @ViewBuilder contentTopBar: () -> ContentTopBar,
+        @ViewBuilder content: () -> Content
+    ) where LeadingAction == EmptyView,
+            TrailingAction == XMSheetConfirmationAction,
+            TitleSubtitle == EmptyView,
+            BottomBar == EmptyView {
+        self.title = title
+        self.subtitle = subtitle
+        self.onClose = onClose
+        self.content = content()
+        self.leadingAction = EmptyView()
+        self.trailingAction = XMSheetConfirmationAction(
+            isDisabled: isConfirmationDisabled,
+            isConfirming: isConfirming,
+            action: confirmationAction
+        )
+        self.titleSubtitle = EmptyView()
+        self.contentTopBar = contentTopBar()
+        self.bottomBar = EmptyView()
+        self.isInteractionLocked = isInteractionLocked || isConfirming
+        self.scrollEdgePresentation = scrollEdgePresentation
+        self.hasCustomLeadingAction = false
+        self.hasTrailingAction = true
+        self.showsCustomTitleSubtitle = false
+        self.showsContentTopBar = true
+        self.showsBottomBar = false
+    }
+
+    /// 创建带动态辅助信息和固定顶部控件的系统确认 Sheet，避免把选择数量塞进导航标题。
+    init(
+        title: String,
+        onClose: @escaping () -> Void,
+        isInteractionLocked: Bool = false,
+        scrollEdgePresentation: XMScrollEdgeChromePresentation = .overlaySoft,
+        isConfirmationDisabled: Bool = false,
+        isConfirming: Bool = false,
+        confirmationAction: @escaping () -> Void,
+        @ViewBuilder titleSubtitle: () -> TitleSubtitle,
+        @ViewBuilder contentTopBar: () -> ContentTopBar,
+        @ViewBuilder content: () -> Content
+    ) where LeadingAction == EmptyView,
+            TrailingAction == XMSheetConfirmationAction,
+            BottomBar == EmptyView {
+        self.title = title
+        self.subtitle = nil
+        self.onClose = onClose
+        self.content = content()
+        self.leadingAction = EmptyView()
+        self.trailingAction = XMSheetConfirmationAction(
+            isDisabled: isConfirmationDisabled,
+            isConfirming: isConfirming,
+            action: confirmationAction
+        )
+        self.titleSubtitle = titleSubtitle()
+        self.contentTopBar = contentTopBar()
+        self.bottomBar = EmptyView()
+        self.isInteractionLocked = isInteractionLocked || isConfirming
+        self.scrollEdgePresentation = scrollEdgePresentation
+        self.hasCustomLeadingAction = false
+        self.hasTrailingAction = true
+        self.showsCustomTitleSubtitle = true
+        self.showsContentTopBar = true
         self.showsBottomBar = false
     }
 
@@ -75,7 +186,7 @@ struct XMSheetScaffold<
         title: String,
         subtitle: String? = nil,
         onClose: @escaping () -> Void,
-        closeVisualSize: CGFloat = XMSheetScaffoldLayout.closeVisualSize,
+        isInteractionLocked: Bool = false,
         scrollEdgePresentation: XMScrollEdgeChromePresentation = .overlaySoft,
         @ViewBuilder bottomBar: () -> BottomBar,
         @ViewBuilder content: () -> Content
@@ -92,9 +203,10 @@ struct XMSheetScaffold<
         self.titleSubtitle = EmptyView()
         self.contentTopBar = EmptyView()
         self.bottomBar = bottomBar()
-        self.closeVisualSize = closeVisualSize
+        self.isInteractionLocked = isInteractionLocked
         self.scrollEdgePresentation = scrollEdgePresentation
-        self.usesCustomTitleActions = false
+        self.hasCustomLeadingAction = false
+        self.hasTrailingAction = false
         self.showsCustomTitleSubtitle = false
         self.showsContentTopBar = false
         self.showsBottomBar = true
@@ -105,7 +217,7 @@ struct XMSheetScaffold<
         title: String,
         subtitle: String? = nil,
         onClose: @escaping () -> Void,
-        closeVisualSize: CGFloat = XMSheetScaffoldLayout.closeVisualSize,
+        isInteractionLocked: Bool = false,
         scrollEdgePresentation: XMScrollEdgeChromePresentation = .overlaySoft,
         @ViewBuilder contentTopBar: () -> ContentTopBar,
         @ViewBuilder content: () -> Content
@@ -122,9 +234,10 @@ struct XMSheetScaffold<
         self.titleSubtitle = EmptyView()
         self.contentTopBar = contentTopBar()
         self.bottomBar = EmptyView()
-        self.closeVisualSize = closeVisualSize
+        self.isInteractionLocked = isInteractionLocked
         self.scrollEdgePresentation = scrollEdgePresentation
-        self.usesCustomTitleActions = false
+        self.hasCustomLeadingAction = false
+        self.hasTrailingAction = false
         self.showsCustomTitleSubtitle = false
         self.showsContentTopBar = true
         self.showsBottomBar = false
@@ -135,7 +248,7 @@ struct XMSheetScaffold<
         title: String,
         subtitle: String? = nil,
         onClose: @escaping () -> Void,
-        closeVisualSize: CGFloat = XMSheetScaffoldLayout.closeVisualSize,
+        isInteractionLocked: Bool = false,
         scrollEdgePresentation: XMScrollEdgeChromePresentation = .overlaySoft,
         @ViewBuilder contentTopBar: () -> ContentTopBar,
         @ViewBuilder bottomBar: () -> BottomBar,
@@ -152,9 +265,10 @@ struct XMSheetScaffold<
         self.titleSubtitle = EmptyView()
         self.contentTopBar = contentTopBar()
         self.bottomBar = bottomBar()
-        self.closeVisualSize = closeVisualSize
+        self.isInteractionLocked = isInteractionLocked
         self.scrollEdgePresentation = scrollEdgePresentation
-        self.usesCustomTitleActions = false
+        self.hasCustomLeadingAction = false
+        self.hasTrailingAction = false
         self.showsCustomTitleSubtitle = false
         self.showsContentTopBar = true
         self.showsBottomBar = true
@@ -164,7 +278,7 @@ struct XMSheetScaffold<
     init(
         title: String,
         onClose: @escaping () -> Void,
-        closeVisualSize: CGFloat = XMSheetScaffoldLayout.closeVisualSize,
+        isInteractionLocked: Bool = false,
         scrollEdgePresentation: XMScrollEdgeChromePresentation = .overlaySoft,
         @ViewBuilder titleSubtitle: () -> TitleSubtitle,
         @ViewBuilder contentTopBar: () -> ContentTopBar,
@@ -180,9 +294,10 @@ struct XMSheetScaffold<
         self.titleSubtitle = titleSubtitle()
         self.contentTopBar = contentTopBar()
         self.bottomBar = bottomBar()
-        self.closeVisualSize = closeVisualSize
+        self.isInteractionLocked = isInteractionLocked
         self.scrollEdgePresentation = scrollEdgePresentation
-        self.usesCustomTitleActions = false
+        self.hasCustomLeadingAction = false
+        self.hasTrailingAction = false
         self.showsCustomTitleSubtitle = true
         self.showsContentTopBar = true
         self.showsBottomBar = true
@@ -193,6 +308,7 @@ struct XMSheetScaffold<
         title: String,
         subtitle: String? = nil,
         onClose: @escaping () -> Void,
+        isInteractionLocked: Bool = false,
         @ViewBuilder leadingAction: () -> LeadingAction,
         @ViewBuilder trailingAction: () -> TrailingAction,
         @ViewBuilder content: () -> Content
@@ -206,38 +322,132 @@ struct XMSheetScaffold<
         self.titleSubtitle = EmptyView()
         self.contentTopBar = EmptyView()
         self.bottomBar = EmptyView()
-        self.closeVisualSize = XMSheetScaffoldLayout.closeVisualSize
+        self.isInteractionLocked = isInteractionLocked
         self.scrollEdgePresentation = .contained
-        self.usesCustomTitleActions = true
+        self.hasCustomLeadingAction = true
+        self.hasTrailingAction = true
+        self.showsCustomTitleSubtitle = false
+        self.showsContentTopBar = false
+        self.showsBottomBar = false
+    }
+
+    /// 创建使用默认关闭按钮与标准确认按钮的系统 Sheet；确认中自动锁定内容、关闭和交互式收起。
+    init(
+        title: String,
+        subtitle: String? = nil,
+        onClose: @escaping () -> Void,
+        isInteractionLocked: Bool = false,
+        isConfirmationDisabled: Bool = false,
+        isConfirming: Bool = false,
+        confirmationAction: @escaping () -> Void,
+        @ViewBuilder content: () -> Content
+    ) where LeadingAction == EmptyView,
+            TrailingAction == XMSheetConfirmationAction,
+            TitleSubtitle == EmptyView,
+            ContentTopBar == EmptyView,
+            BottomBar == EmptyView {
+        self.title = title
+        self.subtitle = subtitle
+        self.onClose = onClose
+        self.content = content()
+        self.leadingAction = EmptyView()
+        self.trailingAction = XMSheetConfirmationAction(
+            isDisabled: isConfirmationDisabled,
+            isConfirming: isConfirming,
+            action: confirmationAction
+        )
+        self.titleSubtitle = EmptyView()
+        self.contentTopBar = EmptyView()
+        self.bottomBar = EmptyView()
+        self.isInteractionLocked = isInteractionLocked || isConfirming
+        self.scrollEdgePresentation = .contained
+        self.hasCustomLeadingAction = false
+        self.hasTrailingAction = true
         self.showsCustomTitleSubtitle = false
         self.showsContentTopBar = false
         self.showsBottomBar = false
     }
 
     var body: some View {
-        VStack(spacing: Spacing.none) {
-            titleChrome
-            scrollContent
+        systemToolbarBody
+    }
+
+    private var systemToolbarBody: some View {
+        NavigationStack {
+            systemNavigationContent
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.surfaceSheet.ignoresSafeArea())
+        .interactiveDismissDisabled(isInteractionLocked)
     }
 
     @ViewBuilder
-    private var scrollContent: some View {
-        if showsContentTopBar, showsBottomBar {
+    private var systemNavigationContent: some View {
+        if let subtitle, !subtitle.isEmpty {
+            configuredSystemScrollContent
+                .navigationSubtitle(subtitle)
+        } else {
+            configuredSystemScrollContent
+        }
+    }
+
+    private var configuredSystemScrollContent: some View {
+        systemScrollContent
+            .disabled(isInteractionLocked)
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { systemToolbarContent }
+    }
+
+    @ToolbarContentBuilder
+    private var systemToolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .cancellationAction) {
+            if hasCustomLeadingAction {
+                leadingAction
+                    .disabled(isInteractionLocked)
+            } else {
+                systemCloseButton
+            }
+        }
+
+        if hasTrailingAction {
+            ToolbarItem(placement: .confirmationAction) {
+                trailingAction
+                    .disabled(isInteractionLocked)
+            }
+        }
+
+        if showsCustomTitleSubtitle {
+            ToolbarItem(placement: .principal) {
+                VStack(spacing: Spacing.micro) {
+                    Text(title)
+                        .font(AppTypography.headlineSemibold)
+                        .foregroundStyle(Color.textPrimary)
+                        .lineLimit(1)
+
+                    titleSubtitle
+                        .font(AppTypography.caption2)
+                        .foregroundStyle(Color.textSecondary)
+                        .lineLimit(1)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var systemScrollContent: some View {
+        if hasSystemTopBar, showsBottomBar {
             XMScrollEdgeChrome(
                 presentation: scrollEdgePresentation,
                 edges: [.top, .bottom],
-                topBar: { contentTopBar },
+                topBar: { systemTopBar },
                 bottomBar: { bottomBar },
                 content: { baseScrollContent }
             )
-        } else if showsContentTopBar {
+        } else if hasSystemTopBar {
             XMScrollEdgeChrome(
                 presentation: scrollEdgePresentation,
                 edges: .top,
-                topBar: { contentTopBar },
+                topBar: { systemTopBar },
                 content: { baseScrollContent }
             )
         } else if showsBottomBar {
@@ -252,108 +462,68 @@ struct XMSheetScaffold<
         }
     }
 
+    private var hasSystemTopBar: Bool {
+        showsContentTopBar
+    }
+
+    private var systemTopBar: some View {
+        contentTopBar
+            .frame(maxWidth: .infinity)
+    }
+
+    private var resolvedContentTopSpacing: CGFloat {
+        showsContentTopBar
+            ? Spacing.none
+            : XMSheetScaffoldLayout.standardContentTopSpacing
+    }
+
+    private var systemCloseButton: some View {
+        Button(action: onClose) {
+            Image(systemName: "xmark")
+                .font(.body.weight(.semibold))
+        }
+        .tint(Color.textSecondary)
+        .disabled(isInteractionLocked)
+        .accessibilityLabel("关闭")
+    }
+
     private var baseScrollContent: some View {
         ScrollView {
             content
         }
+        .contentMargins(
+            .top,
+            resolvedContentTopSpacing,
+            for: .scrollContent
+        )
         .scrollIndicators(.hidden)
         .scrollBounceBehavior(.always)
     }
 
-    private var titleChrome: some View {
-        ZStack {
-            HStack {
-                leadingActionSlot
-                Spacer(minLength: Spacing.none)
-                trailingActionSlot
-            }
-            .frame(minHeight: XMSheetScaffoldLayout.titleChromeMinHeight)
-
-            VStack(spacing: Spacing.micro) {
-                Text(title)
-                    .font(AppTypography.headlineSemibold)
-                    .foregroundStyle(Color.textPrimary)
-                    .lineLimit(1)
-
-                if showsCustomTitleSubtitle {
-                    titleSubtitle
-                        .font(AppTypography.caption2)
-                        .foregroundStyle(Color.textSecondary)
-                        .lineLimit(1)
-                } else if let subtitle, !subtitle.isEmpty {
-                    Text(subtitle)
-                        .font(AppTypography.caption2)
-                        .foregroundStyle(Color.textSecondary)
-                        .lineLimit(1)
-                }
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, titleHorizontalReserve)
-        }
-        .padding(.horizontal, Spacing.screenEdge)
-        .padding(.top, Spacing.base)
-        .padding(.bottom, Spacing.comfortable)
-    }
-
-    private var titleHorizontalReserve: CGFloat {
-        usesCustomTitleActions
-            ? XMSheetScaffoldLayout.textActionTitleHorizontalReserve
-            : XMSheetScaffoldLayout.defaultTitleHorizontalReserve
-    }
-
-    @ViewBuilder
-    private var leadingActionSlot: some View {
-        if usesCustomTitleActions {
-            leadingAction
-        } else {
-            Color.clear
-                .frame(
-                    width: InteractionMetrics.minimumTouchTarget,
-                    height: InteractionMetrics.minimumTouchTarget
-                )
-        }
-    }
-
-    @ViewBuilder
-    private var trailingActionSlot: some View {
-        if usesCustomTitleActions {
-            trailingAction
-        } else {
-            closeButton
-        }
-    }
-
-    private var closeButton: some View {
-        Button(action: onClose) {
-            TopBarActionIcon(
-                systemName: "xmark",
-                iconSize: 13,
-                containerSize: closeVisualSize,
-                weight: .bold,
-                foregroundColor: .textSecondary
-            )
-            .background(
-                Color.controlFillSecondary.opacity(XMSheetScaffoldLayout.closeFillOpacity),
-                in: Circle()
-            )
-            .frame(
-                width: InteractionMetrics.minimumTouchTarget,
-                height: InteractionMetrics.minimumTouchTarget
-            )
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("关闭")
-    }
 }
 
-#Preview("业务 Sheet 骨架") {
+#Preview("普通内容标准顶部间距") {
     XMSheetScaffold(
         title: "编辑内容",
         subtitle: "标准标题与滚动区域",
         onClose: { }
     ) {
         LazyVStack(spacing: Spacing.base) {
+            CardContainer(
+                shape: ConcentricRectangle.xmSheetContentPanel,
+                showsBorder: true,
+                borderColor: .surfaceBorderSubtle
+            ) {
+                VStack(alignment: .leading, spacing: Spacing.half) {
+                    Text("Sheet 内容面板")
+                        .font(AppTypography.headlineSemibold)
+                    Text("普通内容在系统标题安全区后自动增加 12pt 标准间距；面板圆角继续跟随 Sheet 容器逐角同心计算。")
+                        .font(AppTypography.footnote)
+                        .foregroundStyle(Color.textSecondary)
+                }
+                .padding(Spacing.contentEdge)
+            }
+
             ForEach(1...8, id: \.self) { index in
                 CardContainer {
                     Text("内容项 \(index)")
@@ -368,7 +538,7 @@ struct XMSheetScaffold<
     }
 }
 
-#Preview("可交互动态副标题") {
+#Preview("固定顶部栏排除标准间距") {
     XMSheetScaffold(
         title: "选择书籍",
         onClose: { },
@@ -393,7 +563,7 @@ struct XMSheetScaffold<
                 .padding(.bottom, Spacing.base)
         }
     ) {
-        Text("滚动内容")
+        Text("固定顶部栏后的滚动内容不叠加标准标题区间距")
             .font(AppTypography.body)
             .frame(maxWidth: .infinity, minHeight: 320)
     }

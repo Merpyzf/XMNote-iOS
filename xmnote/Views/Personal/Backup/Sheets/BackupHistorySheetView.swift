@@ -68,23 +68,31 @@ private extension BackupHistorySheetView {
     /// 渲染单条备份历史记录行。
     func backupRow(_ backup: BackupFileInfo) -> some View {
         VStack(alignment: .leading, spacing: Spacing.compact) {
-            Text(backup.name)
-                .font(AppTypography.body)
-                .foregroundStyle(.primary)
+            if let date = backup.backupDate {
+                Text(date, format: .dateTime.year().month().day().hour().minute())
+                    .font(AppTypography.body)
+                    .foregroundStyle(Color.textPrimary)
+            } else {
+                Text("备份记录")
+                    .font(AppTypography.body)
+                    .foregroundStyle(Color.textPrimary)
+            }
+
             HStack {
                 Text(backup.deviceName)
                 Spacer()
                 Text(formattedSize(backup.size))
-                    .font(AppTypography.caption)
-                    .foregroundStyle(.secondary)
             }
             .font(AppTypography.caption)
-            .foregroundStyle(.secondary)
-            if let date = backup.backupDate {
-                Text("\(date, style: .date) \(date, style: .time)")
-            }
+            .foregroundStyle(Color.textSecondary)
+
+            Text(backup.name)
+                .font(AppTypography.caption2)
+                .foregroundStyle(Color.textHint)
+                .lineLimit(1)
+                .truncationMode(.middle)
         }
-        .font(AppTypography.caption)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// 将备份文件大小格式化为易读文本。

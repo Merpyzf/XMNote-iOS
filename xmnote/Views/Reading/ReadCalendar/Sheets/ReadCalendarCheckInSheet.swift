@@ -46,24 +46,9 @@ struct ReadCalendarCheckInSheet: View {
                 guard !isSaving else { return }
                 dismiss()
             },
-            bottomBar: {
-                Button(action: save) {
-                    HStack(spacing: Spacing.cozy) {
-                        if isSaving {
-                            ProgressView()
-                                .controlSize(.small)
-                        }
-                        Text(isSaving ? "正在保存…" : "保存")
-                    }
-                    .font(AppTypography.subheadlineSemibold)
-                    .frame(maxWidth: .infinity)
-                    .frame(minHeight: InteractionMetrics.minimumTouchTarget)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(selectedBook == nil || isSaving)
-                .padding(.horizontal, Spacing.screenEdge)
-                .padding(.vertical, Spacing.cozy)
-            }
+            isConfirmationDisabled: selectedBook == nil,
+            isConfirming: isSaving,
+            confirmationAction: save
         ) {
             VStack(alignment: .leading, spacing: Spacing.section) {
                 XMSettingsSection("书籍") {

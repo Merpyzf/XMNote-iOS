@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 RichTextEditor 模块格式定义、RichTextTypography 与 UIKit/TextKit 能力，承接富文本解析/渲染/编辑链路
- * [OUTPUT]: 对外提供 RichTextEditor 能力，用于富文本编辑器的序列化、交互或样式支持
+ * [INPUT]: 依赖 RichTextEditor 模块格式定义、RichTextTypography 与 UIKit/TextKit/UIScrollEdgeEffect 能力，承接富文本解析/渲染/编辑链路及调用方注入的编辑表层
+ * [OUTPUT]: 对外提供 RichTextEditor 能力，用于富文本编辑器的序列化、交互、样式、背景连续性与系统滚动边缘支持
  * [POS]: RichTextEditor 功能模块内部构件，服务 Note 编辑场景的 Android 业务意图对齐
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -27,6 +27,8 @@ struct RichTextEditor: UIViewRepresentable {
     var baseFont: UIFont = RichTextTypography.editorBodyUIFont
     var allowsCameraTextCapture: Bool = false
     var toolbarPresentation: RichTextToolbarPresentation = .inputAccessory
+    var isBackgroundTransparent: Bool = false
+    var usesSoftScrollEdgeEffects: Bool = false
     var onTextChange: (() -> Void)?
     var onFocusChange: ((Bool) -> Void)?
 
@@ -36,6 +38,10 @@ struct RichTextEditor: UIViewRepresentable {
         editorView.delegate = context.coordinator
         editorView.isEditable = isEditable
         editorView.isScrollEnabled = true
+        if isBackgroundTransparent {
+            editorView.backgroundColor = .clear
+        }
+        configureScrollEdgeEffects(for: editorView)
         editorView.linkColor = linkColor
         editorView.isLinkUnderline = isLinkUnderline
 
@@ -44,7 +50,7 @@ struct RichTextEditor: UIViewRepresentable {
 
         // 初始内容
         if attributedText.length > 0 {
-            editorView.attributedText = attributedText
+            editorView.setCanonicalAttributedText(attributedText)
         }
 
         return editorView
@@ -54,6 +60,10 @@ struct RichTextEditor: UIViewRepresentable {
     func updateUIView(_ editorView: RichTextEditorView, context: Context) {
         context.coordinator.parent = self
         editorView.isEditable = isEditable
+        if isBackgroundTransparent, editorView.backgroundColor != .clear {
+            editorView.backgroundColor = .clear
+        }
+        configureScrollEdgeEffects(for: editorView)
         editorView.linkColor = linkColor
         editorView.isLinkUnderline = isLinkUnderline
         editorView.updateBaseFont(baseFont)
@@ -69,8 +79,8 @@ struct RichTextEditor: UIViewRepresentable {
         }
 
         // 仅在外部驱动变更时同步（避免循环更新）
-        if editorView.attributedText != attributedText {
-            editorView.attributedText = attributedText
+        if editorView.canonicalAttributedText() != attributedText {
+            editorView.setCanonicalAttributedText(attributedText)
         }
 
         // 同步工具栏激活状态
@@ -92,6 +102,12 @@ struct RichTextEditor: UIViewRepresentable {
             return controller
         }
         return nil
+    }
+
+    /// 由真实 UITextView 滚动 owner 配置 iOS 26 系统边缘效果，避免 SwiftUI 包装层无法触达内部滚动视图。
+    private func configureScrollEdgeEffects(for editorView: RichTextEditorView) {
+        editorView.topEdgeEffect.style = usesSoftScrollEdgeEffects ? .soft : .automatic
+        editorView.bottomEdgeEffect.style = usesSoftScrollEdgeEffects ? .soft : .automatic
     }
 
     private func applyToolbarPresentation(to editorView: RichTextEditorView, context: Context) {

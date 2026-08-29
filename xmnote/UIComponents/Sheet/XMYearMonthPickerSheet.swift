@@ -19,12 +19,7 @@ struct XMYearMonthPickerSheet: View {
         static let yearMonthAccessibilityPresentationHeight: CGFloat = 540
         static let yearRegularPresentationHeight: CGFloat = 300
         static let yearAccessibilityPresentationHeight: CGFloat = 380
-        static let sheetTopPadding: CGFloat = Spacing.section
-        static let headerBottomPadding: CGFloat = Spacing.base
         static let sheetBottomPadding: CGFloat = Spacing.double
-        static let headerMinHeight: CGFloat = InteractionMetrics.minimumTouchTarget
-        static let closeButtonHitSize: CGFloat = InteractionMetrics.minimumTouchTarget
-        static let closeButtonVisualSize: CGFloat = 32
         static let yearChipMinHeight: CGFloat = 38
         static let yearButtonMinHeight: CGFloat = 54
         static let monthButtonMinHeight: CGFloat = 54
@@ -122,16 +117,27 @@ struct XMYearMonthPickerSheet: View {
     }
 
     var body: some View {
-        VStack(spacing: Spacing.none) {
-            header
-                .padding(.horizontal, Spacing.screenEdge)
-                .padding(.top, Layout.sheetTopPadding)
-                .padding(.bottom, Layout.headerBottomPadding)
-
+        NavigationStack {
             ScrollView {
                 content
                     .padding(.horizontal, Spacing.screenEdge)
+                    .padding(.top, Spacing.base)
                     .padding(.bottom, Layout.sheetBottomPadding)
+            }
+            .scrollEdgeEffectStyle(.soft, for: [.top, .bottom])
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
+                        onCancel()
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .tint(Color.textSecondary)
+                    .accessibilityLabel(closeButtonAccessibilityLabel)
+                }
             }
         }
         .background(Color.surfaceSheet)
@@ -139,42 +145,6 @@ struct XMYearMonthPickerSheet: View {
 }
 
 private extension XMYearMonthPickerSheet {
-    var header: some View {
-        ZStack(alignment: .center) {
-            Text(title)
-                .font(AppTypography.headlineSemibold)
-                .foregroundStyle(Color.textPrimary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.9)
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, Layout.closeButtonHitSize)
-
-            HStack {
-                Spacer(minLength: 0)
-                closeButton
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .frame(minHeight: Layout.headerMinHeight)
-    }
-
-    var closeButton: some View {
-        Button {
-            onCancel()
-            dismiss()
-        } label: {
-            Image(systemName: "xmark")
-                .font(AppTypography.captionSemibold)
-                .foregroundStyle(Color.textSecondary)
-                .frame(width: Layout.closeButtonVisualSize, height: Layout.closeButtonVisualSize)
-                .background(Color.controlFillSecondary.opacity(0.82), in: Circle())
-                .frame(width: Layout.closeButtonHitSize, height: Layout.closeButtonHitSize)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(closeButtonAccessibilityLabel)
-    }
-
     @ViewBuilder
     var content: some View {
         switch mode {

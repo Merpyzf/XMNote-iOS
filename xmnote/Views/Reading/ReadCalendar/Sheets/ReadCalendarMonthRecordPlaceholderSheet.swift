@@ -1,7 +1,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖目标月份与回调事件，依赖 ReadCalendarTheme 与 DesignTokens 提供视觉语义
+ * [INPUT]: 依赖目标月份与回调事件，依赖 ReadCalendarTheme、DesignTokens 与 xmSheetContentPanel 提供视觉语义
  * [OUTPUT]: 对外提供使用中性占位图标的 ReadCalendarMonthRecordPlaceholderSheet（月度阅读记录占位弹层）
  * [POS]: ReadCalendar 业务模块 Sheet，占位承接“点击月份进入当月阅读记录页”的后续能力
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -14,7 +14,6 @@ struct ReadCalendarMonthRecordPlaceholderSheet: View {
         static let contentSpacing: CGFloat = Spacing.base
         static let iconSize: CGFloat = 32
         static let cardPadding: CGFloat = Spacing.base
-        static let cardCornerRadius: CGFloat = CornerRadius.containerMedium
         static let buttonHeight: CGFloat = InteractionMetrics.minimumTouchTarget
     }
 
@@ -25,19 +24,7 @@ struct ReadCalendarMonthRecordPlaceholderSheet: View {
     var body: some View {
         XMSheetScaffold(
             title: "\(monthTitle)阅读记录",
-            onClose: { dismiss() },
-            bottomBar: {
-                Button {
-                    onOpenMonthSummary(monthStart)
-                } label: {
-                    Text("查看当月总结")
-                        .font(AppTypography.subheadlineSemibold)
-                        .frame(maxWidth: .infinity, minHeight: Layout.buttonHeight)
-                }
-                .buttonStyle(.borderedProminent)
-                .padding(.horizontal, Spacing.screenEdge)
-                .padding(.vertical, Spacing.cozy)
-            }
+            onClose: { dismiss() }
         ) {
             VStack(spacing: Spacing.cozy) {
                 Image(systemName: "book.pages")
@@ -48,13 +35,19 @@ struct ReadCalendarMonthRecordPlaceholderSheet: View {
                     .font(AppTypography.subheadline)
                     .foregroundStyle(Color.textSecondary)
                     .multilineTextAlignment(.center)
+
+                Button {
+                    onOpenMonthSummary(monthStart)
+                } label: {
+                    Label("查看当月总结", systemImage: "chart.bar.xaxis")
+                        .font(AppTypography.subheadlineSemibold)
+                        .frame(minHeight: Layout.buttonHeight)
+                }
+                .buttonStyle(.borderedProminent)
             }
             .frame(maxWidth: .infinity, alignment: .center)
             .padding(Layout.cardPadding)
-            .background(
-                RoundedRectangle(cornerRadius: Layout.cardCornerRadius, style: .continuous)
-                    .fill(Color.surfaceNested)
-            )
+            .background(Color.surfaceNested, in: ConcentricRectangle.xmSheetContentPanel)
 
             .padding(Layout.containerPadding)
         }

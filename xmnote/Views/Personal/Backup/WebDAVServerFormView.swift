@@ -19,30 +19,9 @@ struct WebDAVServerFormView: View {
                 guard !viewModel.isTesting else { return }
                 dismiss()
             },
-            bottomBar: {
-                Button {
-                    Task {
-                        if await viewModel.save() {
-                            dismiss()
-                        }
-                    }
-                } label: {
-                    HStack(spacing: Spacing.cozy) {
-                        if viewModel.isTesting {
-                            ProgressView()
-                                .controlSize(.small)
-                        }
-                        Text(viewModel.isTesting ? "正在保存…" : "保存")
-                    }
-                    .font(AppTypography.subheadlineSemibold)
-                    .frame(maxWidth: .infinity)
-                    .frame(minHeight: InteractionMetrics.minimumTouchTarget)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(!viewModel.isFormValid || viewModel.isTesting)
-                .padding(.horizontal, Spacing.screenEdge)
-                .padding(.vertical, Spacing.cozy)
-            }
+            isConfirmationDisabled: !viewModel.isFormValid,
+            isConfirming: viewModel.isTesting,
+            confirmationAction: save
         ) {
             VStack(alignment: .leading, spacing: Spacing.section) {
                 formFields
@@ -53,6 +32,15 @@ struct WebDAVServerFormView: View {
             .disabled(viewModel.isTesting)
         }
         .interactiveDismissDisabled(viewModel.isTesting)
+    }
+
+    /// 保存任务继承当前 Sheet 生命周期；ViewModel 串行执行连通性校验与写入，成功后才关闭。
+    private func save() {
+        Task {
+            if await viewModel.save() {
+                dismiss()
+            }
+        }
     }
 }
 

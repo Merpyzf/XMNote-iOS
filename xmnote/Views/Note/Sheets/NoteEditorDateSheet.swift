@@ -28,10 +28,14 @@ struct NoteEditorDateSheet: View {
             .navigationTitle("创建时间")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
                         dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
                     }
+                    .tint(Color.textSecondary)
+                    .accessibilityLabel("关闭")
                 }
             }
         }
