@@ -68,26 +68,6 @@ enum BookSelectionFixture: Hashable {
     case slowRemoteResolution
 }
 
-extension BookPickerSheetPresentationStyle {
-    var debugTitle: String {
-        switch self {
-        case .currentStandard:
-            return "当前标准"
-        case .appleRecommended:
-            return "Apple 推荐"
-        }
-    }
-
-    var debugSummary: String {
-        switch self {
-        case .currentStandard:
-            return "自定义标题栏与底部全宽确认按钮，保持现有生产书籍选择体验。"
-        case .appleRecommended:
-            return "系统工具栏前导关闭、尾随品牌色确认，不在底部重复放置长按钮。"
-        }
-    }
-}
-
 enum BookSelectionScenarioConsumer: Hashable {
     case localSingle(actionLabel: String)
     case localMultiple(emptyMeaning: String)
@@ -202,15 +182,14 @@ struct BookSelectionTestScenario: Identifiable, Hashable {
     let runtimeHint: String?
 }
 
-/// 绑定一次测试 Sheet 的业务场景和展示样式，避免呈现期间切换选择器导致当前 Sheet 换壳。
+/// 绑定一次测试 Sheet 的业务场景与固定预选数据，保证异步确认可重复验证。
 struct BookSelectionSheetPresentationRequest: Identifiable, Hashable {
     let scenario: BookSelectionTestScenario
-    let sheetPresentationStyle: BookPickerSheetPresentationStyle
     let preselectedRemoteResults: [BookSearchResult]
 
     var id: String {
         let remoteSelectionIdentity = preselectedRemoteResults.map(\.id).joined(separator: ",")
-        return "\(scenario.id)-\(sheetPresentationStyle.rawValue)-\(remoteSelectionIdentity)"
+        return "\(scenario.id)-\(remoteSelectionIdentity)"
     }
 }
 
@@ -222,7 +201,6 @@ struct BookSelectionScenarioPreview: Hashable {
 
 @Observable
 final class BookSelectionTestViewModel {
-    var selectedSheetPresentationStyle: BookPickerSheetPresentationStyle = .appleRecommended
     var presentedSheetRequest: BookSelectionSheetPresentationRequest?
     var sampleLocalBooks: [BookPickerBook]
     var isLoadingSampleLocalBooks = false
@@ -574,11 +552,10 @@ final class BookSelectionTestViewModel {
         Self.scenarios.filter { $0.group == group }
     }
 
-    /// 按当前选择的 Sheet 展示样式打开业务场景，并冻结这次呈现的样式值。
+    /// 使用与生产一致的系统 Sheet 样式打开固定业务场景。
     func open(_ scenario: BookSelectionTestScenario) {
         presentedSheetRequest = BookSelectionSheetPresentationRequest(
             scenario: scenario,
-            sheetPresentationStyle: selectedSheetPresentationStyle,
             preselectedRemoteResults: []
         )
     }
@@ -591,7 +568,6 @@ final class BookSelectionTestViewModel {
         }
         presentedSheetRequest = BookSelectionSheetPresentationRequest(
             scenario: asynchronousConfirmationScenario,
-            sheetPresentationStyle: selectedSheetPresentationStyle,
             preselectedRemoteResults: [remoteResult]
         )
     }

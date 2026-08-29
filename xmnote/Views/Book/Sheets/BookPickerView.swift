@@ -1,19 +1,11 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer 或 Debug 仓储替身提供本地书与在线搜索，Debug 可附带固定远端预选；依赖 BookPickerViewModel 维护共享选择草稿，并复用 XMScrollEdgeChrome 协调固定控件与滚动内容
- * [OUTPUT]: 对外提供生产默认标准样式的 BookPickerView，并为测试中心提供支持确定性异步确认、带系统顶部/底部 soft scroll-edge 的 Apple 推荐 Sheet 对比
+ * [OUTPUT]: 对外提供生产与测试中心共用的 iOS 26 系统样式 BookPickerView，并支持确定性异步确认验证
  * [POS]: Book 模块业务 Sheet，负责统一书籍选择流，不承担具体业务页保存逻辑
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
-
-/// 书籍选择 Sheet 的内部展示壳；生产入口固定使用当前标准，仅由 Debug 测试中心选择 Apple 推荐候选。
-enum BookPickerSheetPresentationStyle: String, CaseIterable, Identifiable, Hashable, Sendable {
-    case currentStandard
-    case appleRecommended
-
-    var id: String { rawValue }
-}
 
 /// 允许测试中心替换数据源，同时保持生产入口继续从 App 环境读取仓储。
 private struct BookPickerRepositoryOverride {
@@ -33,7 +25,6 @@ struct BookPickerView: View {
     let onComplete: (BookPickerResult) -> Void
 
     private let repositoryOverride: BookPickerRepositoryOverride?
-    private let sheetPresentationStyle: BookPickerSheetPresentationStyle
 
     /// 创建使用 App 仓储环境的生产书籍选择 Sheet。
     init(
@@ -43,7 +34,6 @@ struct BookPickerView: View {
         self.configuration = configuration
         self.onComplete = onComplete
         self.repositoryOverride = nil
-        self.sheetPresentationStyle = .currentStandard
     }
 
     #if DEBUG
@@ -52,13 +42,11 @@ struct BookPickerView: View {
         configuration: BookPickerConfiguration,
         bookRepository: any BookPickerRepositoryProtocol,
         searchRepository: any BookSearchRepositoryProtocol,
-        sheetPresentationStyle: BookPickerSheetPresentationStyle = .currentStandard,
         preselectedRemoteResults: [BookSearchResult] = [],
         onComplete: @escaping (BookPickerResult) -> Void
     ) {
         self.configuration = configuration
         self.onComplete = onComplete
-        self.sheetPresentationStyle = sheetPresentationStyle
         self.repositoryOverride = BookPickerRepositoryOverride(
             bookRepository: bookRepository,
             searchRepository: searchRepository,
@@ -75,7 +63,6 @@ struct BookPickerView: View {
                 onComplete: onComplete,
                 bookRepository: repositoryOverride.bookRepository,
                 searchRepository: repositoryOverride.searchRepository,
-                sheetPresentationStyle: sheetPresentationStyle,
                 initialRemoteSelections: repositoryOverride.preselectedRemoteResults
             )
         } else {
@@ -100,7 +87,6 @@ private struct BookPickerEnvironmentResolver: View {
             onComplete: onComplete,
             bookRepository: repositories.bookRepository,
             searchRepository: repositories.bookSearchRepository,
-            sheetPresentationStyle: .currentStandard,
             initialRemoteSelections: []
         )
     }
@@ -112,7 +98,6 @@ private struct BookPickerResolvedView: View {
     let onComplete: (BookPickerResult) -> Void
     let bookRepository: any BookPickerRepositoryProtocol
     let searchRepository: any BookSearchRepositoryProtocol
-    let sheetPresentationStyle: BookPickerSheetPresentationStyle
     let initialRemoteSelections: [BookSearchResult]
 
     @Environment(\.dismiss) private var dismiss
@@ -120,7 +105,6 @@ private struct BookPickerResolvedView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var viewModel: BookPickerViewModel?
-    @State private var activeSheet: ActiveSheet?
     @State private var isSearchActive = false
     @State private var isPreparingSeed = false
     @State private var didComplete = false
@@ -129,12 +113,6 @@ private struct BookPickerResolvedView: View {
     @State private var localLoadingGate = LoadingGate()
     @State private var confirmationTask: Task<Void, Never>?
 
-    private enum ActiveSheet: String, Identifiable {
-        case selectedBooks
-
-        var id: String { rawValue }
-    }
-
     private enum AppleRoute: Hashable {
         case selectedBooks
     }
@@ -142,7 +120,7 @@ private struct BookPickerResolvedView: View {
     var body: some View {
         ZStack {
             if let viewModel {
-                pickerPresentation(viewModel)
+                appleRecommendedPickerScaffold(viewModel)
             } else {
                 loadingPresentation
             }
@@ -155,14 +133,6 @@ private struct BookPickerResolvedView: View {
         .task {
             await prepareViewModelIfNeeded()
         }
-        .sheet(item: $activeSheet) { sheet in
-            switch sheet {
-            case .selectedBooks:
-                if let viewModel {
-                    BookPickerSelectedBooksSheet(viewModel: viewModel)
-                }
-            }
-        }
         .interactiveDismissDisabled(isAppleRecommendedConfirmationRunning)
         .onDisappear {
             localLoadingGate.hideImmediately()
@@ -171,38 +141,17 @@ private struct BookPickerResolvedView: View {
         }
     }
 
-    @ViewBuilder
-    private func pickerPresentation(_ viewModel: BookPickerViewModel) -> some View {
-        switch sheetPresentationStyle {
-        case .currentStandard:
-            currentStandardPickerScaffold(viewModel)
-        case .appleRecommended:
-            appleRecommendedPickerScaffold(viewModel)
-        }
-    }
-
-    @ViewBuilder
     private var loadingPresentation: some View {
-        switch sheetPresentationStyle {
-        case .currentStandard:
-            XMSheetScaffold(
-                title: configuration.title,
-                onClose: handleCancel
-            ) {
-                loadingContent
-            }
-        case .appleRecommended:
-            NavigationStack {
-                loadingContent
-                    .background(Color.surfaceSheet.ignoresSafeArea())
-                    .navigationTitle(configuration.title)
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            appleRecommendedCloseButton(isDisabled: false)
-                        }
+        NavigationStack {
+            loadingContent
+                .background(Color.surfaceSheet.ignoresSafeArea())
+                .navigationTitle(configuration.title)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        appleRecommendedCloseButton(isDisabled: false)
                     }
-            }
+                }
         }
     }
 
@@ -211,43 +160,6 @@ private struct BookPickerResolvedView: View {
             .frame(maxWidth: .infinity)
             .padding(.horizontal, Spacing.screenEdge)
             .padding(.top, Spacing.section)
-    }
-
-    @ViewBuilder
-    private func currentStandardPickerScaffold(_ viewModel: BookPickerViewModel) -> some View {
-        if viewModel.isMultipleSelectionEnabled {
-            XMSheetScaffold(
-                title: configuration.title,
-                onClose: handleCancel,
-                scrollEdgePresentation: .overlaySoft,
-                titleSubtitle: {
-                    BookPickerSelectionSubtitle(
-                        count: viewModel.selectedCount,
-                        allowsEmptySelection: viewModel.allowsEmptyMultipleConfirmation,
-                        onOpenSelection: { activeSheet = .selectedBooks }
-                    )
-                },
-                contentTopBar: {
-                    searchBar(viewModel)
-                },
-                bottomBar: {
-                    multipleSelectionBar(viewModel)
-                }
-            ) {
-                scrollableContent(viewModel)
-            }
-        } else {
-            XMSheetScaffold(
-                title: configuration.title,
-                onClose: handleCancel,
-                scrollEdgePresentation: .overlaySoft,
-                contentTopBar: {
-                    searchBar(viewModel)
-                }
-            ) {
-                scrollableContent(viewModel)
-            }
-        }
     }
 
     private func appleRecommendedPickerScaffold(_ viewModel: BookPickerViewModel) -> some View {
@@ -303,15 +215,13 @@ private struct BookPickerResolvedView: View {
 
     @ToolbarContentBuilder
     private func appleRecommendedToolbar(_ viewModel: BookPickerViewModel) -> some ToolbarContent {
-        if appleNavigationPath.isEmpty {
-            ToolbarItem(placement: .cancellationAction) {
-                appleRecommendedCloseButton(isDisabled: viewModel.isResolvingRemoteSelections)
-            }
+        ToolbarItem(placement: .cancellationAction) {
+            appleRecommendedCloseButton(isDisabled: viewModel.isResolvingRemoteSelections)
+        }
 
-            if viewModel.isMultipleSelectionEnabled {
-                ToolbarItem(placement: .confirmationAction) {
-                    appleRecommendedConfirmationButton(viewModel)
-                }
+        if viewModel.isMultipleSelectionEnabled {
+            ToolbarItem(placement: .confirmationAction) {
+                appleRecommendedConfirmationButton(viewModel)
             }
         }
     }
@@ -350,18 +260,18 @@ private struct BookPickerResolvedView: View {
     }
 
     private var isAppleRecommendedConfirmationRunning: Bool {
-        sheetPresentationStyle == .appleRecommended
-            && viewModel?.isResolvingRemoteSelections == true
+        viewModel?.isResolvingRemoteSelections == true
     }
 
     private func appleRecommendedSearchBar(_ viewModel: BookPickerViewModel) -> some View {
-        BookPickerSystemSearchBar(
+        XMSystemSearchBar(
             text: Binding(
                 get: { viewModel.query },
                 set: { viewModel.updateQuery($0) }
             ),
             isActive: $isSearchActive,
             prompt: "搜索书名、作者、ISBN",
+            accessibilityIdentifier: "book.picker.search",
             isEnabled: !viewModel.isResolvingRemoteSelections,
             onSubmit: {
                 guard viewModel.visibleScope == .online else { return }
@@ -705,50 +615,6 @@ private struct BookPickerResolvedView: View {
         return subtitle.isEmpty ? result.source.title : "\(subtitle) · \(result.source.title)"
     }
 
-    private func searchBar(_ viewModel: BookPickerViewModel) -> some View {
-        XMInlineSearchField(
-            text: Binding(
-                get: { viewModel.query },
-                set: { viewModel.updateQuery($0) }
-            ),
-            isActive: $isSearchActive,
-            prompt: "搜索书名、作者、ISBN",
-            cancelPresentation: .hidden,
-            onSubmit: {
-                guard viewModel.visibleScope == .online else { return }
-                Task {
-                    await viewModel.submitOnlineSearch()
-                }
-            }
-        )
-        .disabled(viewModel.isResolvingRemoteSelections)
-        .padding(.horizontal, Spacing.screenEdge)
-        .padding(.bottom, Spacing.section)
-    }
-
-    private func scrollableContent(_ viewModel: BookPickerViewModel) -> some View {
-        ScrollViewReader { proxy in
-            VStack(alignment: .leading, spacing: Spacing.base) {
-                if showsControls(viewModel) {
-                    controlsSection(viewModel)
-                }
-                resultsSection(viewModel)
-            }
-            .padding(.horizontal, Spacing.screenEdge)
-            .padding(.bottom, Spacing.section)
-            .onAppear {
-                syncLocalLoadingGate(viewModel)
-                scrollToPendingBookIfNeeded(using: proxy, viewModel: viewModel)
-            }
-            .onChange(of: viewModel.status) { _, _ in
-                syncLocalLoadingGate(viewModel)
-            }
-            .onChange(of: viewModel.localBooks.map(\.id)) { _, _ in
-                scrollToPendingBookIfNeeded(using: proxy, viewModel: viewModel)
-            }
-        }
-    }
-
     private func showsControls(_ viewModel: BookPickerViewModel) -> Bool {
         viewModel.supportsScopeSwitch
             || (viewModel.supportsOnline && viewModel.visibleScope == .online)
@@ -1047,18 +913,6 @@ private struct BookPickerResolvedView: View {
         .frame(maxWidth: .infinity, minHeight: BookPickerGroupedSurfaceLayout.unavailableMinimumHeight)
     }
 
-    private func multipleSelectionBar(_ viewModel: BookPickerViewModel) -> some View {
-        Button(multipleConfirmationTitle(for: viewModel)) {
-            confirmMultipleSelection(viewModel)
-        }
-        .buttonStyle(BookPickerConfirmationButtonStyle())
-        .disabled(!canConfirmMultipleSelection(viewModel))
-        .accessibilityIdentifier("book.picker.confirm")
-        .padding(.horizontal, Spacing.screenEdge)
-        .padding(.top, Spacing.cozy)
-        .padding(.bottom, Spacing.base)
-    }
-
     /// 在 MainActor 上启动一次多选确认；新请求会取消旧任务，Sheet 离场时同步取消，完成前检查取消状态避免过期结果回流。
     private func confirmMultipleSelection(_ viewModel: BookPickerViewModel) {
         confirmationTask?.cancel()
@@ -1110,10 +964,6 @@ private struct BookPickerResolvedView: View {
             && (viewModel.selectedCount > 0 || viewModel.allowsEmptyMultipleConfirmation)
     }
 
-    private func multipleConfirmationTitle(for viewModel: BookPickerViewModel) -> String {
-        viewModel.isResolvingRemoteSelections ? "正在整理…" : configuration.multipleConfirmationTitle
-    }
-
     private var localNoResultsMessage: String {
         switch configuration.creationAction {
         case .inlineManualEditor:
@@ -1137,10 +987,6 @@ private struct BookPickerResolvedView: View {
     }
 
     private func blockingOverlayMessage(for viewModel: BookPickerViewModel) -> String? {
-        if viewModel.isResolvingRemoteSelections,
-           sheetPresentationStyle == .currentStandard {
-            return "正在整理选中书籍…"
-        }
         if isPreparingSeed {
             return "正在补全书籍信息…"
         }
@@ -1481,45 +1327,4 @@ struct BookPickerGroupedRowButtonStyle: ButtonStyle {
                 )
             )
     }
-}
-
-/// BookPicker 私有的底部确认样式；使用可用宽度，不把单一 Sheet 尺寸晋升为公共按钮合同。
-private struct BookPickerConfirmationButtonStyle: ButtonStyle {
-    @Environment(\.isEnabled) private var isEnabled
-
-    func makeBody(configuration: Configuration) -> some View {
-        let shape = RoundedRectangle(
-            cornerRadius: CornerRadius.blockLarge,
-            style: .continuous
-        )
-
-        configuration.label
-            .font(AppTypography.headlineSemibold)
-            .foregroundStyle(
-                isEnabled
-                    ? Color.primaryActionForeground
-                    : Color.buttonDisabledForeground
-            )
-            .multilineTextAlignment(.center)
-            .padding(.horizontal, Spacing.screenEdge)
-            .frame(
-                maxWidth: .infinity,
-                minHeight: BookPickerConfirmationMetrics.minimumControlHeight
-            )
-            .background(
-                isEnabled ? Color.primaryActionFill : Color.buttonDisabled,
-                in: shape
-            )
-            .contentShape(shape)
-            .opacity(
-                isEnabled && configuration.isPressed
-                    ? BookPickerConfirmationMetrics.pressedOpacity
-                    : 1
-            )
-    }
-}
-
-private enum BookPickerConfirmationMetrics {
-    static let minimumControlHeight: CGFloat = 46
-    static let pressedOpacity = 0.86
 }

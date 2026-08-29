@@ -1,7 +1,7 @@
 #if DEBUG
 /**
  * [INPUT]: 依赖 BookSelectionTestViewModel 提供业务映射、包含异步模拟预选的 Sheet 请求与固定仓储替身，依赖 BookPickerView 承接两种选择体验
- * [OUTPUT]: 对外提供 BookSelectionTestView，集中展示 Sheet 样式对比、确定性异步确认模拟、业务场景矩阵与结果预览
+ * [OUTPUT]: 对外提供 BookSelectionTestView，集中展示生产系统 Sheet 标准、确定性异步确认模拟、业务场景矩阵与结果预览
  * [POS]: Debug 模块书籍选择测试中心，用固定数据回归验证统一 BookPicker，不依赖真实书架和外部网络
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -45,7 +45,6 @@ struct BookSelectionTestView: View {
                 configuration: viewModel.configuration(for: scenario),
                 bookRepository: repository,
                 searchRepository: repository,
-                sheetPresentationStyle: request.sheetPresentationStyle,
                 preselectedRemoteResults: request.preselectedRemoteResults,
                 onComplete: { result in
                     viewModel.record(result, for: scenario)
@@ -64,23 +63,15 @@ struct BookSelectionTestView: View {
                         .font(AppTypography.headlineSemibold)
                         .foregroundStyle(Color.textPrimary)
 
-                    Text("使用同一份场景配置和固定数据，对比现有底部主按钮与 Apple 顶部成对操作。")
+                    Text("测试中心与生产统一使用 iOS 26 系统工具栏：左侧关闭，显式提交时右侧确认，搜索位于标题下方。")
                         .font(AppTypography.subheadline)
                         .foregroundStyle(Color.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                Picker("Sheet 展示样式", selection: sheetPresentationStyleBinding) {
-                    ForEach(BookPickerSheetPresentationStyle.allCases) { style in
-                        Text(style.debugTitle).tag(style)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .accessibilityIdentifier("debug.book-selection.sheet-style")
-
-                Text(viewModel.selectedSheetPresentationStyle.debugSummary)
+                Label("Apple 系统标准已接入生产", systemImage: "checkmark.seal.fill")
                     .font(AppTypography.subheadline)
-                    .foregroundStyle(Color.textPrimary)
+                    .foregroundStyle(Color.appTint)
                     .fixedSize(horizontal: false, vertical: true)
 
                 Button(action: viewModel.openAsynchronousConfirmationComparison) {
@@ -265,13 +256,6 @@ struct BookSelectionTestView: View {
             }
         }
         .scrollBounceBehavior(.always)
-    }
-
-    private var sheetPresentationStyleBinding: Binding<BookPickerSheetPresentationStyle> {
-        Binding(
-            get: { viewModel.selectedSheetPresentationStyle },
-            set: { viewModel.selectedSheetPresentationStyle = $0 }
-        )
     }
 
     private var presentedSheetRequestBinding: Binding<BookSelectionSheetPresentationRequest?> {
