@@ -70,9 +70,9 @@ struct RelatedCategoryListView: View {
             isLoading: viewModel.phase == .loading,
             isEmpty: viewModel.phase == .empty,
             errorMessage: failureMessage(viewModel.phase),
+            retainedErrorMessage: viewModel.observationErrorMessage,
             loadingMessage: "正在加载相关内容…",
-            emptyMessage: viewModel.normalizedSearchText.isEmpty ? "这个分类还没有相关内容" : "没有匹配的相关内容",
-            emptyIcon: "link",
+            emptyMessage: viewModel.normalizedSearchText.isEmpty ? "暂无相关内容" : "没有匹配的相关内容",
             onRetry: viewModel.retry
         ) {
             relatedList(viewModel)

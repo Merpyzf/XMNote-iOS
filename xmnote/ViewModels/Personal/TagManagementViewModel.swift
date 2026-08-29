@@ -84,6 +84,7 @@ final class TagManagementViewModel {
     }
     var snapshot: TagManagementSnapshot = .empty
     var contentState: TagManagementContentState = .loading
+    var observationErrorMessage: String?
     var selectedTagIDs: Set<Int64> = []
     var isSelectionMode = false
     var activeWriteAction: TagManagementWriteAction?
@@ -193,6 +194,12 @@ final class TagManagementViewModel {
     isolated deinit {
         observationTask?.cancel()
         writeTask?.cancel()
+    }
+
+    /// 重新建立标签观察流，用于首轮读取失败后的显式恢复。
+    func retryObservation() {
+        observationTask?.cancel()
+        startObservation()
     }
 
     /// 打开新增标签 Sheet，提交前不会触发写库。
@@ -441,20 +448,29 @@ private extension TagManagementViewModel {
     }
 
     func startObservation() {
-        contentState = .loading
+        observationErrorMessage = nil
+        if currentTags.isEmpty {
+            contentState = .loading
+        }
         observationTask = Task {
             do {
                 for try await nextSnapshot in repository.observeTagManagementSnapshot() {
                     guard !Task.isCancelled else { return }
                     await MainActor.run {
                         self.snapshot = nextSnapshot
+                        self.observationErrorMessage = nil
                         self.selectedTagIDs = self.selectedTagIDs.intersection(Set(self.currentTags.map(\.id)))
                         self.refreshContentState()
                     }
                 }
             } catch {
                 await MainActor.run {
-                    self.contentState = .error(self.displayMessage(for: error))
+                    if self.currentTags.isEmpty {
+                        self.contentState = .error("暂时无法加载标签")
+                    } else {
+                        self.contentState = .content
+                        self.observationErrorMessage = "标签刷新失败"
+                    }
                 }
             }
         }

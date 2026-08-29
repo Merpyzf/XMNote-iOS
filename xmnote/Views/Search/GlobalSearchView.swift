@@ -292,18 +292,16 @@ private struct GlobalSearchLoadedContent: View {
                 if viewModel.snapshot.isEmpty {
                     XMContentStateView(
                         role: .noResults,
-                        title: "没有找到内容",
-                        message: "换个关键词再试"
+                        title: "没有匹配的内容"
                     )
                 } else {
                     resultsContent
                 }
-            case .failed(_, let message):
+            case .failed:
                 XMContentStateView(
                     role: .failure,
                     title: "搜索失败",
-                    message: message,
-                    action: XMStateAction("重新搜索", systemImage: "arrow.clockwise") {
+                    action: XMStateAction("重试") {
                         viewModel.retry(query: query)
                     }
                 )
@@ -378,15 +376,13 @@ private struct GlobalSearchLoadedContent: View {
                     if showsFieldScopeFilter {
                         XMCompactStateView(
                             role: .noResults,
-                            title: "没有找到内容",
-                            message: "换个范围试试"
+                            title: "没有匹配的内容"
                         )
                     } else {
                         topAnchoredContent {
                             XMCompactStateView(
                                 role: .noResults,
-                                title: "没有找到内容",
-                                message: "换个范围试试"
+                                title: "没有匹配的内容"
                             )
                         }
                     }

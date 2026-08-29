@@ -60,9 +60,7 @@ struct BookPickerSelectedBooksSheet: View {
         } else if filteredItems.isEmpty {
             XMCompactStateView(
                 role: .noResults,
-                title: "没有找到匹配的书",
-                message: "可以修改关键词后继续查找已选书籍",
-                systemImage: "magnifyingglass",
+                title: "没有匹配的书籍",
                 style: .card
             )
             .frame(maxWidth: .infinity, minHeight: BookPickerGroupedSurfaceLayout.unavailableMinimumHeight)
@@ -100,10 +98,9 @@ struct BookPickerSelectedBooksSheet: View {
     private var emptySelection: some View {
         XMCompactStateView(
             role: .empty,
-            title: "还没有选择书籍",
-            message: "返回书籍列表，继续选择需要的书籍",
+            title: "暂无已选书籍",
             systemImage: "books.vertical",
-            action: XMStateAction("继续选择", systemImage: "chevron.backward") {
+            action: XMStateAction("继续选择") {
                 dismiss()
             },
             style: .card

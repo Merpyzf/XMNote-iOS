@@ -216,7 +216,7 @@ struct DailyReadingView: View {
                     XMInlineStatusBanner(
                         observationErrorMessage,
                         tone: .warning,
-                        action: XMStateAction("重试", systemImage: "arrow.clockwise", perform: retryObservation)
+                        action: XMStateAction("重试", perform: retryObservation)
                     )
                     .padding(.horizontal, Spacing.screenEdge)
                 }
@@ -234,16 +234,11 @@ struct DailyReadingView: View {
     private var emptyState: some View {
         XMContentStateView(
             role: .empty,
-            title: "当天还没有阅读轨迹",
-            message: "添加阅读打卡后，记录会按发生时间出现在这里",
+            title: "当天没有阅读记录",
             systemImage: "calendar.badge.clock",
-            action: XMStateAction(
-                viewModel.checkInActionTitle,
-                systemImage: "plus",
-                isEnabled: viewModel.canCheckIn && !viewModel.isWriting
-            ) {
-                isCheckInPresented = true
-            }
+            action: viewModel.canCheckIn && !viewModel.isWriting
+                ? XMStateAction("打卡") { isCheckInPresented = true }
+                : nil
         )
         .frame(maxHeight: .infinity)
     }
@@ -252,10 +247,8 @@ struct DailyReadingView: View {
         XMContentStateView(
             role: .noResults,
             title: "没有符合条件的记录",
-            message: "可以切换书籍或记录类型，查看当天的其他阅读轨迹",
-            systemImage: "line.3.horizontal.decrease.circle",
             action: viewModel.hasActiveFilter
-                ? XMStateAction("显示全部记录", systemImage: "line.3.horizontal.decrease.circle") {
+                ? XMStateAction("显示全部") {
                     Task {
                         await viewModel.clearFilters(using: repositories.readCalendarRepository)
                     }
@@ -268,10 +261,8 @@ struct DailyReadingView: View {
     private var failureState: some View {
         XMContentStateView(
             role: .failure,
-            title: "无法加载阅读轨迹",
-            message: viewModel.errorMessage ?? "请稍后重试",
-            systemImage: "exclamationmark.triangle",
-            action: XMStateAction("重试", systemImage: "arrow.clockwise") {
+            title: "暂时无法加载阅读轨迹",
+            action: XMStateAction("重试") {
                 Task { await viewModel.reload(using: repositories.readCalendarRepository) }
             }
         )

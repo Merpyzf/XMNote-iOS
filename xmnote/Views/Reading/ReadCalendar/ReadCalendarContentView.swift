@@ -514,7 +514,7 @@ private extension ReadCalendarContentView {
                 XMInlineStatusBanner(
                     errorMessage,
                     tone: .warning,
-                    action: XMStateAction("重试", systemImage: "arrow.clockwise", perform: onRetry)
+                    action: XMStateAction("重试", perform: onRetry)
                 )
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
@@ -1252,7 +1252,7 @@ private extension ReadCalendarContentView {
                         XMInlineStatusBanner(
                             selectedYearErrorMessage,
                             tone: .warning,
-                            action: XMStateAction("重试", systemImage: "arrow.clockwise", perform: onRetry)
+                            action: XMStateAction("重试", perform: onRetry)
                         )
                         .padding(.horizontal, Layout.yearHeatmapErrorBannerHorizontalInset)
                         .padding(.bottom, Layout.yearHeatmapErrorBannerBottomInset)
@@ -1476,7 +1476,7 @@ private extension ReadCalendarContentView {
     }
 
     var emptyState: some View {
-        XMCompactStateView(
+        XMContentStateView(
             role: props.errorMessage == nil ? .empty : .failure,
             title: props.errorMessage == nil
                 ? (isHeatmapMode ? "暂无可展示的年度数据" : "暂无可展示的阅读月份")
@@ -1485,7 +1485,7 @@ private extension ReadCalendarContentView {
             systemImage: "calendar.badge.clock",
             action: props.errorMessage == nil
                 ? nil
-                : XMStateAction("重试", systemImage: "arrow.clockwise", perform: onRetry)
+                : XMStateAction("重试", perform: onRetry)
         )
         .frame(maxWidth: .infinity, minHeight: Layout.pageMinHeight)
     }

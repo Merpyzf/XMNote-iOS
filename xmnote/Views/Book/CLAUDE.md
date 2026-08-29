@@ -12,6 +12,7 @@
 - `ChapterManagerView.swift`: 五层书内目录管理、导入、星标、移动、排序与删除页面
 - `Components/BookWorkspaceCollectionView.swift`: 书籍工作台页面私有原生分页、共享 Chrome、吸顶与视口稳定宿主
 - `Components/BookWorkspaceNoteItem.swift`: 书籍工作台页面私有章节标题、书摘卡片与布局刻度
+- `Components/BookshelfGridLayoutPolicy.swift`: 默认书架与二级书单共用的页面私有动态列数、Dynamic Type 与网格项高度策略
 - `Components/BookSearchChipButtonStyle.swift`: 书籍搜索页面私有胶囊按压样式
 - `Components/BookSearchRecentQueriesSection.swift`: 书籍搜索最近查询区块
 - `Components/BookSearchResultRow.swift`: 书籍搜索结果行

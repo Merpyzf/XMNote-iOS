@@ -83,6 +83,7 @@ final class SourceManagementViewModel {
     }
     var snapshot: SourceManagementSnapshot = .empty
     var contentState: SourceManagementContentState = .loading
+    var observationErrorMessage: String?
     var activeWriteAction: SourceManagementWriteAction?
     var writeError: String?
     var toastFeedback: SourceManagementToastFeedback?
@@ -186,6 +187,12 @@ final class SourceManagementViewModel {
     isolated deinit {
         observationTask?.cancel()
         writeTask?.cancel()
+    }
+
+    /// 重新建立来源观察流，用于首轮读取失败后的显式恢复。
+    func retryObservation() {
+        observationTask?.cancel()
+        startObservation()
     }
 
     /// 打开新增来源 Sheet，提交前不会触发写库。
@@ -405,19 +412,28 @@ private extension SourceManagementViewModel {
 
     /// 启动来源快照观察；观察流在后台 Task 中迭代，所有状态写回通过 MainActor 串行化以避免竞态。
     func startObservation() {
-        contentState = .loading
+        observationErrorMessage = nil
+        if currentSources.isEmpty {
+            contentState = .loading
+        }
         observationTask = Task {
             do {
                 for try await nextSnapshot in repository.observeSourceManagementSnapshot() {
                     guard !Task.isCancelled else { return }
                     await MainActor.run {
                         self.snapshot = nextSnapshot
+                        self.observationErrorMessage = nil
                         self.refreshContentState()
                     }
                 }
             } catch {
                 await MainActor.run {
-                    self.contentState = .error(self.displayMessage(for: error))
+                    if self.currentSources.isEmpty {
+                        self.contentState = .error("暂时无法加载来源")
+                    } else {
+                        self.contentState = .content
+                        self.observationErrorMessage = "来源刷新失败"
+                    }
                 }
             }
         }

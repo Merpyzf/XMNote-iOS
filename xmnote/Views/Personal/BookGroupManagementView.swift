@@ -297,24 +297,21 @@ private struct BookGroupManagementContentView: View {
         case .empty:
             XMContentStateView(
                 role: .empty,
-                title: "暂无书籍分组",
-                systemImage: "folder"
+                title: "暂无书籍分组"
             )
             .bookGroupManagementStateRow()
-        case .error(let message):
+        case .error:
             XMContentStateView(
                 role: .failure,
-                title: "分组加载失败",
-                message: message,
-                systemImage: "exclamationmark.triangle"
+                title: "暂时无法加载分组",
+                action: XMStateAction("重试", perform: viewModel.retryObservation)
             )
             .bookGroupManagementStateRow()
         case .content:
             if viewModel.isSearchResultEmpty {
                 XMContentStateView(
                     role: .noResults,
-                    title: "没有匹配的分组",
-                    message: "未找到与“\(viewModel.normalizedSearchText)”匹配的分组。"
+                    title: "没有匹配的分组"
                 )
                     .bookGroupManagementStateRow()
             } else {
@@ -325,6 +322,18 @@ private struct BookGroupManagementContentView: View {
 
     private var groupList: some View {
         List {
+            if let observationErrorMessage = viewModel.observationErrorMessage {
+                Section {
+                    XMInlineStatusBanner(
+                        observationErrorMessage,
+                        tone: .error,
+                        action: XMStateAction("重试", perform: viewModel.retryObservation)
+                    )
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                }
+            }
+
             if !isReordering {
                 Section {
                     PersonalManagementSearchListRow(

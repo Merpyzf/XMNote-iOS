@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 NoteExcerpt、ExpandableRichText、XMJXImageWall、XMTagLabel 与 DesignTokens 展示单书工作台章节、书摘和头部排版令牌
- * [OUTPUT]: 对 BookDetailView 提供统一结构轴、具备对称边界呼吸并带无缝连续书名、色点中性状态与评分缺席态等距底部呼吸的独立普通评分胶囊的无边缘光晕封面影像 Hero、低于书摘正文的统一出版元数据层级、三项轻透阅读指标 Chip、中性内容台阶与折叠导航中和布局刻度，以及共享中性画布的章节和书摘内容
+ * [OUTPUT]: 对 BookDetailView 提供统一结构轴、具备对称边界呼吸并带无缝连续书名、色点中性状态与评分缺席态等距底部呼吸的独立普通评分胶囊的无边缘光晕封面影像 Hero、低于书摘正文的统一出版元数据层级、三项轻透阅读指标 Chip、中性内容台阶、状态视口下限与折叠导航中和布局刻度，以及共享中性画布的章节和书摘内容
  * [POS]: Views/Book/Components 的页面私有内容组件，承接影像 Hero 头部节奏、中性内容层、章节分组和具备清晰信息亲密性的书摘列表项
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -61,6 +61,7 @@ enum BookWorkspaceLayoutMetrics {
     static let scopeIndicatorOffset: CGFloat = Spacing.tight
     static let scopeAccessibilityIndicatorSpacing: CGFloat = Spacing.cozy
     static let scopeBarEstimatedHeight: CGFloat = InteractionMetrics.minimumTouchTarget
+    static let stateViewportMinimumHeight: CGFloat = 280
     static let contentStepTopCornerRadius: CGFloat = 20
     static let contentStepBoundaryOpacity: CGFloat = 0.18
     static let navigationNeutralizationDistance: CGFloat = 64

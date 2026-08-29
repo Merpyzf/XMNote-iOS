@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 OCRRepositoryProtocol 与 NotePhotoOCRFlowViewModel 驱动正式书摘 OCR 状态，依赖 AppTypography、AVFoundation/PhotosUI 提供排版、拍照与选图能力
- * [OUTPUT]: 对外提供 NotePhotoOCRFlowView，以统一文本与中性辅助图标 token 承载书摘编辑页的拍照、单框裁切与识别回填流程
+ * [OUTPUT]: 对外提供 NotePhotoOCRFlowView 与 OCRCameraUnavailableStateView，以中性状态视觉承载拍照、裁切与识别回填流程
  * [POS]: Views/Note/Components 的页面私有子视图，负责对齐 Android 的正式拍照 OCR 主流程
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -188,35 +188,10 @@ private extension OCRCameraScreen {
     @ViewBuilder
     var cameraPreviewLayer: some View {
         if cameraController.shouldShowFailurePlaceholder {
-            ZStack {
-                LinearGradient(
-                    colors: [
-                        Color.black,
-                        Color.appTint.opacity(0.12),
-                        Color.black
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
-
-                VStack(spacing: Spacing.base) {
-                    Image(systemName: cameraController.placeholderIconName)
-                        .font(.system(size: 34, weight: .semibold))
-                        .foregroundStyle(Color.white.opacity(0.78))
-
-                    Text(cameraController.stateMessage)
-                        .font(AppTypography.subheadlineMedium)
-                        .foregroundStyle(Color.white.opacity(0.92))
-                        .multilineTextAlignment(.center)
-
-                    Text("即使当前设备无法打开相机，你仍可通过底部“相册”按钮进入裁切识别页")
-                        .font(AppTypography.footnote)
-                        .foregroundStyle(Color.white.opacity(0.68))
-                        .multilineTextAlignment(.center)
-                }
-                .padding(.horizontal, Spacing.double)
-            }
+            OCRCameraUnavailableStateView(
+                iconName: cameraController.placeholderIconName,
+                message: cameraController.stateMessage
+            )
         } else {
             ZStack {
                 Color.black
@@ -435,8 +410,7 @@ private extension OCRCameraScreen {
         if isLoadingPhotoItem {
             return "正在读取相册图片…"
         }
-        guard cameraController.shouldShowFailurePlaceholder else { return nil }
-        return cameraController.stateMessage
+        return nil
     }
 
     func showGuideTipIfNeeded() {
@@ -550,6 +524,33 @@ private extension OCRCameraScreen {
         } catch {
             photoLoadingErrorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
+    }
+}
+
+/// OCR 相机不可用状态保留取景器的深色上下文，并把具体恢复入口交还给底部工具区。
+struct OCRCameraUnavailableStateView: View {
+    let iconName: String
+    let message: String
+
+    var body: some View {
+        ZStack {
+            Color.black
+
+            VStack(spacing: Spacing.base) {
+                Image(systemName: iconName)
+                    .font(.system(size: 32, weight: .regular))
+                    .foregroundStyle(Color.white.opacity(0.68))
+                    .accessibilityHidden(true)
+
+                Text(message)
+                    .font(AppTypography.subheadline)
+                    .foregroundStyle(Color.white.opacity(0.82))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, Spacing.double)
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 

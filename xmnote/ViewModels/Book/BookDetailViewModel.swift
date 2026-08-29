@@ -37,12 +37,16 @@ final class BookDetailViewModel {
 #endif
 
     var book: BookDetail?
+    var detailLoadState: BookWorkspaceDomainLoadState = .loading
+    var isBookMissing = false
     var notes: [NoteExcerpt] = []
     var notesLoadState: BookNotesLoadState = .loading
     var loadedNotesCount: Int?
     var relatedCategories: [BookRelatedCategory] = []
     var related: [BookRelatedExcerpt] = []
+    var relatedLoadState: BookWorkspaceDomainLoadState = .loading
     var reviews: [BookReviewExcerpt] = []
+    var reviewsLoadState: BookWorkspaceDomainLoadState = .loading
     var headerTintRGBAHex: UInt32?
     var errorMessage: String?
     var workspace: BookContentWorkspaceSnapshot = .empty
@@ -91,6 +95,20 @@ final class BookDetailViewModel {
             Task { await observeReviews() }
         ]
         startWorkspaceObservation()
+    }
+
+    /// 首次读取失败后重建四域观察；已有内容继续保留，只有缺少可信快照的域回到加载态。
+    func retryObservation() {
+        stopObservation()
+        errorMessage = nil
+        if book == nil {
+            detailLoadState = .loading
+            isBookMissing = false
+        }
+        if notes.isEmpty { notesLoadState = .loading }
+        if related.isEmpty { relatedLoadState = .loading }
+        if reviews.isEmpty { reviewsLoadState = .loading }
+        startObservation()
     }
 
     /// 停止当前页面建立的全部观察与展示派生；重复调用安全，重新出现时可再次启动。
@@ -259,7 +277,7 @@ final class BookDetailViewModel {
             } catch is CancellationError {
                 return
             } catch {
-                self?.workspaceActionErrorMessage = error.localizedDescription
+                self?.workspaceActionErrorMessage = "操作失败"
             }
         }
     }
@@ -281,7 +299,7 @@ final class BookDetailViewModel {
             } catch is CancellationError {
                 return
             } catch {
-                self?.workspaceErrorMessage = error.localizedDescription
+                self?.workspaceErrorMessage = "工作台设置刷新失败"
                 self?.isWorkspaceLoading = false
                 self?.workspaceTask = nil
             }
@@ -296,12 +314,20 @@ final class BookDetailViewModel {
                 let preparedBook = try await Self.preparedBookOffMain(detail)
                 guard !Task.isCancelled else { return }
                 self.book = preparedBook
+                self.isBookMissing = preparedBook == nil
+                self.detailLoadState = .loaded
                 resolveHeaderTintIfNeeded(for: preparedBook)
             }
         } catch is CancellationError {
             return
         } catch {
-            recordObservationError(error)
+            if book == nil {
+                isBookMissing = false
+                detailLoadState = .failed
+            } else {
+                detailLoadState = .loaded
+                recordObservationError(error)
+            }
         }
     }
 
@@ -326,7 +352,6 @@ final class BookDetailViewModel {
 
             guard didReceiveValue || Task.isCancelled else {
                 notesLoadState = .failed
-                errorMessage = "部分内容加载失败：书摘数据流未返回内容"
 #if DEBUG
                 Self.notesLogger.error(
                     "[book.workspace.notes.stream.finished_without_value] bookID=\(self.bookId)"
@@ -337,13 +362,16 @@ final class BookDetailViewModel {
         } catch is CancellationError {
             return
         } catch {
-            notesLoadState = .failed
+            let hasRetainedContent = !notes.isEmpty
+            notesLoadState = hasRetainedContent ? .loaded : .failed
 #if DEBUG
             Self.notesLogger.error(
                 "[book.workspace.notes.stream.failed] bookID=\(self.bookId) error=\(error.localizedDescription, privacy: .public)"
             )
 #endif
-            recordObservationError(error)
+            if hasRetainedContent {
+                recordObservationError(error)
+            }
         }
     }
 
@@ -455,33 +483,55 @@ final class BookDetailViewModel {
 
     /// 订阅相关内容并在后台生成普通相关笔记的稳定纯文本预览。
     private func observeRelated() async {
+        var didReceiveValue = false
         do {
             for try await items in repository.observeBookRelated(bookId: bookId) {
                 guard !Task.isCancelled else { return }
                 let preparedItems = try await Self.preparedRelatedOffMain(items)
                 guard !Task.isCancelled else { return }
+                didReceiveValue = true
                 related = preparedItems
+                relatedLoadState = .loaded
+            }
+            if !didReceiveValue, !Task.isCancelled {
+                relatedLoadState = .failed
             }
         } catch is CancellationError {
             return
         } catch {
-            recordObservationError(error)
+            if related.isEmpty {
+                relatedLoadState = .failed
+            } else {
+                relatedLoadState = .loaded
+                recordObservationError(error)
+            }
         }
     }
 
     /// 订阅书评并在后台生成正文的稳定纯文本预览。
     private func observeReviews() async {
+        var didReceiveValue = false
         do {
             for try await items in repository.observeBookReviews(bookId: bookId) {
                 guard !Task.isCancelled else { return }
                 let preparedItems = try await Self.preparedReviewsOffMain(items)
                 guard !Task.isCancelled else { return }
+                didReceiveValue = true
                 reviews = preparedItems
+                reviewsLoadState = .loaded
+            }
+            if !didReceiveValue, !Task.isCancelled {
+                reviewsLoadState = .failed
             }
         } catch is CancellationError {
             return
         } catch {
-            recordObservationError(error)
+            if reviews.isEmpty {
+                reviewsLoadState = .failed
+            } else {
+                reviewsLoadState = .loaded
+                recordObservationError(error)
+            }
         }
     }
 
@@ -505,7 +555,7 @@ final class BookDetailViewModel {
 
     /// 收敛观察流失败为页面级可感知错误，不因单个域失败终止其余内容展示。
     private func recordObservationError(_ error: Error) {
-        errorMessage = "部分内容加载失败：\(error.localizedDescription)"
+        errorMessage = "部分内容刷新失败"
     }
 
     /// 在非主线程预处理书籍详情纯文本；父任务取消时同步取消后台解析任务。

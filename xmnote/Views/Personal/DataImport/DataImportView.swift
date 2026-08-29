@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 AppNavigationCoordinator、微信读书导入 ViewModel、WebView、BookPickerView、Photos 与统一反馈组件
- * [OUTPUT]: 对外提供书摘导入入口、授权、分批、导入预览和单书内容预览页面
+ * [OUTPUT]: 对外提供书摘导入入口、授权、分批、WereadImportBatchStatusView、导入预览和单书内容预览页面
  * [POS]: Views/Personal/DataImport 的完整微信读书扫码授权导入交互流
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -275,9 +275,11 @@ private struct WereadBatchView: View {
                     Button { viewModel.beginOpen(batch.id) } label: {
                         HStack {
                             VStack(alignment: .leading) { Text("第 \(batch.number) 批"); Text("第 \(batch.start)–\(batch.end) 本").font(AppTypography.caption).foregroundStyle(Color.textSecondary) }
-                            Spacer(); batchStatus(batch.status)
+                            Spacer(); WereadImportBatchStatusView(status: batch.status)
                         }
-                    }.disabled(viewModel.isLoading && { if case .loading = batch.status { return false }; return true }())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(viewModel.isLoading && { if case .loading = batch.status { return false }; return true }())
                 }
             }
         }
@@ -289,19 +291,35 @@ private struct WereadBatchView: View {
         .xmSystemAlert(isPresented: $showsError, descriptor: viewModel.errorMessage.map { message in .init(title: "本批加载失败", message: message, actions: [.init(title: "知道了") { viewModel.errorMessage = nil }]) })
     }
 
-    @ViewBuilder private func batchStatus(_ status: WereadImportBatchStatus) -> some View {
+}
+
+/// 微信读书分批导入的确定进度与结果状态，保持批次语义而不并入通用页面状态角色。
+struct WereadImportBatchStatusView: View {
+    let status: WereadImportBatchStatus
+
+    @ViewBuilder
+    var body: some View {
         switch status {
         case .notStarted:
             Text("未开始")
+                .font(AppTypography.subheadline)
+                .foregroundStyle(Color.textSecondary)
         case .loading(let percent):
             ProgressView(value: Double(percent), total: 100)
+                .controlSize(.small)
+                .tint(Color.appTint)
                 .frame(width: 72)
+                .accessibilityLabel("本批导入进度")
+                .accessibilityValue("\(percent)%")
         case .failed:
             Text("重试")
+                .font(AppTypography.subheadline)
                 .foregroundStyle(Color.feedbackError)
         case .success:
-            Image(systemName: "checkmark.circle.fill")
+            Image(systemName: "checkmark.circle")
+                .font(.system(size: 16, weight: .regular))
                 .foregroundStyle(Color.feedbackSuccess)
+                .accessibilityLabel("已完成")
         }
     }
 }

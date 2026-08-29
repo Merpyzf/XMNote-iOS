@@ -20,10 +20,9 @@ struct BackupHistorySheetView: View {
         ) {
             Group {
                 if viewModel.backupList.isEmpty {
-                    XMCompactStateView(
+                    XMContentStateView(
                         role: .empty,
-                        title: "暂无备份记录",
-                        systemImage: "clock.arrow.circlepath"
+                        title: "暂无备份记录"
                     )
                     .frame(maxWidth: .infinity, minHeight: 220)
                 } else {

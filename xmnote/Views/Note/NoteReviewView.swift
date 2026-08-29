@@ -158,8 +158,16 @@ struct NoteReviewView: View {
                 emptyOrFailureContent
                     .transition(.opacity)
                     .zIndex(1)
-            case .failure(let message):
-                NoteReviewFailureContent(message: message, onRetry: retryInitialLoad)
+            case .failure:
+                XMContentStateView(
+                    role: .failure,
+                    title: "暂时无法加载回顾",
+                    action: XMStateAction(
+                        "重试",
+                        perform: retryInitialLoad
+                    )
+                )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .transition(.opacity)
                     .zIndex(1)
             }
@@ -201,25 +209,12 @@ struct NoteReviewView: View {
     }
 
     private var emptyOrFailureContent: some View {
-        VStack(spacing: Spacing.base) {
-            XMContentStateView(
-                role: .empty,
-                title: "暂无可回顾书摘",
-                systemImage: "text.quote"
-            )
-                .frame(maxHeight: 260)
-
-            Button {
-                onOpenSettings()
-            } label: {
-                Label("调整范围", systemImage: "slider.horizontal.3")
-                    .font(AppTypography.subheadlineSemibold)
-                    .frame(height: InteractionMetrics.minimumTouchTarget)
-                    .padding(.horizontal, Spacing.contentEdge)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(Color.primaryActionFill)
-        }
+        XMContentStateView(
+            role: .noResults,
+            title: "暂无可回顾书摘",
+            systemImage: "line.3.horizontal.decrease.circle",
+            action: XMStateAction("调整范围", perform: onOpenSettings)
+        )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, Spacing.screenEdge)
     }
@@ -484,33 +479,6 @@ struct NoteReviewView: View {
         Task { @MainActor in
             await viewModel.retryInitialLoad()
         }
-    }
-}
-
-/// 首轮查询失败使用持久页面状态承载原因与重试，不与瞬时 Toast 或空结果混用。
-private struct NoteReviewFailureContent: View {
-    let message: String
-    let onRetry: () -> Void
-
-    var body: some View {
-        CardContainer(showsBorder: false) {
-            VStack(alignment: .leading, spacing: Spacing.base) {
-                Label("暂时无法加载回顾", systemImage: "exclamationmark.triangle")
-                    .font(AppTypography.headline)
-                    .foregroundStyle(Color.textPrimary)
-
-                Text(message)
-                    .font(AppTypography.subheadline)
-                    .foregroundStyle(Color.textSecondary)
-
-                Button("重试", action: onRetry)
-                    .font(AppTypography.subheadline)
-                    .buttonStyle(.bordered)
-            }
-            .padding(Spacing.contentEdge)
-        }
-        .padding(.horizontal, Spacing.screenEdge)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

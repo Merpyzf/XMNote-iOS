@@ -63,6 +63,7 @@ final class ContentViewerViewModel {
 
     private var detailCache: [ContentViewerItemID: ContentViewerDetail] = [:]
     private var detailLoadingIDs: Set<ContentViewerItemID> = []
+    private var missingDetailIDs: Set<ContentViewerItemID> = []
     private var detailErrorMessages: [ContentViewerItemID: String] = [:]
     private var hasAppliedInitialSelection = false
     private var pendingDeletedSelection: PendingDeletedSelection?
@@ -318,6 +319,7 @@ final class ContentViewerViewModel {
         do {
             try await repository.delete(itemID: selectedItemID)
             detailCache.removeValue(forKey: selectedItemID)
+            missingDetailIDs.remove(selectedItemID)
             detailErrorMessages.removeValue(forKey: selectedItemID)
             pruneDetailCache(around: self.selectedItemID)
         } catch {
@@ -337,6 +339,11 @@ final class ContentViewerViewModel {
     /// 返回指定分页项的详情加载错误。
     func detailErrorMessage(for itemID: ContentViewerItemID) -> String? {
         detailErrorMessages[itemID]
+    }
+
+    /// 返回指定分页项是否已由 Repository 确认为不存在或失效。
+    func isDetailMissing(for itemID: ContentViewerItemID) -> Bool {
+        missingDetailIDs.contains(itemID)
     }
 
     /// 返回指定分页项是否处于详情加载中。
@@ -396,6 +403,7 @@ private extension ContentViewerViewModel {
             selectedItemID = nil
             detailCache.removeAll(keepingCapacity: false)
             detailLoadingIDs.removeAll(keepingCapacity: false)
+            missingDetailIDs.removeAll(keepingCapacity: false)
             detailErrorMessages.removeAll(keepingCapacity: false)
             if hasAppliedInitialSelection || pendingDeletedSelection != nil {
                 dismissalRequestToken &+= 1
@@ -421,6 +429,7 @@ private extension ContentViewerViewModel {
             let fallbackIndex = min(pendingDeletedSelection.deletedIndex, newItems.count - 1)
             resolvedSelection = newItems[max(0, fallbackIndex)].id
             if pendingDeletedSelection.deletedItemID == previousSelectedItemID {
+                missingDetailIDs.remove(pendingDeletedSelection.deletedItemID)
                 detailErrorMessages.removeValue(forKey: pendingDeletedSelection.deletedItemID)
             }
             self.pendingDeletedSelection = nil
@@ -447,17 +456,21 @@ private extension ContentViewerViewModel {
         guard !detailLoadingIDs.contains(itemID) else { return }
 
         detailLoadingIDs.insert(itemID)
+        missingDetailIDs.remove(itemID)
         detailErrorMessages[itemID] = nil
         defer { detailLoadingIDs.remove(itemID) }
 
         do {
             guard let detail = try await repository.fetchViewerDetail(itemID: itemID) else {
                 detailCache.removeValue(forKey: itemID)
-                detailErrorMessages[itemID] = missingItemMessage
+                missingDetailIDs.insert(itemID)
+                detailErrorMessages[itemID] = nil
                 pruneDetailCache(around: selectedItemID ?? itemID)
                 return
             }
             detailCache[itemID] = detail
+            missingDetailIDs.remove(itemID)
+            detailErrorMessages[itemID] = nil
             pruneDetailCache(around: selectedItemID ?? itemID)
         } catch {
             Self.logger.error("Content viewer detail failed: \(error.localizedDescription, privacy: .public)")
@@ -470,6 +483,7 @@ private extension ContentViewerViewModel {
     func pruneDetailCache(around anchorID: ContentViewerItemID?) {
         let validItemIDs = Set(items.map(\.id))
         detailCache = detailCache.filter { validItemIDs.contains($0.key) }
+        missingDetailIDs = Set(missingDetailIDs.filter { validItemIDs.contains($0) })
         detailErrorMessages = detailErrorMessages.filter { validItemIDs.contains($0.key) }
         detailLoadingIDs = Set(detailLoadingIDs.filter { validItemIDs.contains($0) })
 
@@ -499,6 +513,7 @@ private extension ContentViewerViewModel {
 
         for id in removableIDs where overflow > 0 {
             detailCache.removeValue(forKey: id)
+            missingDetailIDs.remove(id)
             detailErrorMessages.removeValue(forKey: id)
             overflow -= 1
         }

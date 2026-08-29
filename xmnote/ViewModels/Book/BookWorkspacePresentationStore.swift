@@ -93,11 +93,26 @@ nonisolated struct BookWorkspaceReviewRow: Hashable, Sendable {
     let isLast: Bool
 }
 
-/// 空态展示模型。
+/// 工作台局部状态语义，保持加载、空态、无结果与失败在 Collection 快照中可区分。
+nonisolated enum BookWorkspaceStateKind: Hashable, Sendable {
+    case loading
+    case empty
+    case noResults
+    case failure
+}
+
+/// 工作台业务域的读取阶段；空数组只有在 loaded 后才允许映射为空态。
+nonisolated enum BookWorkspaceDomainLoadState: Hashable, Sendable {
+    case loading
+    case loaded
+    case failed
+}
+
+/// 工作台局部状态展示模型。
 nonisolated struct BookWorkspaceEmptyRow: Hashable, Sendable {
+    let kind: BookWorkspaceStateKind
     let title: String
-    let systemImage: String
-    let description: String
+    let description: String?
 }
 
 /// 单条 Collection item 的不可变展示载荷。
@@ -142,9 +157,9 @@ nonisolated struct BookWorkspacePresentationSnapshot: Sendable {
                 .chromeSpacer: .chromeSpacer,
                 .empty(section): .empty(
                     BookWorkspaceEmptyRow(
-                        title: "正在整理内容",
-                        systemImage: "ellipsis",
-                        description: ""
+                        kind: .loading,
+                        title: "正在加载内容…",
+                        description: nil
                     )
                 )
             ]
@@ -198,7 +213,9 @@ nonisolated struct BookWorkspacePresentationInput: Hashable, Sendable {
     let isNotesLoadingFeedbackVisible: Bool
     let relatedCategories: [BookRelatedCategory]
     let related: [BookRelatedExcerpt]
+    let relatedLoadState: BookWorkspaceDomainLoadState
     let reviews: [BookReviewExcerpt]
+    let reviewsLoadState: BookWorkspaceDomainLoadState
     let catalogQuery: String
     let notesQuery: String
     let relatedQuery: String
@@ -310,6 +327,7 @@ final class BookWorkspacePresentationStore {
 
         let relatedChanged = previous.map {
             $0.related != input.related
+                || $0.relatedLoadState != input.relatedLoadState
                 || $0.relatedCategories != input.relatedCategories
                 || $0.relatedQuery != input.relatedQuery
                 || $0.selectedRelatedCategoryID != input.selectedRelatedCategoryID
@@ -326,6 +344,7 @@ final class BookWorkspacePresentationStore {
 
         let reviewsChanged = previous.map {
             $0.reviews != input.reviews
+                || $0.reviewsLoadState != input.reviewsLoadState
                 || $0.reviewsQuery != input.reviewsQuery
                 || $0.reviewSort != input.reviewSort
         } ?? true
@@ -515,10 +534,11 @@ final class BookWorkspacePresentationStore {
         let contentSection: BookWorkspaceCollectionSectionModel
 
         if visible.isEmpty {
+            let isFiltering = !keyword.isEmpty || input.catalogFilter != .all
             let empty = BookWorkspaceEmptyRow(
-                title: keyword.isEmpty ? "暂无目录" : "没有匹配的目录",
-                systemImage: "list.bullet.indent",
-                description: "目录同步或创建后会显示在这里"
+                kind: isFiltering ? .noResults : .empty,
+                title: isFiltering ? "没有符合条件的目录" : "暂无目录",
+                description: nil
             )
             items[.empty(.catalog)] = .empty(empty)
             contentIDs = [.empty(.catalog)]
@@ -560,24 +580,21 @@ final class BookWorkspacePresentationStore {
             }
             return makeEmptySnapshot(
                 for: .notes,
-                title: "正在整理内容",
-                systemImage: "ellipsis",
-                description: ""
+                kind: .loading,
+                title: "正在加载书摘…"
             )
         case .failed:
             return makeEmptySnapshot(
                 for: .notes,
-                title: "书摘加载失败",
-                systemImage: "exclamationmark.triangle",
-                description: "暂时无法读取书摘，请稍后再试"
+                kind: .failure,
+                title: "暂时无法加载书摘"
             )
         case .loaded:
             if input.isNotesLoadingFeedbackVisible {
                 return makeEmptySnapshot(
                     for: .notes,
-                    title: "正在整理内容",
-                    systemImage: "ellipsis",
-                    description: ""
+                    kind: .loading,
+                    title: "正在加载书摘…"
                 )
             }
         }
@@ -596,11 +613,11 @@ final class BookWorkspacePresentationStore {
             .chromeSpacer: .chromeSpacer
         ]
         guard !notes.isEmpty else {
+            let isFiltering = !keyword.isEmpty || input.notesWithIdeasOnly
             return makeEmptySnapshot(
                 for: .notes,
-                title: keyword.isEmpty ? "还没有书摘" : "没有匹配的书摘",
-                systemImage: "text.quote",
-                description: "记录一句触动你的内容，稍后会按章节整理在这里"
+                kind: isFiltering ? .noResults : .empty,
+                title: isFiltering ? "没有符合条件的书摘" : "暂无书摘"
             )
         }
 
@@ -672,17 +689,17 @@ final class BookWorkspacePresentationStore {
 
     nonisolated private static func makeEmptySnapshot(
         for section: BookWorkspaceSection,
+        kind: BookWorkspaceStateKind,
         title: String,
-        systemImage: String,
-        description: String
+        description: String? = nil
     ) -> BookWorkspacePresentationSnapshot {
         var items: [BookWorkspaceCollectionItemID: BookWorkspaceCollectionItem] = [
             .chromeSpacer: .chromeSpacer
         ]
         items[.empty(section)] = .empty(
             BookWorkspaceEmptyRow(
+                kind: kind,
                 title: title,
-                systemImage: systemImage,
                 description: description
             )
         )
@@ -700,6 +717,14 @@ final class BookWorkspacePresentationStore {
     nonisolated private static func makeRelatedSnapshot(
         _ input: BookWorkspacePresentationInput
     ) -> BookWorkspacePresentationSnapshot {
+        switch input.relatedLoadState {
+        case .loading:
+            return makeEmptySnapshot(for: .related, kind: .loading, title: "正在加载相关内容…")
+        case .failed:
+            return makeEmptySnapshot(for: .related, kind: .failure, title: "暂时无法加载相关内容")
+        case .loaded:
+            break
+        }
         let keyword = normalized(input.relatedQuery)
         let filtered = input.related.filter { item in
             let matchesCategory = input.selectedRelatedCategoryID == nil
@@ -715,11 +740,12 @@ final class BookWorkspacePresentationStore {
             .chromeSpacer: .chromeSpacer
         ]
         guard !filtered.isEmpty else {
+            let isFiltering = !keyword.isEmpty || input.selectedRelatedCategoryID != nil
             items[.empty(.related)] = .empty(
                 BookWorkspaceEmptyRow(
-                    title: keyword.isEmpty ? "还没有相关内容" : "没有匹配的相关内容",
-                    systemImage: "link",
-                    description: "把文章、观点或关联书籍整理到当前书中"
+                    kind: isFiltering ? .noResults : .empty,
+                    title: isFiltering ? "没有符合条件的相关内容" : "暂无相关内容",
+                    description: nil
                 )
             )
             return BookWorkspacePresentationSnapshot(
@@ -777,6 +803,14 @@ final class BookWorkspacePresentationStore {
     nonisolated private static func makeReviewsSnapshot(
         _ input: BookWorkspacePresentationInput
     ) -> BookWorkspacePresentationSnapshot {
+        switch input.reviewsLoadState {
+        case .loading:
+            return makeEmptySnapshot(for: .reviews, kind: .loading, title: "正在加载书评…")
+        case .failed:
+            return makeEmptySnapshot(for: .reviews, kind: .failure, title: "暂时无法加载书评")
+        case .loaded:
+            break
+        }
         let keyword = normalized(input.reviewsQuery)
         let filtered = input.reviews.filter { item in
             keyword.isEmpty
@@ -789,9 +823,9 @@ final class BookWorkspacePresentationStore {
         guard !filtered.isEmpty else {
             items[.empty(.reviews)] = .empty(
                 BookWorkspaceEmptyRow(
-                    title: keyword.isEmpty ? "还没有书评" : "没有匹配的书评",
-                    systemImage: "text.bubble",
-                    description: "写下对整本书的判断、收获与推荐理由"
+                    kind: keyword.isEmpty ? .empty : .noResults,
+                    title: keyword.isEmpty ? "暂无书评" : "没有匹配的书评",
+                    description: nil
                 )
             )
             return BookWorkspacePresentationSnapshot(

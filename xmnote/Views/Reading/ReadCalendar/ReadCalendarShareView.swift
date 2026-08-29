@@ -110,9 +110,8 @@ struct ReadCalendarShareView: View {
             XMContentStateView(
                 role: .failure,
                 title: "无法生成预览",
-                message: viewModel.errorMessage ?? "请稍后重试",
                 systemImage: "photo.badge.exclamationmark",
-                action: XMStateAction("重试", systemImage: "arrow.clockwise") {
+                action: XMStateAction("重试") {
                     Task { await viewModel.reload(using: repositories.readCalendarRepository) }
                 }
             )

@@ -76,10 +76,8 @@ private struct WebDAVServerListContentView: View {
                 XMContentStateView(
                     role: .failure,
                     title: "暂时无法加载服务器",
-                    message: viewModel.loadErrorMessage,
                     action: XMStateAction(
                         "重试",
-                        systemImage: "arrow.clockwise",
                         perform: onRetry
                     )
                 )
@@ -87,10 +85,7 @@ private struct WebDAVServerListContentView: View {
                 if viewModel.servers.isEmpty {
                     XMContentStateView(
                         role: .empty,
-                        title: "暂无备份服务器",
-                        message: "添加服务器后可用于云端备份",
-                        systemImage: "externaldrive.badge.plus",
-                        action: XMStateAction("新增服务器", perform: viewModel.beginAdd)
+                        title: "暂无备份服务器"
                     )
                 } else {
                     serverList

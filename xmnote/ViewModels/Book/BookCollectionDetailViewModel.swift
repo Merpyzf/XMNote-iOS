@@ -9,6 +9,15 @@ import Foundation
 import Photos
 import UIKit
 
+/// 书单详情读取状态，单独表达内容失效，避免与可恢复的读取失败混用。
+enum BookCollectionDetailContentState: Equatable {
+    case loading
+    case content
+    case empty
+    case missing
+    case error(String)
+}
+
 /// 书单内 relation 文本编辑弹窗状态。
 struct BookCollectionRecommendEdit: Identifiable, Hashable {
     let item: BookCollectionBookItem
@@ -129,7 +138,8 @@ struct BookCollectionAnnualDescriptionEdit: Identifiable, Hashable {
 final class BookCollectionDetailViewModel {
     let collectionID: Int64
     var detail: BookCollectionDetail?
-    var contentState: BookCollectionContentState = .loading
+    var contentState: BookCollectionDetailContentState = .loading
+    var observationErrorMessage: String?
     var activeAction: BookCollectionPendingAction?
     var actionFeedback: BookshelfActionFeedback?
     var activeForm: BookCollectionFormPresentation?
@@ -175,6 +185,11 @@ final class BookCollectionDetailViewModel {
         observationTask?.cancel()
         writeTask?.cancel()
         feedbackClearTask?.cancel()
+    }
+
+    /// 重新建立书单详情观察流，用于首轮读取失败后的显式恢复。
+    func retryObservation() {
+        startObservation()
     }
 
     /// 将 BookPicker 返回的本地、在线与手动创建结果统一加入当前手动书单。
@@ -423,7 +438,10 @@ final class BookCollectionDetailViewModel {
 
     private func startObservation() {
         observationTask?.cancel()
-        contentState = .loading
+        observationErrorMessage = nil
+        if detail == nil {
+            contentState = .loading
+        }
         observationTask = Task { [repository, collectionID] in
             do {
                 for try await detail in repository.observeBookCollectionDetail(collectionID: collectionID) {
@@ -432,17 +450,23 @@ final class BookCollectionDetailViewModel {
                     guard !Task.isCancelled else { return }
                     await MainActor.run {
                         self.detail = preparedDetail
+                        self.observationErrorMessage = nil
                         if let preparedDetail {
                             self.contentState = preparedDetail.books.isEmpty ? .empty : .content
                         } else {
-                            self.contentState = .error("未能查询到书单")
+                            self.contentState = .missing
                         }
                     }
                 }
             } catch {
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
-                    self.contentState = .error(error.localizedDescription)
+                    if let detail = self.detail {
+                        self.contentState = detail.books.isEmpty ? .empty : .content
+                        self.observationErrorMessage = "书单刷新失败"
+                    } else {
+                        self.contentState = .error("暂时无法加载书单")
+                    }
                 }
             }
         }
@@ -516,7 +540,7 @@ final class BookCollectionDetailViewModel {
 
     private func failAction(_ error: Error) {
         activeAction = nil
-        actionFeedback = BookshelfActionFeedback(kind: .error, message: error.localizedDescription)
+        actionFeedback = BookshelfActionFeedback(kind: .error, message: "操作失败")
         scheduleFeedbackClear()
     }
 

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 BookWorkspacePresentationSnapshot、Nuke/Core Image 封面处理管线、XMMarqueeText、XMStarredAppearance、ReadingStatusPresentation、InteractionMetrics、SwiftUI 普通胶囊行内容构建器与 UIKit UICollectionView
- * [OUTPUT]: 对外提供背景与前景同步折叠及回弹、下拉时整幅等比填充且共同穿过状态栏/导航栏的无边缘光晕封面影像 Hero、Android 等效模糊、随折叠末段淡出并拉平的中性圆角 Tab 台阶、整体导航中和、接入公共连续跑马灯的书名状态行、书脊封面、单行出版元数据、轻量色点状态、中性上下文操作、与缺席态共享等距底部呼吸的普通轻透评分与三项精致阅读指标 Chip、与系统标题互斥联动的共享可收起书籍头部、统一内容卡片轮廓、几何稳定的吸顶 Tab 与纯内容原生 Pager
+ * [OUTPUT]: 对外提供背景与前景同步折叠及回弹、下拉时整幅等比填充且共同穿过状态栏/导航栏的无边缘光晕封面影像 Hero、Android 等效模糊、随折叠末段淡出并拉平的中性圆角 Tab 台阶、整体导航中和、接入公共连续跑马灯的书名状态行、书脊封面、单行出版元数据、轻量色点状态、中性上下文操作、与缺席态共享等距底部呼吸的普通轻透评分与三项精致阅读指标 Chip、与系统标题互斥联动的共享可收起书籍头部、统一内容卡片轮廓、几何稳定的吸顶 Tab、局部状态视口居中与纯内容原生 Pager
  * [POS]: Views/Book/Components 的页面私有 UIKit 混合列表，负责影像 Hero/中性内容分层、分页、共享 Chrome、diff、章节吸顶和视口稳定
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -49,6 +49,7 @@ struct BookWorkspaceCollectionView: UIViewRepresentable {
     let onOpenReview: (BookReviewExcerpt) -> Void
     let onEditReview: (BookReviewExcerpt) -> Void
     let onDeleteReview: (BookReviewExcerpt) -> Void
+    let onRetry: () -> Void
 
     /// 创建四个常驻 UICollectionView 的唯一宿主。
     func makeUIView(context: Context) -> BookWorkspaceCollectionHostView {
@@ -96,7 +97,8 @@ struct BookWorkspaceCollectionView: UIViewRepresentable {
             onDeleteRelated: onDeleteRelated,
             onOpenReview: onOpenReview,
             onEditReview: onEditReview,
-            onDeleteReview: onDeleteReview
+            onDeleteReview: onDeleteReview,
+            onRetry: onRetry
         )
     }
 }
@@ -132,6 +134,7 @@ private struct BookWorkspaceCollectionConfiguration {
     let onOpenReview: (BookReviewExcerpt) -> Void
     let onEditReview: (BookReviewExcerpt) -> Void
     let onDeleteReview: (BookReviewExcerpt) -> Void
+    let onRetry: () -> Void
 
     static let empty = BookWorkspaceCollectionConfiguration(
         book: nil,
@@ -165,7 +168,8 @@ private struct BookWorkspaceCollectionConfiguration {
         onDeleteRelated: { _ in },
         onOpenReview: { _ in },
         onEditReview: { _ in },
-        onDeleteReview: { _ in }
+        onDeleteReview: { _ in },
+        onRetry: {}
     )
 }
 
@@ -1424,6 +1428,7 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
 
         for context in contexts.values where context.lastBoundsSize != context.collectionView.bounds.size {
             context.lastBoundsSize = context.collectionView.bounds.size
+            refreshStateViewport(in: context)
             context.collectionView.collectionViewLayout.invalidateLayout()
         }
         updateSharedChromeMetricsIfNeeded()
@@ -1925,8 +1930,9 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
                 if let indexPath = context.dataSource?.indexPath(for: .chromeSpacer),
                    let cell = context.collectionView.cellForItem(at: indexPath)
                         as? BookWorkspaceHostingCell {
-                    cell.configure(content: content(for: .chromeSpacer))
+                    cell.configure(content: content(for: .chromeSpacer, in: context))
                 }
+                refreshStateViewport(in: context)
                 context.collectionView.collectionViewLayout.invalidateLayout()
                 context.collectionView.layoutIfNeeded()
             }
@@ -2107,10 +2113,11 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
                     withReuseIdentifier: BookWorkspaceHostingCell.reuseIdentifier,
                     for: indexPath
                   ) as? BookWorkspaceHostingCell,
-                  let item = self.contexts[section]?.snapshot.itemsByID[itemID] else {
+                  let context = self.contexts[section],
+                  let item = context.snapshot.itemsByID[itemID] else {
                 return nil
             }
-            cell.configure(content: self.content(for: item))
+            cell.configure(content: self.content(for: item, in: context))
             return cell
         }
         dataSource.supplementaryViewProvider = { [weak self] collectionView, kind, indexPath in
@@ -2145,8 +2152,11 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
         context.dataSource = dataSource
     }
 
-    /// 从不可变载荷构建独立 Cell 视觉；这里不读取父 SwiftUI View 的 State 或 Environment。
-    private func content(for item: BookWorkspaceCollectionItem) -> AnyView {
+    /// 从不可变载荷与当前域可用视口构建独立 Cell 视觉，不读取父 SwiftUI View 的 State。
+    private func content(
+        for item: BookWorkspaceCollectionItem,
+        in context: BookWorkspaceCollectionDomainContext
+    ) -> AnyView {
         switch item {
         case .chromeSpacer:
             return AnyView(
@@ -2204,8 +2214,45 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
                 )
             )
         case .empty(let row):
-            return AnyView(BookWorkspaceCollectionEmptyRow(row: row))
+            return AnyView(
+                BookWorkspaceCollectionEmptyRow(
+                    row: row,
+                    minimumViewportHeight: stateViewportHeight(in: context.collectionView),
+                    onRetry: configuration.onRetry
+                )
+            )
         }
+    }
+
+    /// 以当前域真实安全区和共享 Chrome 测量值计算状态行高度，使正文落在 Tab 与底部系统栏之间。
+    private func stateViewportHeight(
+        in collectionView: UICollectionView
+    ) -> CGFloat {
+        let visibleHeight = max(
+            collectionView.bounds.height
+                - collectionView.adjustedContentInset.top
+                - collectionView.adjustedContentInset.bottom,
+            0
+        )
+        let sharedChromeHeight = max(bookHeaderHeight + scopeBarHeight, 0)
+        return max(
+            BookWorkspaceLayoutMetrics.stateViewportMinimumHeight,
+            visibleHeight - sharedChromeHeight
+        )
+    }
+
+    /// 仅重配状态 Cell；普通内容域不进入这条几何刷新路径。
+    private func refreshStateViewport(
+        in context: BookWorkspaceCollectionDomainContext
+    ) {
+        let itemID = BookWorkspaceCollectionItemID.empty(context.section)
+        guard let item = context.snapshot.itemsByID[itemID],
+              let indexPath = context.dataSource?.indexPath(for: itemID),
+              let cell = context.collectionView.cellForItem(at: indexPath)
+                as? BookWorkspaceHostingCell else {
+            return
+        }
+        cell.configure(content: content(for: item, in: context))
     }
 
     private func noteRowState(for noteID: Int64) -> BookWorkspaceNoteRowState {
@@ -2380,7 +2427,7 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
                     as? BookWorkspaceHostingCell else {
                 continue
             }
-            cell.configure(content: content(for: item))
+            cell.configure(content: content(for: item, in: context))
         }
     }
 
@@ -2449,12 +2496,12 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
                 trailing: 0
             )
         case .empty:
-            estimatedHeight = 280
+            estimatedHeight = BookWorkspaceLayoutMetrics.stateViewportMinimumHeight
             interItemSpacing = 0
             insets = NSDirectionalEdgeInsets(
-                top: BookWorkspaceLayoutMetrics.sectionSpacing,
+                top: 0,
                 leading: BookWorkspaceLayoutMetrics.pageHorizontalInset,
-                bottom: Spacing.double,
+                bottom: 0,
                 trailing: BookWorkspaceLayoutMetrics.pageHorizontalInset
             )
         }
@@ -2641,6 +2688,9 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
               !isVerticalScrollActive(in: context) else { return }
         context.hasPendingAdjustedInsetRestoration = false
         UIView.performWithoutAnimation {
+            refreshStateViewport(in: context)
+            context.collectionView.collectionViewLayout.invalidateLayout()
+            context.collectionView.layoutIfNeeded()
             restoreViewport(in: context)
             captureViewport(in: context)
             if context.section == committedSection {
@@ -3670,15 +3720,28 @@ private struct BookWorkspaceReviewCollectionRow: View {
 /// Collection 内的系统空态，保持页面其它域相同的信息密度和辅助技术语义。
 private struct BookWorkspaceCollectionEmptyRow: View {
     let row: BookWorkspaceEmptyRow
+    let minimumViewportHeight: CGFloat
+    let onRetry: () -> Void
 
+    @ViewBuilder
     var body: some View {
-        XMCompactStateView(
-            role: .empty,
-            title: row.title,
-            message: row.description,
-            systemImage: row.systemImage
-        )
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, Spacing.double)
+        Group {
+            switch row.kind {
+            case .loading:
+                LoadingStateView(row.title, style: .inline)
+            case .empty:
+                XMCompactStateView(role: .empty, title: row.title, message: row.description)
+            case .noResults:
+                XMCompactStateView(role: .noResults, title: row.title, message: row.description)
+            case .failure:
+                XMCompactStateView(
+                    role: .failure,
+                    title: row.title,
+                    message: row.description,
+                    action: XMStateAction("重试", perform: onRetry)
+                )
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: minimumViewportHeight)
     }
 }

@@ -161,19 +161,14 @@ private struct ChapterManagerContentView: View {
         case .empty:
             XMContentStateView(
                 role: .empty,
-                title: "暂无目录",
-                message: "可以新增一级章节，再逐步整理书摘结构",
-                systemImage: "list.bullet.indent",
-                action: XMStateAction("新增章节", systemImage: "plus", perform: viewModel.presentCreateRoot)
+                title: "暂无目录"
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-        case .error(let message):
+        case .error:
             XMContentStateView(
                 role: .failure,
-                title: "目录暂时无法显示",
-                message: message,
-                systemImage: "exclamationmark.triangle",
-                action: XMStateAction("重新读取", systemImage: "arrow.clockwise", perform: viewModel.retryObservation)
+                title: "暂时无法加载目录",
+                action: XMStateAction("重试", perform: viewModel.retryObservation)
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .content:

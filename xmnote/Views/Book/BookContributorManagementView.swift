@@ -49,8 +49,18 @@ private struct BookContributorManagementContentView: View {
     var body: some View {
         ZStack(alignment: .top) {
             content
-            if let message = viewModel.writeError ?? viewModel.actionNotice {
-                notice(message)
+            if let message = viewModel.writeError {
+                notice(message, tone: .error)
+            } else if let message = viewModel.observationErrorMessage {
+                XMInlineStatusBanner(
+                    message,
+                    tone: .error,
+                    action: XMStateAction("重试", perform: viewModel.retryObservation)
+                )
+                .padding(.horizontal, Spacing.screenEdge)
+                .padding(.top, Spacing.tight)
+            } else if let message = viewModel.actionNotice {
+                notice(message, tone: .neutral)
             }
         }
         .xmSystemAlert(item: $viewModel.activeNameEdit) { nameEdit in
@@ -83,16 +93,14 @@ private struct BookContributorManagementContentView: View {
         case .empty:
             XMContentStateView(
                 role: .empty,
-                title: "暂无\(viewModel.kind.itemTitle)",
-                systemImage: viewModel.kind == .author ? "person.text.rectangle" : "building.2"
+                title: "暂无\(viewModel.kind.itemTitle)"
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-        case .error(let message):
+        case .error:
             XMContentStateView(
                 role: .failure,
-                title: "\(viewModel.kind.title)加载失败",
-                message: message,
-                systemImage: "exclamationmark.triangle"
+                title: "暂时无法加载\(viewModel.kind.title)",
+                action: XMStateAction("重试", perform: viewModel.retryObservation)
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .content:
@@ -120,18 +128,10 @@ private struct BookContributorManagementContentView: View {
         readLoadingGate.update(intent: viewModel.contentState == .loading ? .read : .none)
     }
 
-    private func notice(_ message: String) -> some View {
-        Text(message)
-            .font(AppTypography.caption)
-            .foregroundStyle(Color.textSecondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
+    private func notice(_ message: String, tone: XMInlineStatusBanner.Tone) -> some View {
+        XMInlineStatusBanner(message, tone: tone)
             .padding(.horizontal, Spacing.screenEdge)
-            .padding(.vertical, Spacing.tight)
-            .background(Color.surfaceCard)
-            .overlay(alignment: .bottom) {
-                Divider()
-                    .overlay(Color.surfaceBorderSubtle)
-            }
+            .padding(.top, Spacing.tight)
             .transition(.opacity)
             .zIndex(2)
     }

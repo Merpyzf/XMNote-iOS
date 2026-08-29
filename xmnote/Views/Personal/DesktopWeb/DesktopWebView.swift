@@ -487,7 +487,7 @@ struct DesktopWebView: View {
         XMInlineStatusBanner(
             failure.message,
             tone: .error,
-            action: XMStateAction("重新尝试", systemImage: "arrow.clockwise", perform: coordinator.retry)
+            action: XMStateAction("重试", perform: coordinator.retry)
         )
         .padding(.horizontal, Spacing.contentEdge)
         .transition(

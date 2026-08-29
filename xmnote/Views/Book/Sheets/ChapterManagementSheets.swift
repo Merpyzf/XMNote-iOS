@@ -35,8 +35,7 @@ struct ChapterMoveSheet: View {
                 if visibleTargets.isEmpty {
                     XMContentStateView(
                         role: .noResults,
-                        title: "没有匹配的目录",
-                        message: searchText.isEmpty ? nil : "未找到与“\(searchText)”匹配的目录。"
+                        title: "没有匹配的目录"
                     )
                 } else {
                     List(visibleTargets) { target in
@@ -810,9 +809,9 @@ struct ChapterRemoteSyncSheet: View {
         case .error(let message):
             unavailableContent(
                 role: .failure,
-                title: "目录暂时无法获取",
+                title: "暂时无法加载目录",
                 message: message,
-                systemImage: "exclamationmark.triangle"
+                systemImage: nil
             )
         }
     }
@@ -824,8 +823,7 @@ struct ChapterRemoteSyncSheet: View {
                 if visibleCandidates.isEmpty {
                     XMCompactStateView(
                         role: .noResults,
-                        title: "没有匹配的候选书籍",
-                        message: viewModel.searchText.isEmpty ? nil : "未找到与“\(viewModel.searchText)”匹配的候选书籍。"
+                        title: "没有匹配的候选书籍"
                     )
                 } else {
                     ForEach(visibleCandidates) { candidate in
@@ -878,8 +876,7 @@ struct ChapterRemoteSyncSheet: View {
                 if viewModel.visibleCatalogItems.isEmpty {
                     XMCompactStateView(
                         role: .noResults,
-                        title: "没有匹配的目录",
-                        message: viewModel.searchText.isEmpty ? nil : "未找到与“\(viewModel.searchText)”匹配的目录。"
+                        title: "没有匹配的目录"
                     )
                 } else {
                     ForEach(viewModel.visibleCatalogItems) { item in
@@ -940,7 +937,7 @@ struct ChapterRemoteSyncSheet: View {
         role: XMStateRole,
         title: String,
         message: String,
-        systemImage: String
+        systemImage: String?
     ) -> some View {
         XMContentStateView(
             role: role,
@@ -948,8 +945,8 @@ struct ChapterRemoteSyncSheet: View {
             message: message,
             systemImage: systemImage,
             action: viewModel.canReturnToCandidates
-                ? XMStateAction("返回候选书籍", systemImage: "chevron.backward", perform: viewModel.returnToCandidates)
-                : XMStateAction("重新获取", systemImage: "arrow.clockwise", perform: viewModel.load)
+                ? XMStateAction("返回候选书籍", perform: viewModel.returnToCandidates)
+                : XMStateAction("重试", perform: viewModel.load)
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

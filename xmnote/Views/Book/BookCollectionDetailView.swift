@@ -199,7 +199,15 @@ private struct BookCollectionDetailContentView: View {
 
     @ViewBuilder
     private var content: some View {
-        LoadPhaseHost(
+        if case .missing = viewModel.contentState {
+            XMContentStateView(
+                role: .instruction,
+                title: "书单不存在或已删除",
+                systemImage: "questionmark.circle"
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            LoadPhaseHost(
             phase: loadPhase,
             content: {
                 bookList
@@ -217,29 +225,36 @@ private struct BookCollectionDetailContentView: View {
                 } else {
                     XMContentStateView(
                         role: .empty,
-                        title: message,
-                        message: viewModel.isManual ? "添加书籍后会显示在这里" : "读完记录会显示在这里",
-                        systemImage: viewModel.isManual ? "book.badge.plus" : "calendar"
+                        title: message
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             },
-            failure: { message in
+            failure: { _ in
                 XMContentStateView(
                     role: .failure,
-                    title: "书单加载失败",
-                    message: message.isEmpty ? "请稍后重试" : message,
-                    systemImage: "exclamationmark.triangle"
+                    title: "暂时无法加载书单",
+                    action: XMStateAction("重试", perform: viewModel.retryObservation)
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-        )
-        .overlay(alignment: .top) {
-            if let feedback = viewModel.actionFeedback {
-                BookCollectionFeedbackBanner(feedback: feedback)
+            )
+            .overlay(alignment: .top) {
+                if let feedback = viewModel.actionFeedback {
+                    BookCollectionFeedbackBanner(feedback: feedback)
+                        .padding(.horizontal, Spacing.screenEdge)
+                        .padding(.top, Spacing.tight)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                } else if let message = viewModel.observationErrorMessage {
+                    XMInlineStatusBanner(
+                        message,
+                        tone: .error,
+                        action: XMStateAction("重试", perform: viewModel.retryObservation)
+                    )
                     .padding(.horizontal, Spacing.screenEdge)
                     .padding(.top, Spacing.tight)
                     .transition(.opacity.combined(with: .move(edge: .top)))
+                }
             }
         }
     }
@@ -282,7 +297,7 @@ private struct BookCollectionDetailContentView: View {
                         }
 
                         if detail.books.isEmpty {
-                            BookCollectionEmptyBooksRow(isManual: viewModel.isManual)
+                            BookCollectionEmptyBooksRow()
                                 .padding(.horizontal, Spacing.screenEdge)
                                 .listRowSeparator(.hidden)
                                 .listRowInsets(contentSectionInsets)
@@ -551,7 +566,9 @@ private struct BookCollectionDetailContentView: View {
         case .content:
             return .content
         case .empty:
-            return viewModel.detail == nil ? .empty(message: "书单里还没有书") : .content
+            return viewModel.detail == nil ? .empty(message: "暂无书籍") : .content
+        case .missing:
+            return .empty(message: "书单不存在或已删除")
         case .error(let message):
             return .error(message: message)
         }

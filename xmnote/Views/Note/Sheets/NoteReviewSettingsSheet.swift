@@ -493,8 +493,7 @@ private struct NoteReviewTagSelectionSheet: View {
                 if options.isEmpty {
                     XMCompactStateView(
                         role: .empty,
-                        title: "暂无书摘标签",
-                        systemImage: "tag"
+                        title: "暂无书摘标签"
                     )
                         .frame(minHeight: 220)
                 } else {

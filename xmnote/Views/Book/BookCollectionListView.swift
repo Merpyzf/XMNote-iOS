@@ -193,6 +193,15 @@ struct BookCollectionListView: View {
                 .padding(.horizontal, Spacing.screenEdge)
                 .padding(.top, Spacing.tight)
                 .transition(.opacity.combined(with: .move(edge: .top)))
+        } else if let message = viewModel.observationErrorMessage {
+            XMInlineStatusBanner(
+                message,
+                tone: .error,
+                action: XMStateAction("重试", perform: viewModel.retryObservation)
+            )
+            .padding(.horizontal, Spacing.screenEdge)
+            .padding(.top, Spacing.tight)
+            .transition(.opacity.combined(with: .move(edge: .top)))
         }
     }
 
@@ -222,9 +231,9 @@ struct BookCollectionListView: View {
                         emptyState(title: message)
                     }
                 },
-                failure: { message in
+                failure: { _ in
                     stateRow {
-                        failureState(message: message)
+                        failureState
                     }
                 }
             )
@@ -328,7 +337,7 @@ struct BookCollectionListView: View {
     }
 
     private var emptyTitle: String {
-        selectedKind == .manual ? "还没有书单，点击右上角按钮创建" : "今年还没有读完的书"
+        selectedKind == .manual ? "暂无书单" : "今年还没有读完的书"
     }
 
     private var selectedKind: BookCollectionKind {
@@ -358,36 +367,15 @@ struct BookCollectionListView: View {
     }
 
     private func emptyState(title: String) -> some View {
-        VStack(spacing: Spacing.section) {
-            XMCompactStateView(
-                role: .empty,
-                title: title,
-                systemImage: selectedKind == .manual ? "rectangle.stack.badge.plus" : "calendar"
-            )
-            .frame(maxHeight: 260)
-
-            if selectedKind == .manual {
-                Button {
-                    viewModel.presentCreateForm()
-                } label: {
-                    Label("新建第一份书单", systemImage: "plus")
-                        .font(AppTypography.subheadlineMedium)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(!viewModel.canCreateManualCollection)
-                .accessibilityIdentifier("book.collection.empty.create")
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, Spacing.screenEdge)
+        XMContentStateView(role: .empty, title: title)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func failureState(message: String) -> some View {
+    private var failureState: some View {
         XMContentStateView(
             role: .failure,
-            title: "书单加载失败",
-            message: message.isEmpty ? "请稍后重试" : message,
-            systemImage: "exclamationmark.triangle"
+            title: "暂时无法加载书单",
+            action: XMStateAction("重试", perform: viewModel.retryObservation)
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

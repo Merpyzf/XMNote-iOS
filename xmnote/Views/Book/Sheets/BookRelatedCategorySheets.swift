@@ -98,8 +98,7 @@ struct BookRelatedCategoryPickerSheet<ManagementDestination: View>: View {
                 if categories.isEmpty {
                     XMContentStateView(
                         role: .empty,
-                        title: "没有可用分类",
-                        systemImage: "square.grid.2x2"
+                        title: "没有可用分类"
                     )
                         .padding(Spacing.screenEdge)
                 } else {

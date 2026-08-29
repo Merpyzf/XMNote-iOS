@@ -1151,8 +1151,7 @@ struct ReadingRecentBooksCard: View {
                     if books.isEmpty {
                         XMCompactStateView(
                             role: .empty,
-                            title: "最近没有在读记录",
-                            systemImage: "books.vertical"
+                            title: "最近没有在读记录"
                         )
                             .frame(height: 160)
                     } else {

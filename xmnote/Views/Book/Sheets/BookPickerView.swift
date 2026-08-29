@@ -389,9 +389,8 @@ private struct BookPickerResolvedView: View {
         VStack(alignment: .leading, spacing: Spacing.base) {
             XMCompactStateView(
                 role: .empty,
-                title: "还没有书籍",
-                message: "先创建一本书，后续书摘才能关联到阅读对象",
-                systemImage: "books.vertical",
+                title: "还没有可选书籍",
+                message: "请先添加书籍",
                 style: .card
             )
             stateActionGroup(
@@ -408,9 +407,7 @@ private struct BookPickerResolvedView: View {
         VStack(alignment: .leading, spacing: Spacing.base) {
             XMCompactStateView(
                 role: .noResults,
-                title: "没有找到匹配的书",
-                message: localNoResultsMessage,
-                systemImage: "magnifyingglass",
+                title: "没有匹配的书籍",
                 style: .card
             )
             stateActionGroup(
@@ -494,9 +491,7 @@ private struct BookPickerResolvedView: View {
             XMCompactStateView(
                 role: .failure,
                 title: "当前来源搜索失败",
-                message: message,
-                systemImage: "wifi.exclamationmark",
-                action: XMStateAction("重试", systemImage: "arrow.clockwise") {
+                action: XMStateAction("重试") {
                     Task {
                         await viewModel.submitOnlineSearch()
                     }
@@ -516,9 +511,7 @@ private struct BookPickerResolvedView: View {
         VStack(alignment: .leading, spacing: Spacing.base) {
             XMCompactStateView(
                 role: .noResults,
-                title: "没有找到匹配的书",
-                message: onlineNoResultsMessage,
-                systemImage: "magnifyingglass",
+                title: "没有匹配的书籍",
                 style: .card
             )
             if viewModel.supportsCreationFlow {

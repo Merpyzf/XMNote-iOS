@@ -102,6 +102,7 @@ final class BookCollectionListViewModel {
     var importedCollectionID: Int64?
     var activeAction: BookCollectionPendingAction?
     var actionFeedback: BookshelfActionFeedback?
+    var observationErrorMessage: String?
 
     private let repository: any BookshelfRepositoryProtocol
     private var persistedSelectedKind: BookCollectionKind = .manual
@@ -300,22 +301,36 @@ final class BookCollectionListViewModel {
         importedCollectionID = nil
     }
 
+    /// 重新建立书单列表观察流，用于首轮读取失败后的显式恢复。
+    func retryObservation() {
+        startObservation()
+    }
+
     private func startObservation() {
         observationTask?.cancel()
-        contentState = .loading
+        observationErrorMessage = nil
+        if snapshot.isEmpty {
+            contentState = .loading
+        }
         observationTask = Task { [repository] in
             do {
                 for try await snapshot in repository.observeBookCollectionList() {
                     guard !Task.isCancelled else { return }
                     await MainActor.run {
                         self.snapshot = snapshot
+                        self.observationErrorMessage = nil
                         self.refreshContentState()
                     }
                 }
             } catch {
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
-                    self.contentState = .error(error.localizedDescription)
+                    if self.snapshot.isEmpty {
+                        self.contentState = .error("暂时无法加载书单")
+                    } else {
+                        self.refreshContentState()
+                        self.observationErrorMessage = "书单刷新失败"
+                    }
                 }
             }
         }
@@ -327,7 +342,7 @@ final class BookCollectionListViewModel {
                 try await repository.repairAnnualBookCollections()
             } catch {
                 await MainActor.run {
-                    self.actionFeedback = BookshelfActionFeedback(kind: .warning, message: error.localizedDescription)
+                    self.actionFeedback = BookshelfActionFeedback(kind: .warning, message: "年度书单同步失败")
                 }
             }
         }
@@ -377,7 +392,7 @@ final class BookCollectionListViewModel {
     private func failAction(_ error: Error) {
         activeAction = nil
         wereadImportErrorMessage = nil
-        actionFeedback = BookshelfActionFeedback(kind: .error, message: error.localizedDescription)
+        actionFeedback = BookshelfActionFeedback(kind: .error, message: "操作失败")
         scheduleFeedbackClear()
     }
 

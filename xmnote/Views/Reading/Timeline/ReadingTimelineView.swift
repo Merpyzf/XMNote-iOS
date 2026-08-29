@@ -1103,10 +1103,8 @@ private struct TimelineListContent: View, Equatable {
                 XMCompactStateView(
                     role: .failure,
                     title: "暂时无法加载时间线",
-                    message: initialErrorMessage,
                     action: XMStateAction(
                         "重试",
-                        systemImage: "arrow.clockwise",
                         perform: onRetry
                     )
                 )
@@ -1119,8 +1117,7 @@ private struct TimelineListContent: View, Equatable {
 
                     XMCompactStateView(
                         role: .noResults,
-                        title: "当日没有匹配事件",
-                        systemImage: "clock.arrow.circlepath"
+                        title: "当日没有匹配事件"
                     )
                 }
                     .padding(.vertical, Spacing.double)
@@ -1160,7 +1157,6 @@ private struct TimelineListContent: View, Equatable {
             tone: .error,
             action: XMStateAction(
                 "重试",
-                systemImage: "arrow.clockwise",
                 perform: onRetry
             )
         )

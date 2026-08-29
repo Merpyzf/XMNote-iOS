@@ -50,7 +50,7 @@ struct NoteDetailView: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .topBarTrailing) {
-            if let viewModel {
+            if let viewModel, viewModel.loadState == .content {
                 Button {
                     navigationCoordinator.present(
                         .noteEditor(mode: .edit(noteId: noteId), seed: nil)
@@ -58,7 +58,6 @@ struct NoteDetailView: View {
                 } label: {
                     Text("编辑")
                 }
-                .disabled(viewModel.isLoading)
             }
         }
     }
@@ -70,13 +69,57 @@ private struct NoteDetailContentView: View {
     @State private var readLoadingGate = LoadingGate()
 
     var body: some View {
+        Group {
+            switch viewModel.loadState {
+            case .idle, .loading:
+                Color.clear
+            case .content:
+                loadedContent
+            case .missing:
+                XMContentStateView(
+                    role: .instruction,
+                    title: "笔记不存在或已删除",
+                    systemImage: "questionmark.circle"
+                )
+            case .failure:
+                XMContentStateView(
+                    role: .failure,
+                    title: "暂时无法加载笔记",
+                    action: XMStateAction(
+                        "重试",
+                        perform: retryLoad
+                    )
+                )
+            }
+        }
+        .overlay {
+            if readLoadingGate.isVisible {
+                LoadingStateView("加载中…")
+            }
+        }
+        .onAppear {
+            syncReadLoadingVisibility()
+        }
+        .onChange(of: viewModel.isLoading) { _, _ in
+            syncReadLoadingVisibility()
+        }
+        .onDisappear {
+            readLoadingGate.hideImmediately()
+        }
+    }
+
+    private var loadedContent: some View {
         ScrollView {
             VStack(spacing: Spacing.base) {
+                if let saveErrorMessage = viewModel.saveErrorMessage {
+                    XMInlineStatusBanner(saveErrorMessage, tone: .error)
+                }
+
                 if let footer = viewModel.metadata?.footerText, !footer.isEmpty {
                     CardContainer {
                         Text(footer)
                             .font(AppTypography.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.textSecondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(Spacing.contentEdge)
                     }
@@ -117,34 +160,10 @@ private struct NoteDetailContentView: View {
                         HighlightColorPicker(selectedARGB: $viewModel.selectedHighlightARGB)
                     }
                 }
-
-                if let errorMessage = viewModel.errorMessage {
-                    CardContainer {
-                        Text(errorMessage)
-                            .font(AppTypography.footnote)
-                            .foregroundStyle(Color.red)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(Spacing.contentEdge)
-                    }
-                }
             }
             .padding(.horizontal, Spacing.screenEdge)
             .padding(.vertical, Spacing.base)
             .safeAreaPadding(.bottom)
-        }
-        .overlay {
-            if readLoadingGate.isVisible {
-                LoadingStateView("加载中…")
-            }
-        }
-        .onAppear {
-            syncReadLoadingVisibility()
-        }
-        .onChange(of: viewModel.isLoading) { _, _ in
-            syncReadLoadingVisibility()
-        }
-        .onDisappear {
-            readLoadingGate.hideImmediately()
         }
     }
 
@@ -163,6 +182,10 @@ private struct NoteDetailContentView: View {
 
     private func syncReadLoadingVisibility() {
         readLoadingGate.update(intent: viewModel.isLoading ? .read : .none)
+    }
+
+    private func retryLoad() {
+        Task { await viewModel.load() }
     }
 }
 

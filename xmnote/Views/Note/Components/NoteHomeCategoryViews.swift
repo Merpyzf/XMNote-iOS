@@ -371,22 +371,15 @@ struct NoteBookReviewsView: View {
                 .padding(.vertical, Spacing.cozy)
                 .transition(.opacity)
         } else if let loadMoreErrorMessage {
-            VStack(spacing: Spacing.compact) {
-                Text("继续加载失败")
-                    .font(AppTypography.subheadlineMedium)
-                    .foregroundStyle(Color.textPrimary)
-
-                Text(loadMoreErrorMessage)
-                    .font(ReadingContentTypography.metadata)
-                    .foregroundStyle(Color.textSecondary)
-                    .lineLimit(2)
-
-                Button("重试", action: onRetryLoadMore)
-                    .font(AppTypography.subheadline)
-                    .buttonStyle(.bordered)
-            }
+            XMInlineStatusBanner(
+                "继续加载书评失败：\(loadMoreErrorMessage)",
+                tone: .error,
+                action: XMStateAction(
+                    "重试",
+                    perform: onRetryLoadMore
+                )
+            )
             .padding(.vertical, Spacing.cozy)
-            .frame(maxWidth: .infinity)
             .transition(.opacity)
         }
     }

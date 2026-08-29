@@ -2109,11 +2109,9 @@ private final class BookshelfDefaultSearchEmptyCell: UICollectionViewCell {
         backgroundColor = .clear
         contentView.backgroundColor = .clear
         contentConfiguration = UIHostingConfiguration {
-            XMCompactStateView(
+            XMContentStateView(
                 role: .noResults,
-                title: "没有匹配的书籍",
-                message: "清除搜索后查看全部书籍",
-                systemImage: "books.vertical"
+                title: "没有匹配的书籍"
             )
             .frame(minHeight: BookshelfDefaultCollectionMetrics.searchEmptyHeight)
         }

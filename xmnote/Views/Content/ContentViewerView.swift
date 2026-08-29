@@ -641,7 +641,6 @@ private struct ContentViewerLoadedView: View {
         case .retry:
             XMStateAction(
                 "重试",
-                systemImage: "arrow.clockwise",
                 perform: viewModel.retryListObservation
             )
         case .dismiss, .none:
@@ -656,7 +655,13 @@ private struct ContentViewerLoadedView: View {
 
     private func pageState(for itemID: ContentViewerItemID) -> ContentViewerContentView.Props.PageState {
         if let detail = viewModel.detail(for: itemID) {
-            return .detail(detail)
+            return .detail(
+                detail,
+                retainedErrorMessage: viewModel.detailErrorMessage(for: itemID)
+            )
+        }
+        if viewModel.isDetailMissing(for: itemID) {
+            return .missing(presentationStyle.missingItemMessage)
         }
         if let message = viewModel.detailErrorMessage(for: itemID) {
             return .failure(message)

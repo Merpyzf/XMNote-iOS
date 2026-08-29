@@ -215,6 +215,18 @@ private struct TagManagementContentView: View {
             .safeAreaBar(edge: .top, spacing: Spacing.none) {
                 scopeSelector
             }
+            .safeAreaInset(edge: .top, spacing: Spacing.none) {
+                if let observationErrorMessage = viewModel.observationErrorMessage {
+                    XMInlineStatusBanner(
+                        observationErrorMessage,
+                        tone: .error,
+                        action: XMStateAction("重试", perform: viewModel.retryObservation)
+                    )
+                    .padding(.horizontal, Spacing.screenEdge)
+                    .padding(.vertical, Spacing.tight)
+                    .background(Color.surfacePage)
+                }
+            }
             .scrollEdgeEffectStyle(.soft, for: .bottom)
             .sheet(item: $viewModel.activeNameEdit) { edit in
                 TagNameEditSheet(viewModel: viewModel, edit: edit)
@@ -311,6 +323,7 @@ private struct TagManagementContentView: View {
             selectedTagIDs: viewModel.selectedTagIDs,
             isDisabled: viewModel.activeWriteAction != nil,
             topBarHeight: scopeSelectorHeight,
+            onRetry: viewModel.retryObservation,
             onScrollEdgeWashEdgesChange: { _ in },
             onSearchTextChange: { viewModel.searchText = $0 },
             onSearchActiveChange: { isInlineSearchActive = $0 },

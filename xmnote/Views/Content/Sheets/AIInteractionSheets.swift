@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 AITextResultViewModel/AIAutoTagViewModel、AIRepositoryProtocol、AIMarkdownResultView、系统 Sheet/Liquid Glass、LoadingGate、xmMinimumHitTarget 与现有反馈组件
- * [OUTPUT]: 对外提供 AITextResultSheet 与 AIAutoTagSheet，承接流式 Markdown 结果、克制等待态、中性模型菜单、固定底部品牌确认操作、编辑器请求交接和 AI 标签确认写回生命周期
+ * [OUTPUT]: 对外提供 AITextResultSheet、AIAutoTagSheet 及可复现等待/空结果/失败状态的业务展示单元，承接流式结果、固定底部确认和标签写回生命周期
  * [POS]: Views/Content/Sheets 的 AI 业务 Sheet，被通用 viewer 及单页详情入口复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -367,8 +367,10 @@ struct AITextResultSheet: View {
         Button("重新生成") {
             viewModel.startGeneration()
         }
-        .font(AppTypography.subheadlineMedium)
-        .buttonStyle(.bordered)
+        .font(AppTypography.subheadline)
+        .buttonStyle(.borderless)
+        .tint(Color.appTint)
+        .xmMinimumHitTarget(anchor: .leading)
     }
 
     private var aiDisclosure: some View {
@@ -708,28 +710,15 @@ struct AIAutoTagSheet: View {
             readyContent(suggestions: suggestions)
                 .transition(.opacity)
         case .empty:
-            VStack(alignment: .leading, spacing: Spacing.base) {
-                Text("没有生成可用的标签建议")
-                    .font(AppTypography.footnote)
-                    .foregroundStyle(Color.textSecondary)
-                retryButton
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            AIAutoTagEmptyStateView(onRetry: viewModel.startLoading)
             .transition(.opacity)
         case .failed(let message, let partialContent):
-            VStack(alignment: .leading, spacing: Spacing.section) {
-                if let partialContent {
-                    AIMarkdownResultView(
-                        markdown: partialContent,
-                        isStreaming: false,
-                        interactionController: markdownInteractionController
-                    )
-                }
-
-                generationError(message: message)
-                retryButton
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            AIAutoTagGenerationFailureView(
+                message: message,
+                partialContent: partialContent,
+                interactionController: markdownInteractionController,
+                onRetry: viewModel.startLoading
+            )
             .transition(.opacity)
         }
     }
@@ -791,14 +780,6 @@ struct AIAutoTagSheet: View {
             .fixedSize(horizontal: false, vertical: true)
     }
 
-    private var retryButton: some View {
-        Button("重新生成") {
-            viewModel.startLoading()
-        }
-        .font(AppTypography.subheadlineMedium)
-        .buttonStyle(.bordered)
-    }
-
     private var normalizedBookTitle: String {
         let title = viewModel.bookTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         return title.isEmpty ? "当前书摘" : title
@@ -832,6 +813,70 @@ struct AIAutoTagSheet: View {
         return reason.isEmpty
             ? "AI 推荐，\(source)，\(selection)"
             : "AI 推荐，\(source)，\(reason)，\(selection)"
+    }
+}
+
+/// AI 标签生成失败时仅在确有部分结果时保留正文；完整失败回到局部失败状态，不伪装成 retained-error。
+struct AIAutoTagGenerationFailureView: View {
+    let message: String
+    let partialContent: String?
+    let interactionController: AIMarkdownInteractionController
+    let onRetry: () -> Void
+
+    @ViewBuilder
+    var body: some View {
+        if let resolvedPartialContent {
+            VStack(alignment: .leading, spacing: Spacing.section) {
+                AIMarkdownResultView(
+                    markdown: resolvedPartialContent,
+                    isStreaming: false,
+                    interactionController: interactionController
+                )
+
+                XMInlineStatusBanner(
+                    "部分结果生成失败",
+                    tone: .error,
+                    action: XMStateAction(
+                        "重新生成",
+                        perform: onRetry
+                    )
+                )
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            XMCompactStateView(
+                role: .failure,
+                title: "暂时无法生成标签",
+                action: XMStateAction("重新生成", perform: onRetry)
+            )
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    private var resolvedPartialContent: String? {
+        guard let partialContent else { return nil }
+        let trimmed = partialContent.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
+/// AI 标签生成完成但没有可用建议时，以事实文案和低权重恢复动作保留当前 Sheet 上下文。
+struct AIAutoTagEmptyStateView: View {
+    let onRetry: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.base) {
+            Text("没有生成可用的标签建议")
+                .font(AppTypography.subheadline)
+                .foregroundStyle(Color.textSecondary)
+
+            Button("重新生成", action: onRetry)
+                .font(AppTypography.subheadline)
+                .buttonStyle(.borderless)
+                .tint(Color.stateActionForeground)
+                .xmMinimumHitTarget(anchor: .leading)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -893,7 +938,7 @@ private struct AIAutoTagSuggestionRow: View {
 }
 
 /// 首段 AI 标签内容返回前的静态等待态，只说明当前任务，不使用品牌色或循环动效。
-private struct AIAutoTagWaitingView: View {
+struct AIAutoTagWaitingView: View {
     var body: some View {
         Text("分析中…")
             .font(AppTypography.footnote)

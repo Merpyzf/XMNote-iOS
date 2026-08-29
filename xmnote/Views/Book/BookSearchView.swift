@@ -469,9 +469,7 @@ struct BookSearchView: View {
         XMCompactStateView(
             role: .failure,
             title: "搜索失败",
-            message: "\(viewModel.selectedSource.title) 暂时无法完成搜索。\(errorMessage)",
-            systemImage: "wifi.exclamationmark",
-            action: XMStateAction("重新搜索", systemImage: "arrow.clockwise") {
+            action: XMStateAction("重试") {
                 Task {
                     await performSearch(using: viewModel)
                 }
@@ -524,8 +522,6 @@ struct BookSearchView: View {
         XMCompactStateView(
             role: .noResults,
             title: "没有匹配的书籍",
-            message: "当前搜索源：\(viewModel.selectedSource.title)",
-            systemImage: "magnifyingglass",
             style: .card
         )
         .frame(maxWidth: .infinity, minHeight: 220)

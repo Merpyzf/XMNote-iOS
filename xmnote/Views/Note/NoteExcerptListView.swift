@@ -87,9 +87,9 @@ struct NoteExcerptListView: View {
             isLoading: viewModel.phase == .loading,
             isEmpty: false,
             errorMessage: failureMessage(viewModel.phase),
+            retainedErrorMessage: viewModel.observationErrorMessage,
             loadingMessage: "正在加载书摘…",
-            emptyMessage: viewModel.appliedSearchText.isEmpty ? "这里还没有书摘" : "没有匹配的书摘",
-            emptyIcon: "text.quote",
+            emptyMessage: viewModel.appliedSearchText.isEmpty ? "暂无书摘" : "没有匹配的书摘",
             animatesEmptyContentTransition: true,
             onRetry: viewModel.retry
         ) {
@@ -128,8 +128,7 @@ struct NoteExcerptListView: View {
             if viewModel.phase == .empty {
                 XMContentStateView(
                     role: viewModel.appliedSearchText.isEmpty ? .empty : .noResults,
-                    title: viewModel.appliedSearchText.isEmpty ? "这里还没有书摘" : "没有匹配的书摘",
-                    systemImage: "text.quote"
+                    title: viewModel.appliedSearchText.isEmpty ? "暂无书摘" : "没有匹配的书摘"
                 )
                 .frame(maxWidth: .infinity, minHeight: 280)
                 .listRowInsets(EdgeInsets())

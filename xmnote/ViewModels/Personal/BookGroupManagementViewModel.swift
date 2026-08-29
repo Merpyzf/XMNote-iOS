@@ -79,6 +79,7 @@ enum BookGroupManagementWriteAction: Hashable {
 final class BookGroupManagementViewModel {
     var snapshot: BookGroupManagementSnapshot = .empty
     var contentState: BookGroupManagementContentState = .loading
+    var observationErrorMessage: String?
     var selectedGroupIDs: Set<Int64> = []
     var isSelectionMode = false
     var activeWriteAction: BookGroupManagementWriteAction?
@@ -188,6 +189,12 @@ final class BookGroupManagementViewModel {
     isolated deinit {
         observationTask?.cancel()
         writeTask?.cancel()
+    }
+
+    /// 重新建立分组观察流，用于首轮读取失败后的显式恢复。
+    func retryObservation() {
+        observationTask?.cancel()
+        startObservation()
     }
 
     /// 打开新增分组 Sheet，提交前不会触发写库。
@@ -435,13 +442,17 @@ private extension BookGroupManagementViewModel {
     }
 
     func startObservation() {
-        contentState = .loading
+        observationErrorMessage = nil
+        if groups.isEmpty {
+            contentState = .loading
+        }
         observationTask = Task {
             do {
                 for try await nextSnapshot in repository.observeBookGroupManagementSnapshot() {
                     guard !Task.isCancelled else { return }
                     await MainActor.run {
                         self.snapshot = nextSnapshot
+                        self.observationErrorMessage = nil
                         self.selectedGroupIDs = self.selectedGroupIDs.intersection(Set(self.groups.map(\.id)))
                         if self.groups.isEmpty {
                             self.exitSelectionMode()
@@ -451,7 +462,12 @@ private extension BookGroupManagementViewModel {
                 }
             } catch {
                 await MainActor.run {
-                    self.contentState = .error(self.displayMessage(for: error))
+                    if self.groups.isEmpty {
+                        self.contentState = .error("暂时无法加载分组")
+                    } else {
+                        self.contentState = .content
+                        self.observationErrorMessage = "分组刷新失败"
+                    }
                 }
             }
         }

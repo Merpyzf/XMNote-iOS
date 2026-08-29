@@ -111,17 +111,6 @@ enum BookshelfBookListEmptyState: Hashable {
     case searchEmpty(selectedCount: Int)
     case error(String)
 
-    var icon: String {
-        switch self {
-        case .contentEmpty:
-            return "books.vertical"
-        case .searchEmpty:
-            return "books.vertical"
-        case .error:
-            return "exclamationmark.triangle"
-        }
-    }
-
     var title: String {
         switch self {
         case .contentEmpty:
@@ -129,7 +118,7 @@ enum BookshelfBookListEmptyState: Hashable {
         case .searchEmpty:
             return "没有匹配的书籍"
         case .error:
-            return "书籍加载失败"
+            return "暂时无法加载书籍"
         }
     }
 
@@ -137,10 +126,8 @@ enum BookshelfBookListEmptyState: Hashable {
         switch self {
         case .contentEmpty:
             return nil
-        case .searchEmpty(let selectedCount):
-            return selectedCount > 0 ? "已选书籍仍保留，清除搜索可继续整理" : "清除搜索后查看全部书籍"
-        case .error(let message):
-            return message.isEmpty ? "请稍后重试" : message
+        case .searchEmpty, .error:
+            return nil
         }
     }
 

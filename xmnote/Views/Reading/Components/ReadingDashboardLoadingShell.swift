@@ -43,14 +43,12 @@ struct ReadingDashboardLoadingShell: View {
 
     var body: some View {
         Group {
-            if let errorMessage {
+            if errorMessage != nil {
                 XMContentStateView(
                     role: .failure,
                     title: "暂时无法加载在读首页",
-                    message: errorMessage,
                     action: XMStateAction(
                         "重试",
-                        systemImage: "arrow.clockwise",
                         perform: onRetry
                     )
                 )

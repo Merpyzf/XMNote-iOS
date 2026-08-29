@@ -1547,11 +1547,9 @@ private final class BookshelfAggregateSearchEmptyCell: UICollectionViewCell {
         backgroundColor = .clear
         contentView.backgroundColor = .clear
         contentConfiguration = UIHostingConfiguration {
-            XMCompactStateView(
+            XMContentStateView(
                 role: .noResults,
-                title: "没有匹配的项",
-                message: "清除搜索后查看全部内容",
-                systemImage: "square.grid.2x2"
+                title: "没有匹配的内容"
             )
             .frame(minHeight: BookshelfAggregateCollectionMetrics.searchEmptyHeight)
         }

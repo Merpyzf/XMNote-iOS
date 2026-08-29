@@ -191,16 +191,12 @@ struct BookCollectionCoverSearchSheet: View {
             XMCompactStateView(
                 role: .noResults,
                 title: "没有匹配到封面",
-                message: "可以换一个来源，或回到编辑页手动粘贴封面链接",
-                systemImage: "photo.badge.exclamationmark",
                 style: .card
             )
-        case .failure(let message):
+        case .failure:
             XMCompactStateView(
                 role: .failure,
                 title: "搜索失败",
-                message: message,
-                systemImage: "wifi.exclamationmark",
                 style: .card
             )
         }

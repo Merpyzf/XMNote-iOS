@@ -20,6 +20,7 @@
 ## 子目录
 
 - `Backup/`: 数据备份与恢复。
+- `DataImport/`: 微信读书扫码授权、分批导入、内容预览与批次业务状态。
 - `DesktopWeb/`: 网页端服务配置。
 
 分组、来源、标签、备份和桌面网页功能的通用空态、无搜索结果与局部失败视觉统一复用 `StatePresentation` 组件族；UICollectionView 背景适配器只保留容器职责。

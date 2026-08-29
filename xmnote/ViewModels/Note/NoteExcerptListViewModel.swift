@@ -111,6 +111,7 @@ final class NoteExcerptListViewModel {
     private(set) var items: [NoteExcerptListItem] = []
     private(set) var totalCount = 0
     private(set) var phase: NoteExcerptListPhase = .loading
+    private(set) var observationErrorMessage: String?
     private(set) var isLoadingMore = false
     private(set) var isWriting = false
     private(set) var isChapterStarred = true
@@ -399,6 +400,7 @@ final class NoteExcerptListViewModel {
 
     /// 建立当前范围的数据库观察流；取消旧任务后，晚到快照无法覆盖新搜索或排序。
     private func startObservation(reason: NoteExcerptListRestartReason) {
+        observationErrorMessage = nil
         if !hasReceivedSnapshot {
             phase = .loading
         } else if case .failure = phase {
@@ -451,7 +453,12 @@ final class NoteExcerptListViewModel {
             } catch {
                 guard !Task.isCancelled, let self else { return }
                 self.isLoadingMore = false
-                self.phase = self.items.isEmpty ? .failure(error.localizedDescription) : .content
+                if self.items.isEmpty {
+                    self.phase = .failure("暂时无法加载书摘")
+                } else {
+                    self.phase = .content
+                    self.observationErrorMessage = "书摘刷新失败"
+                }
             }
         }
     }
@@ -519,6 +526,7 @@ final class NoteExcerptListViewModel {
             selectedNoteIDs.formIntersection(snapshot.items.map(\.id))
         }
         isLoadingMore = false
+        observationErrorMessage = nil
         phase = nextPhase
 
         guard hasVisibleChange else { return }

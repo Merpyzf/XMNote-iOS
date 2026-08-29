@@ -41,8 +41,9 @@ struct ContentViewerContentView: View {
         /// 单页渲染状态，避免内容壳层直接读取 ViewModel。
         enum PageState: Equatable {
             case loading
+            case missing(String)
             case failure(String)
-            case detail(ContentViewerDetail)
+            case detail(ContentViewerDetail, retainedErrorMessage: String?)
         }
 
         let selectedItemID: ContentViewerItemID?
@@ -67,14 +68,12 @@ struct ContentViewerContentView: View {
             placeholder: { placeholderState },
             loading: { loadingState },
             empty: { emptyState(message: $0) },
-            failure: {
+            failure: { _ in
                 XMContentStateView(
                     role: .failure,
                     title: "暂时无法加载",
-                    message: $0,
                     action: XMStateAction(
                         "重试",
-                        systemImage: "arrow.clockwise",
                         perform: onRetryList
                     )
                 )
@@ -145,7 +144,7 @@ private extension ContentViewerContentView {
 
     func emptyState(message: String) -> some View {
         XMContentStateView(
-            role: .empty,
+            role: .instruction,
             title: message,
             systemImage: presentationStyle.emptyIconName
         )
@@ -169,19 +168,31 @@ private struct ContentViewerPageView: View {
                 case .loading:
                     LoadingStateView(presentationStyle.loadingMessage)
                         .frame(maxWidth: .infinity, minHeight: 320)
-                case .failure(let message):
+                case .missing(let message):
+                    XMContentStateView(
+                        role: .instruction,
+                        title: message,
+                        systemImage: "questionmark.circle"
+                    )
+                    .frame(maxWidth: .infinity, minHeight: 320)
+                case .failure:
                     XMContentStateView(
                         role: .failure,
                         title: "暂时无法加载详情",
-                        message: message,
                         action: XMStateAction(
                             "重试",
-                            systemImage: "arrow.clockwise",
                             perform: onRetry
                         )
                     )
                     .frame(maxWidth: .infinity, minHeight: 320)
-                case .detail(let detail):
+                case .detail(let detail, let retainedErrorMessage):
+                    if retainedErrorMessage != nil {
+                        XMInlineStatusBanner(
+                            "内容刷新失败",
+                            tone: .error,
+                            action: XMStateAction("重试", perform: onRetry)
+                        )
+                    }
                     detailBody(detail)
                 }
             }

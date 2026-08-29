@@ -1915,14 +1915,10 @@ struct BookCollectionContentHeader: View {
 
 /// 空书单在内容容器内部的轻量说明，保持和非空书单一致的页面重心。
 struct BookCollectionEmptyBooksRow: View {
-    let isManual: Bool
-
     var body: some View {
         XMCompactStateView(
             role: .empty,
-            title: "书单里还没有书",
-            message: isManual ? "添加书籍后，会在这里按顺序显示" : "读完记录会在这里同步显示",
-            systemImage: isManual ? "book.badge.plus" : "calendar"
+            title: "暂无书籍"
         )
     }
 }

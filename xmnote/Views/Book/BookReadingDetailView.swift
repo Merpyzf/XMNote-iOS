@@ -66,7 +66,7 @@ struct BookReadingDetailView: View {
             didApplyMonthlyDefault = true
             applyMonthlyDefault()
         }
-        .onChange(of: viewModel.errorMessage) { _, message in
+        .onChange(of: viewModel.operationErrorMessage) { _, message in
             guard let message else { return }
             toastCenter.error(message)
             viewModel.consumeError()
@@ -144,36 +144,52 @@ private extension BookReadingDetailView {
                 let topSafeAreaExtent = max(geometry.safeAreaInsets.top, 0)
 
                 ScrollView {
-                    BookReadingDetailContent(
-                        snapshot: snapshot,
-                        mode: .interactive,
-                        theme: visualTheme,
-                        ratingValue: Binding(
-                            get: { viewModel.ratingValue },
-                            set: { viewModel.ratingValue = $0 }
-                        ),
-                        expandedMonthIDs: $expandedMonthIDs,
-                        onOpenCover: { presentedSheet = .cover },
-                        onOpenBookInfo: {
-                            navigationCoordinator.presentBookEditor(
-                                mode: .edit(bookId: viewModel.bookID)
+                    VStack(spacing: Spacing.base) {
+                        if viewModel.refreshErrorMessage != nil {
+                            XMInlineStatusBanner(
+                                "阅读详情刷新失败",
+                                tone: .error,
+                                action: XMStateAction("重试") {
+                                    Task {
+                                        await viewModel.observe(
+                                            using: repositories.bookReadingDetailRepository
+                                        )
+                                    }
+                                }
                             )
-                        },
-                        onRatingChanged: { value in
-                            Task {
-                                await viewModel.updateRating(
-                                    value,
-                                    using: repositories.bookReadingDetailRepository
+                        }
+
+                        BookReadingDetailContent(
+                            snapshot: snapshot,
+                            mode: .interactive,
+                            theme: visualTheme,
+                            ratingValue: Binding(
+                                get: { viewModel.ratingValue },
+                                set: { viewModel.ratingValue = $0 }
+                            ),
+                            expandedMonthIDs: $expandedMonthIDs,
+                            onOpenCover: { presentedSheet = .cover },
+                            onOpenBookInfo: {
+                                navigationCoordinator.presentBookEditor(
+                                    mode: .edit(bookId: viewModel.bookID)
                                 )
-                            }
-                        },
-                        onChangeReadingStatus: { presentedSheet = .addStatus },
-                        onEditReadingStatus: { item in
-                            guard let recordID = item.recordID else { return }
-                            presentedSheet = .editStatus(recordID)
-                        },
-                        onUpdateReadingProgress: { presentedSheet = .progress }
-                    )
+                            },
+                            onRatingChanged: { value in
+                                Task {
+                                    await viewModel.updateRating(
+                                        value,
+                                        using: repositories.bookReadingDetailRepository
+                                    )
+                                }
+                            },
+                            onChangeReadingStatus: { presentedSheet = .addStatus },
+                            onEditReadingStatus: { item in
+                                guard let recordID = item.recordID else { return }
+                                presentedSheet = .editStatus(recordID)
+                            },
+                            onUpdateReadingProgress: { presentedSheet = .progress }
+                        )
+                    }
                     .padding(.horizontal, Spacing.screenEdge)
                     .padding(.top, Spacing.contentEdge + topSafeAreaExtent)
                     .padding(.bottom, Spacing.base)
@@ -188,12 +204,23 @@ private extension BookReadingDetailView {
                 .scrollEdgeEffectHidden(true, for: .top)
             }
         } else if viewModel.loadPhase == .failed {
-            XMContentStateView(
-                role: .failure,
-                title: "无法加载阅读详情",
-                message: viewModel.errorMessage ?? "书籍不存在或已被删除",
-                systemImage: "exclamationmark.triangle"
-            )
+            if viewModel.isMissing {
+                XMContentStateView(
+                    role: .instruction,
+                    title: "书籍不存在或已删除",
+                    systemImage: "questionmark.circle"
+                )
+            } else {
+                XMContentStateView(
+                    role: .failure,
+                    title: "暂时无法加载阅读详情",
+                    action: XMStateAction("重试") {
+                        Task {
+                            await viewModel.observe(using: repositories.bookReadingDetailRepository)
+                        }
+                    }
+                )
+            }
         } else if loadingGate.isVisible {
             LoadingStateView("正在整理阅读数据…", style: .card)
         }

@@ -52,7 +52,7 @@ struct ReadingHeatmapWidgetCard: View {
                         XMInlineStatusBanner(
                             errorMessage,
                             tone: .warning,
-                            action: XMStateAction("重试", systemImage: "arrow.clockwise", perform: onRetry)
+                            action: XMStateAction("重试", perform: onRetry)
                         )
                         .padding(.horizontal, ReadingHeatmapWidgetLayout.contentInset)
                         .padding(.bottom, ReadingHeatmapWidgetLayout.contentInset)

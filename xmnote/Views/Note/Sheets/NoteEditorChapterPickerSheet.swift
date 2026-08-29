@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 NoteEditorChapterOption、XMSelectionIndicator、XMContentStateView 与章节选择动作
+ * [INPUT]: 依赖 NoteEditorChapterOption、XMSelectionIndicator、XMCompactStateView 与章节选择动作
  * [OUTPUT]: 对外提供 NoteEditorChapterPickerSheet，承载章节搜索与单选
  * [POS]: Views/Note/Sheets 的书摘编辑章节选择业务 Sheet
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -50,17 +50,14 @@ struct NoteEditorChapterPickerSheet: View {
 
                 if visibleChapters.isEmpty {
                     if searchText.isEmpty {
-                        XMContentStateView(
+                        XMCompactStateView(
                             role: .empty,
-                            title: "暂无章节",
-                            message: "可以先不设置章节，或到目录管理中新增",
-                            systemImage: "text.book.closed"
+                            title: "暂无章节"
                         )
                     } else {
-                        XMContentStateView(
+                        XMCompactStateView(
                             role: .noResults,
-                            title: "没有匹配的章节",
-                            message: "未找到与“\(searchText)”匹配的章节"
+                            title: "没有匹配的章节"
                         )
                     }
                 } else {

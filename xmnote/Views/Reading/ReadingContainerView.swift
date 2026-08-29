@@ -143,8 +143,8 @@ struct ReadingContainerView: View {
             )
         case .statistics:
             XMContentStateView(
-                role: .empty,
-                title: "暂无统计数据",
+                role: .instruction,
+                title: "统计功能暂未开放",
                 systemImage: "chart.bar"
             )
         }

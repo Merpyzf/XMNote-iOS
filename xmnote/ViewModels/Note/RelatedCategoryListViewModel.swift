@@ -41,6 +41,7 @@ final class RelatedCategoryListViewModel {
     private(set) var items: [RelatedListItem] = []
     private(set) var totalCount = 0
     private(set) var phase: RelatedCategoryListPhase = .loading
+    private(set) var observationErrorMessage: String?
     private(set) var isLoadingMore = false
     private(set) var isWriting = false
 
@@ -110,6 +111,7 @@ final class RelatedCategoryListViewModel {
 
     /// 当前 query/sort/seed 绑定一个数据库观察任务，取消时不会把旧快照写回新页面条件。
     private func startObservation() {
+        observationErrorMessage = nil
         if items.isEmpty { phase = .loading }
         let stream = noteRepository.observeRelatedContentList(
             request: RelatedContentPageRequest(
@@ -128,12 +130,18 @@ final class RelatedCategoryListViewModel {
                     self.items = snapshot.items
                     self.totalCount = snapshot.totalCount
                     self.isLoadingMore = false
+                    self.observationErrorMessage = nil
                     self.phase = snapshot.items.isEmpty ? .empty : .content
                 }
             } catch {
                 guard !Task.isCancelled, let self else { return }
                 self.isLoadingMore = false
-                self.phase = self.items.isEmpty ? .failure(error.localizedDescription) : .content
+                if self.items.isEmpty {
+                    self.phase = .failure("暂时无法加载相关内容")
+                } else {
+                    self.phase = .content
+                    self.observationErrorMessage = "相关内容刷新失败"
+                }
             }
         }
     }

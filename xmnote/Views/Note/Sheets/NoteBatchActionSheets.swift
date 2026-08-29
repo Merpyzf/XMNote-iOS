@@ -64,14 +64,12 @@ struct NoteChapterSelectionSheet: View {
                         if searchText.isEmpty {
                             XMCompactStateView(
                                 role: .empty,
-                                title: "当前书籍还没有章节",
-                                systemImage: "text.book.closed"
+                                title: "暂无章节"
                             )
                         } else {
                             XMCompactStateView(
                                 role: .noResults,
-                                title: "没有匹配的章节",
-                                message: "未找到与“\(searchText)”匹配的章节。"
+                                title: "没有匹配的章节"
                             )
                         }
                     } else {

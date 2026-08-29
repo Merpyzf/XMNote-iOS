@@ -121,6 +121,17 @@ struct BookGridView: View {
             if let writeError = viewModel.writeError, !writeError.isEmpty {
                 writeErrorHint(writeError)
                     .padding(.top, showsDimensionToolbar ? BookGridToolbarMetrics.dimensionRailHeight : Spacing.none)
+            } else if let observationErrorMessage = viewModel.observationErrorMessage {
+                XMInlineStatusBanner(
+                    observationErrorMessage,
+                    tone: .error,
+                    action: XMStateAction("重试", perform: viewModel.retryObservation)
+                )
+                .padding(.horizontal, Spacing.screenEdge)
+                .padding(.vertical, Spacing.cozy)
+                .padding(.top, showsDimensionToolbar ? BookGridToolbarMetrics.dimensionRailHeight : Spacing.none)
+                .transition(.opacity)
+                .zIndex(2)
             }
         }
         .xmSystemAlert(item: $viewModel.activeContributorNameEdit) { nameEdit in
@@ -237,12 +248,11 @@ struct BookGridView: View {
             } else {
                 emptyStateView
             }
-        case .error(let message):
+        case .error:
             XMContentStateView(
                 role: .failure,
-                title: "书架加载失败",
-                message: message.isEmpty ? "请稍后重试" : message,
-                systemImage: "exclamationmark.triangle"
+                title: "暂时无法加载书架",
+                action: XMStateAction("重试", perform: viewModel.retryObservation)
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .content:
@@ -255,16 +265,13 @@ struct BookGridView: View {
         if hasSearchKeyword {
             XMContentStateView(
                 role: .noResults,
-                title: "没有匹配的书籍",
-                message: viewModel.isEditing ? "已选书籍仍保留，清除搜索可继续整理" : "清除搜索后查看全部书籍",
-                systemImage: "books.vertical"
+                title: "没有匹配的书籍"
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             XMContentStateView(
                 role: .empty,
-                title: "暂无书籍",
-                systemImage: "book"
+                title: "暂无书籍"
             )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }

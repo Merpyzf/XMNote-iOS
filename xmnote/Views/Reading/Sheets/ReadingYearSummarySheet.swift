@@ -27,10 +27,9 @@ struct ReadingYearSummarySheet: View {
         ) {
             Group {
                 if summary.books.isEmpty {
-                    XMCompactStateView(
+                    XMContentStateView(
                         role: .empty,
-                        title: "这一年还没有已读书籍",
-                        systemImage: "books.vertical"
+                        title: "今年还没有读完的书"
                     )
                     .frame(maxWidth: .infinity, minHeight: 240)
                 } else {

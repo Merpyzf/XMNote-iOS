@@ -20,11 +20,9 @@ struct ContentViewerTagSheet: View {
         ) {
             Group {
                 if tags.isEmpty {
-                    XMCompactStateView(
+                    XMContentStateView(
                         role: .empty,
-                        title: "当前书摘没有标签",
-                        systemImage: "tag",
-                        style: .centered
+                        title: "书摘没有标签"
                     )
                     .frame(maxWidth: .infinity, minHeight: 180)
                 } else {

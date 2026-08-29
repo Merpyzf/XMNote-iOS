@@ -204,7 +204,6 @@ private struct DatabaseInitializationFailureView: View {
             message: "请稍后重试",
             action: XMStateAction(
                 "重试",
-                systemImage: "arrow.clockwise",
                 perform: onRetry
             )
         )

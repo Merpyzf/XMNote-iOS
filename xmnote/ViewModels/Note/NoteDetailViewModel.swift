@@ -3,10 +3,19 @@ import UIKit
 
 /**
  * [INPUT]: 依赖 NoteRepositoryProtocol 读写笔记详情，依赖 RichTextBridge 做 HTML <-> 富文本转换
- * [OUTPUT]: 对外提供 NoteDetailViewModel 与 Metadata，驱动详情页加载/编辑/保存状态
+ * [OUTPUT]: 对外提供 NoteDetailViewModel、NoteDetailLoadState 与 Metadata，驱动详情页加载/编辑/保存状态
  * [POS]: Note 模块笔记详情状态编排器，被 NoteDetailView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
+
+/// 笔记详情的读取阶段，区分内容失效与可恢复失败，避免未加载数据被误当成空编辑器。
+enum NoteDetailLoadState: Equatable {
+    case idle
+    case loading
+    case content
+    case missing
+    case failure(String)
+}
 
 @MainActor
 @Observable
@@ -47,9 +56,9 @@ class NoteDetailViewModel {
     var selectedHighlightARGB: UInt32 = HighlightColors.defaultHighlightColor
 
     var metadata: Metadata?
-    var isLoading = false
+    private(set) var loadState: NoteDetailLoadState = .idle
     var isSaving = false
-    var errorMessage: String?
+    private(set) var saveErrorMessage: String?
 
     private let repository: any NoteRepositoryProtocol
 
@@ -59,16 +68,19 @@ class NoteDetailViewModel {
         self.repository = repository
     }
 
+    var isLoading: Bool { loadState == .loading }
+
     /// 加载笔记详情并转换为富文本编辑器可消费的数据结构。
     func load() async {
-        isLoading = true
-        errorMessage = nil
-        defer { isLoading = false }
+        guard !isLoading else { return }
+        loadState = .loading
+        saveErrorMessage = nil
 
         do {
             let payload = try await repository.fetchNoteDetail(noteId: noteId)
             guard let payload else {
-                errorMessage = "笔记不存在或已删除"
+                clearLoadedContent()
+                loadState = .missing
                 return
             }
 
@@ -80,15 +92,17 @@ class NoteDetailViewModel {
                 includeTime: payload.includeTime,
                 createdDate: payload.createdDate
             )
+            loadState = .content
         } catch {
-            errorMessage = "加载失败：\(error.localizedDescription)"
+            clearLoadedContent()
+            loadState = .failure("暂时无法加载笔记")
         }
     }
 
     /// 将当前编辑内容序列化为 HTML 并提交保存。
     func save() async -> Bool {
         isSaving = true
-        errorMessage = nil
+        saveErrorMessage = nil
         defer { isSaving = false }
 
         let contentHTML = RichTextBridge.attributedToHtml(contentText)
@@ -102,8 +116,14 @@ class NoteDetailViewModel {
             )
             return true
         } catch {
-            errorMessage = "保存失败：\(error.localizedDescription)"
+            saveErrorMessage = "笔记保存失败"
             return false
         }
+    }
+
+    private func clearLoadedContent() {
+        contentText = NSAttributedString()
+        ideaText = NSAttributedString()
+        metadata = nil
     }
 }

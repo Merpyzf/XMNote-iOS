@@ -21,7 +21,9 @@ final class BookReadingDetailViewModel {
     let bookID: Int64
     private(set) var snapshot: BookReadingDetailSnapshot?
     private(set) var loadPhase: DailyReadingLoadPhase = .idle
-    private(set) var errorMessage: String?
+    private(set) var operationErrorMessage: String?
+    private(set) var refreshErrorMessage: String?
+    private(set) var isMissing = false
     private(set) var writeOperation: WriteOperation?
     private(set) var completionTracker: BookReadingCompletionTracker?
     var setting = BookReadingDetailSetting()
@@ -42,27 +44,38 @@ final class BookReadingDetailViewModel {
     func observe(using repository: any BookReadingDetailRepositoryProtocol) async {
         setting = repository.fetchSetting()
         shareSetting = repository.fetchShareSetting()
-        loadPhase = .loading
-        errorMessage = nil
+        if snapshot == nil {
+            loadPhase = .loading
+        }
+        refreshErrorMessage = nil
+        isMissing = false
         do {
             for try await value in repository.observeSnapshot(bookID: bookID) {
                 try Task.checkCancellation()
                 guard let value else {
                     snapshot = nil
-                    errorMessage = "书籍不存在或已被删除"
+                    refreshErrorMessage = nil
+                    isMissing = true
                     loadPhase = .failed
                     continue
                 }
                 snapshot = value
                 ratingValue = Double(value.book.score) / 10
+                refreshErrorMessage = nil
                 loadPhase = .loaded
             }
         } catch is CancellationError {
             return
         } catch {
             guard !Task.isCancelled else { return }
-            errorMessage = error.localizedDescription
-            loadPhase = .failed
+            isMissing = false
+            if snapshot != nil {
+                refreshErrorMessage = "阅读详情刷新失败"
+                loadPhase = .loaded
+            } else {
+                refreshErrorMessage = nil
+                loadPhase = .failed
+            }
         }
     }
 
@@ -95,7 +108,7 @@ final class BookReadingDetailViewModel {
                 score: Int64((min(max(stars, 0), 5) * 10).rounded())
             )
         } catch {
-            errorMessage = "评分更新失败：\(error.localizedDescription)"
+            operationErrorMessage = "评分更新失败"
         }
     }
 
@@ -174,7 +187,7 @@ final class BookReadingDetailViewModel {
 
     /// 消费一次性错误文本，避免 Toast 重复出现。
     func consumeError() {
-        errorMessage = nil
+        operationErrorMessage = nil
     }
 
     /// 庆祝层退场后清除一次性追踪，保证页面刷新或生命周期恢复不会重复播放。

@@ -132,8 +132,8 @@ struct NoteCollectionView: View {
             NoteHomeStateHost(
                 state: viewModel.excerptState,
                 loadingMessage: "正在加载书摘分组…",
-                emptyMessage: hasQuery ? "没有匹配的书摘分组" : "还没有书摘",
-                emptyIcon: "text.quote",
+                emptyRole: hasQuery ? .noResults : .empty,
+                emptyMessage: hasQuery ? "没有匹配的书摘分组" : "暂无书摘",
                 emptyStateOffset: emptyStateOffset,
                 onRetry: viewModel.retrySelectedCategory
             ) {
@@ -147,8 +147,8 @@ struct NoteCollectionView: View {
             NoteHomeStateHost(
                 state: viewModel.starredState,
                 loadingMessage: "正在加载星标章节…",
-                emptyMessage: hasQuery ? "未找到相关星标章节" : "暂无星标章节",
-                emptyIcon: "star",
+                emptyRole: hasQuery ? .noResults : .empty,
+                emptyMessage: hasQuery ? "没有匹配的星标章节" : "暂无星标章节",
                 emptyStateOffset: emptyStateOffset,
                 onRetry: viewModel.retrySelectedCategory
             ) {
@@ -165,8 +165,8 @@ struct NoteCollectionView: View {
             NoteHomeStateHost(
                 state: viewModel.relatedState,
                 loadingMessage: "正在加载相关分类…",
-                emptyMessage: hasQuery ? "没有匹配的相关分类" : "还没有相关内容",
-                emptyIcon: "link",
+                emptyRole: hasQuery ? .noResults : .empty,
+                emptyMessage: hasQuery ? "没有匹配的相关分类" : "暂无相关内容",
                 emptyStateOffset: emptyStateOffset,
                 onRetry: viewModel.retrySelectedCategory
             ) {
@@ -183,8 +183,8 @@ struct NoteCollectionView: View {
             NoteHomeStateHost(
                 state: viewModel.reviewState,
                 loadingMessage: "正在加载书评…",
-                emptyMessage: hasQuery ? "没有匹配的书评" : "还没有书评",
-                emptyIcon: "doc.text",
+                emptyRole: hasQuery ? .noResults : .empty,
+                emptyMessage: hasQuery ? "没有匹配的书评" : "暂无书评",
                 emptyStateOffset: emptyStateOffset,
                 onRetry: viewModel.retrySelectedCategory
             ) {
@@ -273,8 +273,8 @@ struct NoteCollectionView: View {
 private struct NoteHomeStateHost<Content: View>: View {
     let state: NoteHomeSectionState
     let loadingMessage: String
+    let emptyRole: XMStateRole
     let emptyMessage: String
-    let emptyIcon: String
     let emptyStateOffset: CGFloat
     let onRetry: () -> Void
     @ViewBuilder let content: Content
@@ -294,23 +294,16 @@ private struct NoteHomeStateHost<Content: View>: View {
                     content
                 case .empty:
                     XMContentStateView(
-                        role: .empty,
-                        title: emptyMessage,
-                        systemImage: emptyIcon
+                        role: emptyRole,
+                        title: emptyMessage
                     )
                         .offset(y: emptyStateOffset)
-                case .error(let message):
-                    XMCompactStateView(
+                case .error:
+                    XMContentStateView(
                         role: .failure,
-                        title: "暂时无法加载",
-                        message: message,
-                        systemImage: "exclamationmark.triangle",
-                        action: XMStateAction("重试", systemImage: "arrow.clockwise", perform: onRetry),
-                        style: .card
+                        title: "暂时无法加载内容",
+                        action: XMStateAction("重试", perform: onRetry)
                     )
-                    .padding(.horizontal, Spacing.screenEdge)
-                    .padding(.top, Spacing.double)
-                    .frame(minHeight: NoteHomeLayout.stateMinHeight, alignment: .top)
                 }
             }
         }

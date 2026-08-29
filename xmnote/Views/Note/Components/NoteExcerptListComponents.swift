@@ -259,9 +259,9 @@ struct NoteListPhaseHost<Content: View>: View {
     let isLoading: Bool
     let isEmpty: Bool
     let errorMessage: String?
+    let retainedErrorMessage: String?
     let loadingMessage: String
     let emptyMessage: String
-    let emptyIcon: String
     let animatesEmptyContentTransition: Bool
     let onRetry: () -> Void
     @ViewBuilder let content: Content
@@ -274,9 +274,9 @@ struct NoteListPhaseHost<Content: View>: View {
         isLoading: Bool,
         isEmpty: Bool,
         errorMessage: String?,
+        retainedErrorMessage: String? = nil,
         loadingMessage: String,
         emptyMessage: String,
-        emptyIcon: String,
         animatesEmptyContentTransition: Bool = false,
         onRetry: @escaping () -> Void,
         @ViewBuilder content: () -> Content
@@ -284,9 +284,9 @@ struct NoteListPhaseHost<Content: View>: View {
         self.isLoading = isLoading
         self.isEmpty = isEmpty
         self.errorMessage = errorMessage
+        self.retainedErrorMessage = retainedErrorMessage
         self.loadingMessage = loadingMessage
         self.emptyMessage = emptyMessage
-        self.emptyIcon = emptyIcon
         self.animatesEmptyContentTransition = animatesEmptyContentTransition
         self.onRetry = onRetry
         self.content = content()
@@ -299,13 +299,11 @@ struct NoteListPhaseHost<Content: View>: View {
                     .padding(Spacing.screenEdge)
             } else if isLoading {
                 Color.clear
-            } else if let errorMessage {
+            } else if errorMessage != nil {
                 XMContentStateView(
                     role: .failure,
-                    title: "暂时无法加载",
-                    message: errorMessage,
-                    systemImage: "exclamationmark.triangle",
-                    action: XMStateAction("重试", systemImage: "arrow.clockwise", perform: onRetry)
+                    title: "暂时无法加载内容",
+                    action: XMStateAction("重试", perform: onRetry)
                 )
             } else {
                 successContent
@@ -322,15 +320,14 @@ struct NoteListPhaseHost<Content: View>: View {
     private var successContent: some View {
         if animatesEmptyContentTransition {
             ZStack {
-                content
+                retainedContent
                     .opacity(isEmpty ? 0 : 1)
                     .allowsHitTesting(!isEmpty)
                     .accessibilityHidden(isEmpty)
 
                 XMContentStateView(
                     role: .noResults,
-                    title: emptyMessage,
-                    systemImage: emptyIcon
+                    title: emptyMessage
                 )
                     .opacity(isEmpty ? 1 : 0)
                     .allowsHitTesting(isEmpty)
@@ -340,12 +337,30 @@ struct NoteListPhaseHost<Content: View>: View {
         } else if isEmpty {
             XMContentStateView(
                 role: .empty,
-                title: emptyMessage,
-                systemImage: emptyIcon
+                title: emptyMessage
             )
         } else {
-            content
+            retainedContent
         }
+    }
+
+    private var retainedContent: some View {
+        content
+            .safeAreaInset(edge: .top, spacing: Spacing.none) {
+                if let retainedErrorMessage {
+                    XMInlineStatusBanner(
+                        "内容刷新失败：\(retainedErrorMessage)",
+                        tone: .error,
+                        action: XMStateAction(
+                            "重试",
+                            perform: onRetry
+                        )
+                    )
+                    .padding(.horizontal, Spacing.screenEdge)
+                    .padding(.top, Spacing.cozy)
+                    .background(Color.surfacePage)
+                }
+            }
     }
 
     private func syncLoadingGate() {

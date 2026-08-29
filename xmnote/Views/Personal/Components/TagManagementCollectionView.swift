@@ -25,6 +25,7 @@ struct TagManagementCollectionView: UIViewRepresentable {
     let selectedTagIDs: Set<Int64>
     let isDisabled: Bool
     let topBarHeight: CGFloat
+    let onRetry: () -> Void
     let onScrollEdgeWashEdgesChange: (XMScrollEdgeWashEdges) -> Void
     let onSearchTextChange: (String) -> Void
     let onSearchActiveChange: (Bool) -> Void
@@ -69,6 +70,7 @@ struct TagManagementCollectionView: UIViewRepresentable {
             isDisabled: isDisabled,
             reducesMotion: reduceMotion,
             topBarHeight: topBarHeight,
+            onRetry: onRetry,
             onScrollEdgeWashEdgesChange: onScrollEdgeWashEdgesChange,
             onSearchTextChange: onSearchTextChange,
             onSearchActiveChange: onSearchActiveChange,
@@ -594,7 +596,8 @@ private extension TagManagementCollectionHostView {
         let hostedConfiguration = UIHostingConfiguration {
             TagManagementCollectionEmptyStateView(
                 state: configuration.emptyState,
-                headerHeight: isSearchEffectivelyPinned ? configuration.headerHeight : 0
+                headerHeight: isSearchEffectivelyPinned ? configuration.headerHeight : 0,
+                onRetry: configuration.onRetry
             )
         }
         .margins(.all, 0)
@@ -1315,6 +1318,7 @@ struct TagManagementCollectionConfiguration {
     let isDisabled: Bool
     let reducesMotion: Bool
     let topBarHeight: CGFloat
+    let onRetry: () -> Void
     let onScrollEdgeWashEdgesChange: (XMScrollEdgeWashEdges) -> Void
     let onSearchTextChange: (String) -> Void
     let onSearchActiveChange: (Bool) -> Void
@@ -1380,6 +1384,7 @@ struct TagManagementCollectionConfiguration {
         isDisabled: false,
         reducesMotion: false,
         topBarHeight: 0,
+        onRetry: {},
         onScrollEdgeWashEdgesChange: { _ in },
         onSearchTextChange: { _ in },
         onSearchActiveChange: { _ in },
@@ -1598,6 +1603,7 @@ private struct TagManagementCollectionHeaderContent: View {
 private struct TagManagementCollectionEmptyStateView: View {
     let state: TagManagementCollectionEmptyState
     let headerHeight: CGFloat
+    let onRetry: () -> Void
 
     var body: some View {
         Group {
@@ -1609,21 +1615,18 @@ private struct TagManagementCollectionEmptyStateView: View {
             case .empty(let title):
                 XMContentStateView(
                     role: .empty,
-                    title: title,
-                    systemImage: "tag"
+                    title: title
                 )
-            case .search(let query):
+            case .search:
                 XMContentStateView(
                     role: .noResults,
-                    title: "没有匹配的标签",
-                    message: "未找到与“\(query)”匹配的标签。"
+                    title: "没有匹配的标签"
                 )
-            case .error(let message):
+            case .error:
                 XMContentStateView(
                     role: .failure,
-                    title: "标签加载失败",
-                    message: message,
-                    systemImage: "exclamationmark.triangle"
+                    title: "暂时无法加载标签",
+                    action: XMStateAction("重试", perform: onRetry)
                 )
             }
         }

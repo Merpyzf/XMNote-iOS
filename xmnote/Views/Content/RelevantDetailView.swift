@@ -63,17 +63,27 @@ private struct RelevantDetailLoadedView: View {
     @State private var aiTextPresentation: AITextResultPresentation?
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Spacing.base) {
-                if let detail = viewModel.detail {
-                    relevantContent(detail)
-                } else if let errorMessage = viewModel.errorMessage {
-                    viewerMessageCard(text: errorMessage)
-                }
+        Group {
+            if let detail = viewModel.detail {
+                detailContent(detail)
+            } else if viewModel.isMissing {
+                XMContentStateView(
+                    role: .instruction,
+                    title: "相关内容不存在或已删除",
+                    systemImage: "questionmark.circle"
+                )
+            } else if viewModel.loadErrorMessage != nil {
+                XMContentStateView(
+                    role: .failure,
+                    title: "暂时无法加载相关内容",
+                    action: XMStateAction(
+                        "重试",
+                        perform: retryLoad
+                    )
+                )
+            } else {
+                Color.clear
             }
-            .padding(.horizontal, Spacing.screenEdge)
-            .padding(.vertical, Spacing.base)
-            .safeAreaPadding(.bottom)
         }
         .background(Color.surfacePage)
         .navigationTitle(navigationTitle)
@@ -111,6 +121,30 @@ private struct RelevantDetailLoadedView: View {
         }
         .onDisappear {
             readLoadingGate.hideImmediately()
+        }
+    }
+
+    private func detailContent(_ detail: RelevantContentDetail) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Spacing.base) {
+                if let operationErrorMessage = viewModel.operationErrorMessage {
+                    XMInlineStatusBanner(operationErrorMessage, tone: .error)
+                } else if viewModel.loadErrorMessage != nil {
+                    XMInlineStatusBanner(
+                        "相关内容刷新失败",
+                        tone: .error,
+                        action: XMStateAction(
+                            "重试",
+                            perform: retryLoad
+                        )
+                    )
+                }
+
+                relevantContent(detail)
+            }
+            .padding(.horizontal, Spacing.screenEdge)
+            .padding(.vertical, Spacing.base)
+            .safeAreaPadding(.bottom)
         }
     }
 
@@ -175,6 +209,10 @@ private struct RelevantDetailLoadedView: View {
 
     private func presentTextLookup(_ input: AITextLookupInput) {
         aiTextPresentation = AITextResultPresentation(request: .textLookup(input))
+    }
+
+    private func retryLoad() {
+        Task { await viewModel.load() }
     }
 
     private func normalizedURL(_ raw: String) -> URL? {

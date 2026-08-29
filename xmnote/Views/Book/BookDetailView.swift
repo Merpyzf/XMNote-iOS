@@ -558,6 +558,29 @@ private struct BookWorkspaceContentView: View {
         Group {
             if let book = viewModel.book {
                 workspace(book)
+                    .overlay(alignment: .top) {
+                        if let errorMessage = viewModel.errorMessage {
+                            XMInlineStatusBanner(
+                                errorMessage,
+                                tone: .error,
+                                action: XMStateAction("重试", perform: viewModel.retryObservation)
+                            )
+                            .padding(.horizontal, Spacing.screenEdge)
+                            .padding(.top, Spacing.tight)
+                        }
+                    }
+            } else if viewModel.isBookMissing {
+                XMContentStateView(
+                    role: .instruction,
+                    title: "书籍不存在或已删除",
+                    systemImage: "questionmark.circle"
+                )
+            } else if viewModel.detailLoadState == .failed {
+                XMContentStateView(
+                    role: .failure,
+                    title: "暂时无法加载书籍内容",
+                    action: XMStateAction("重试", perform: viewModel.retryObservation)
+                )
             } else if readLoadingGate.isVisible {
                 LoadingStateView("正在加载书籍内容…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -617,9 +640,9 @@ private struct BookWorkspaceContentView: View {
             syncReadLoadingVisibility()
             syncNotesLoadingVisibility()
         }
-        .onChange(of: viewModel.book == nil) { _, isBookUnavailable in
+        .onChange(of: viewModel.detailLoadState) { _, _ in
             syncReadLoadingVisibility()
-            if isBookUnavailable {
+            if viewModel.book == nil {
                 isBookHeaderFullyCollapsed = false
             }
         }
@@ -916,7 +939,8 @@ private struct BookWorkspaceContentView: View {
                 },
                 onDeleteReview: { item in
                     pendingDeletion = .review(item)
-                }
+                },
+                onRetry: viewModel.retryObservation
             )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .ignoresSafeArea(.container, edges: [.top, .bottom])
@@ -981,9 +1005,7 @@ private struct BookWorkspaceContentView: View {
             if chapters.isEmpty {
                 contentUnavailable(
                     role: searchQuery(.catalog).isEmpty ? .empty : .noResults,
-                    title: searchQuery(.catalog).isEmpty ? "暂无目录" : "没有匹配的目录",
-                    systemImage: "list.bullet.indent",
-                    description: "目录同步或创建后会显示在这里"
+                    title: searchQuery(.catalog).isEmpty ? "暂无目录" : "没有匹配的目录"
                 )
             } else {
                 VStack(spacing: Spacing.none) {
@@ -1118,11 +1140,9 @@ private struct BookWorkspaceContentView: View {
     private func notesWorkspaceContent(_ book: BookDetail) -> some View {
         let groups = noteGroups(for: book)
         if groups.isEmpty {
-            contentUnavailable(
-                role: normalizedSearchQuery(.notes).isEmpty ? .empty : .noResults,
-                title: normalizedSearchQuery(.notes).isEmpty ? "还没有书摘" : "没有匹配的书摘",
-                systemImage: "text.quote",
-                description: "记录一句触动你的内容，稍后会按章节整理在这里"
+                contentUnavailable(
+                    role: normalizedSearchQuery(.notes).isEmpty ? .empty : .noResults,
+                    title: normalizedSearchQuery(.notes).isEmpty ? "暂无书摘" : "没有匹配的书摘"
             )
             .padding(.horizontal, Spacing.screenEdge)
             .padding(.top, Spacing.section)
@@ -1282,9 +1302,7 @@ private struct BookWorkspaceContentView: View {
             if groups.isEmpty {
                 contentUnavailable(
                     role: normalizedSearchQuery(.related).isEmpty ? .empty : .noResults,
-                    title: normalizedSearchQuery(.related).isEmpty ? "还没有相关内容" : "没有匹配的相关内容",
-                    systemImage: "link",
-                    description: "把文章、观点或关联书籍整理到当前书中"
+                    title: normalizedSearchQuery(.related).isEmpty ? "暂无相关内容" : "没有匹配的相关内容"
                 )
             } else {
                 LazyVStack(alignment: .leading, spacing: Spacing.section) {
@@ -1428,9 +1446,7 @@ private struct BookWorkspaceContentView: View {
             if items.isEmpty {
                 contentUnavailable(
                     role: normalizedSearchQuery(.reviews).isEmpty ? .empty : .noResults,
-                    title: normalizedSearchQuery(.reviews).isEmpty ? "还没有书评" : "没有匹配的书评",
-                    systemImage: "text.bubble",
-                    description: "写下对整本书的判断、收获与推荐理由"
+                    title: normalizedSearchQuery(.reviews).isEmpty ? "暂无书评" : "没有匹配的书评"
                 )
             } else {
                 VStack(spacing: Spacing.none) {
@@ -1495,15 +1511,11 @@ private struct BookWorkspaceContentView: View {
     /// 使用通用紧凑状态生成一致的局部空态，不在列表内追加装饰性大插画。
     private func contentUnavailable(
         role: XMStateRole,
-        title: String,
-        systemImage: String,
-        description: String
+        title: String
     ) -> some View {
         XMCompactStateView(
             role: role,
-            title: title,
-            message: description,
-            systemImage: systemImage
+            title: title
         )
         .frame(maxWidth: .infinity)
         .padding(.vertical, Spacing.double)
@@ -1563,7 +1575,9 @@ private struct BookWorkspaceContentView: View {
             isNotesLoadingFeedbackVisible: isNotesLoadingFeedbackVisible,
             relatedCategories: relatedCategories,
             related: related,
+            relatedLoadState: viewModel.relatedLoadState,
             reviews: reviews,
+            reviewsLoadState: viewModel.reviewsLoadState,
             catalogQuery: searchQuery(.catalog),
             notesQuery: searchQuery(.notes),
             relatedQuery: searchQuery(.related),
@@ -1758,9 +1772,9 @@ private struct BookWorkspaceContentView: View {
             Group {
                 if viewModel.relatedCategories.isEmpty {
                     XMContentStateView(
-                        role: .empty,
-                        title: "暂无可用分类",
-                        message: "请先在 Android 端或后续分类管理能力中创建相关分类",
+                        role: .instruction,
+                        title: "还没有可用分类",
+                        message: "请先在 Android 端创建分类",
                         systemImage: "square.grid.2x2"
                     )
                 } else {
@@ -1799,7 +1813,7 @@ private struct BookWorkspaceContentView: View {
 
     /// 同步读取加载门闩，避免本地数据库快速命中时出现加载闪烁。
     private func syncReadLoadingVisibility() {
-        readLoadingGate.update(intent: viewModel.book == nil ? .read : .none)
+        readLoadingGate.update(intent: viewModel.detailLoadState == .loading ? .read : .none)
     }
 
     /// 仅在书摘观察流真实等待超过读取阈值时展示加载行，快速本地首值保持静默。
@@ -1845,9 +1859,7 @@ struct BookChapterNotesView: View {
                 if notes.isEmpty {
                     XMContentStateView(
                         role: .empty,
-                        title: "本章暂无书摘",
-                        message: "从阅读中记录的内容会出现在这里",
-                        systemImage: "text.quote"
+                        title: "本章暂无书摘"
                     )
                 } else {
                     ScrollView {

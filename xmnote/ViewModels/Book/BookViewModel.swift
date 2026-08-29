@@ -122,6 +122,7 @@ final class BookViewModel {
     var snapshot: BookshelfSnapshot = .empty
     var contentState: BookshelfContentState = .loading
     var hasCompletedInitialLoad = false
+    var observationErrorMessage: String?
     var selectedDimension: BookshelfDimension = .default {
         didSet {
             if selectedDimension != .default {
@@ -352,6 +353,16 @@ final class BookViewModel {
 
     // MARK: - Observation
 
+    /// 重新建立书架观察流，用于首轮读取失败后的显式恢复。
+    func retryObservation() {
+        observationTask?.cancel()
+        observationErrorMessage = nil
+        if snapshot.isEmpty(for: selectedDimension) {
+            contentState = .loading
+        }
+        startObservation()
+    }
+
     private func startObservation() {
         if !hasCompletedInitialLoad {
             contentState = .loading
@@ -368,13 +379,19 @@ final class BookViewModel {
                     await MainActor.run {
                         self.snapshot = snapshot
                         self.hasCompletedInitialLoad = true
+                        self.observationErrorMessage = nil
                         self.applySnapshotContentState()
                     }
                 }
             } catch {
                 await MainActor.run {
                     self.hasCompletedInitialLoad = true
-                    self.contentState = .error(error.localizedDescription)
+                    if self.snapshot.isEmpty(for: self.selectedDimension) {
+                        self.contentState = .error("暂时无法加载书架")
+                    } else {
+                        self.contentState = .content
+                        self.observationErrorMessage = "书架刷新失败"
+                    }
                 }
             }
         }

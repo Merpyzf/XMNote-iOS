@@ -127,6 +127,18 @@ private struct SourceManagementContentView: View {
                 .padding(.horizontal, Spacing.screenEdge)
                 .padding(.vertical, Spacing.half)
         }
+        .safeAreaInset(edge: .top, spacing: Spacing.none) {
+            if let observationErrorMessage = viewModel.observationErrorMessage {
+                XMInlineStatusBanner(
+                    observationErrorMessage,
+                    tone: .error,
+                    action: XMStateAction("重试", perform: viewModel.retryObservation)
+                )
+                .padding(.horizontal, Spacing.screenEdge)
+                .padding(.vertical, Spacing.tight)
+                .background(Color.surfacePage)
+            }
+        }
         .sheet(item: $viewModel.activeNameEdit) { edit in
             SourceNameEditSheet(viewModel: viewModel, edit: edit)
         }
@@ -191,25 +203,21 @@ private struct SourceManagementContentView: View {
         case .empty:
             XMContentStateView(
                 role: .empty,
-                title: emptyTitle,
-                message: emptyDescription,
-                systemImage: emptySystemImage
+                title: emptyTitle
             )
             .sourceManagementStateRow()
-        case .error(let message):
+        case .error:
             XMContentStateView(
                 role: .failure,
-                title: "来源加载失败",
-                message: message,
-                systemImage: "exclamationmark.triangle"
+                title: "暂时无法加载来源",
+                action: XMStateAction("重试", perform: viewModel.retryObservation)
             )
             .sourceManagementStateRow()
         case .content:
             if viewModel.isSearchResultEmpty {
                 XMContentStateView(
                     role: .noResults,
-                    title: "没有匹配的来源",
-                    message: "未找到与“\(viewModel.normalizedSearchText)”匹配的来源。"
+                    title: "没有匹配的来源"
                 )
                     .sourceManagementStateRow()
             } else {
@@ -275,24 +283,6 @@ private struct SourceManagementContentView: View {
             return "搜索我的来源"
         case .appDefault:
             return "搜索默认来源"
-        }
-    }
-
-    private var emptyDescription: String {
-        switch viewModel.selectedScope {
-        case .mine:
-            return "添加来源后，可在录入和批量编辑书籍时选择"
-        case .appDefault:
-            return "默认来源随基础数据初始化生成"
-        }
-    }
-
-    private var emptySystemImage: String {
-        switch viewModel.selectedScope {
-        case .mine:
-            return "books.vertical"
-        case .appDefault:
-            return "building.columns"
         }
     }
 

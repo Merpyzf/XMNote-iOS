@@ -78,7 +78,6 @@ struct NoteMergeView: View {
             errorMessage: failureMessage(viewModel.phase),
             loadingMessage: "正在生成合并预览…",
             emptyMessage: "",
-            emptyIcon: "arrow.triangle.merge",
             onRetry: viewModel.retry
         ) {
             if viewModel.isSubmitted {

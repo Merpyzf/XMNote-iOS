@@ -53,7 +53,7 @@ struct ReadCalendarYearSummarySheet: View {
                     XMInlineStatusBanner(
                         errorMessage,
                         tone: .warning,
-                        action: XMStateAction("重试", systemImage: "arrow.clockwise", perform: onRetry)
+                        action: XMStateAction("重试", perform: onRetry)
                     )
                 }
 

@@ -16,7 +16,9 @@ final class RelevantDetailViewModel {
     var detail: RelevantContentDetail?
     var isLoading = false
     var isDeleting = false
-    var errorMessage: String?
+    private(set) var isMissing = false
+    private(set) var loadErrorMessage: String?
+    private(set) var operationErrorMessage: String?
     private(set) var dismissalRequestToken: Int = 0
 
     private let repository: any ContentRepositoryProtocol
@@ -29,38 +31,42 @@ final class RelevantDetailViewModel {
 
     /// 读取或刷新当前相关内容详情。
     func load() async {
+        guard !isLoading else { return }
         isLoading = true
-        errorMessage = nil
+        isMissing = false
+        loadErrorMessage = nil
         defer { isLoading = false }
 
         do {
             guard let payload = try await repository.fetchViewerDetail(itemID: .relevant(contentId)) else {
                 detail = nil
-                errorMessage = "相关内容不存在或已删除"
+                isMissing = true
                 return
             }
             guard case .relevant(let relevantDetail) = payload else {
                 detail = nil
-                errorMessage = "相关内容数据类型不匹配"
+                loadErrorMessage = "暂时无法加载相关内容"
                 return
             }
             detail = relevantDetail
+            operationErrorMessage = nil
         } catch {
-            errorMessage = "加载失败：\(error.localizedDescription)"
+            loadErrorMessage = "暂时无法加载相关内容"
         }
     }
 
     /// 删除当前相关内容，成功后请求退出详情页。
     func deleteCurrentRelevant() async {
+        guard !isDeleting else { return }
         isDeleting = true
-        errorMessage = nil
+        operationErrorMessage = nil
         defer { isDeleting = false }
 
         do {
             try await repository.delete(itemID: .relevant(contentId))
             dismissalRequestToken &+= 1
         } catch {
-            errorMessage = "删除失败：\(error.localizedDescription)"
+            operationErrorMessage = "删除相关内容失败"
         }
     }
 }

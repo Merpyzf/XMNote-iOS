@@ -11,6 +11,7 @@
 - `NoteDetailView.swift`: 笔记详情阅读与编辑
 - `NoteExcerptListView.swift`: 书摘二级列表（底部系统搜索、上下文菜单、分享/删除与批量操作）
 - `NoteReviewView.swift`: 书摘回顾分页卡组主界面
+- `Components/NotePhotoOCRFlowView.swift`: 书摘 OCR 取景、权限或设备不可用状态、相册回退、裁切识别与结果回填流程
 - `Components/NoteReviewCardView.swift`: 书摘回顾卡片页面私有内容视图
 - `Components/NoteReviewPalette+UI.swift`: 书摘回顾卡片配色与文本对齐 UI 映射
 - `Components/NoteCollapsibleSearchPage.swift`: 书摘页面折叠搜索与滚动 chrome 组件组

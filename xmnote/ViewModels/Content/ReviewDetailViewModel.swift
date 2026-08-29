@@ -16,7 +16,9 @@ final class ReviewDetailViewModel {
     var detail: ReviewContentDetail?
     var isLoading = false
     var isDeleting = false
-    var errorMessage: String?
+    private(set) var isMissing = false
+    private(set) var loadErrorMessage: String?
+    private(set) var operationErrorMessage: String?
     private(set) var dismissalRequestToken: Int = 0
 
     private let repository: any ContentRepositoryProtocol
@@ -29,38 +31,42 @@ final class ReviewDetailViewModel {
 
     /// 读取或刷新当前书评详情。
     func load() async {
+        guard !isLoading else { return }
         isLoading = true
-        errorMessage = nil
+        isMissing = false
+        loadErrorMessage = nil
         defer { isLoading = false }
 
         do {
             guard let payload = try await repository.fetchViewerDetail(itemID: .review(reviewId)) else {
                 detail = nil
-                errorMessage = "书评不存在或已删除"
+                isMissing = true
                 return
             }
             guard case .review(let reviewDetail) = payload else {
                 detail = nil
-                errorMessage = "书评数据类型不匹配"
+                loadErrorMessage = "暂时无法加载书评"
                 return
             }
             detail = reviewDetail
+            operationErrorMessage = nil
         } catch {
-            errorMessage = "加载失败：\(error.localizedDescription)"
+            loadErrorMessage = "暂时无法加载书评"
         }
     }
 
     /// 删除当前书评，成功后请求退出详情页。
     func deleteCurrentReview() async {
+        guard !isDeleting else { return }
         isDeleting = true
-        errorMessage = nil
+        operationErrorMessage = nil
         defer { isDeleting = false }
 
         do {
             try await repository.delete(itemID: .review(reviewId))
             dismissalRequestToken &+= 1
         } catch {
-            errorMessage = "删除失败：\(error.localizedDescription)"
+            operationErrorMessage = "删除书评失败"
         }
     }
 }

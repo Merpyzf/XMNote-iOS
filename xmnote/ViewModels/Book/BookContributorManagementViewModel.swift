@@ -97,6 +97,7 @@ enum BookContributorWriteAction: Hashable {
 final class BookContributorManagementViewModel {
     var groups: [BookshelfAggregateGroup] = []
     var contentState: BookshelfContentState = .loading
+    var observationErrorMessage: String?
     var activeWriteAction: BookContributorWriteAction?
     var writeError: String?
     var actionNotice: String?
@@ -121,6 +122,12 @@ final class BookContributorManagementViewModel {
     isolated deinit {
         observationTask?.cancel()
         writeTask?.cancel()
+    }
+
+    /// 重新建立作者或出版社观察流，用于首轮读取失败后的显式恢复。
+    func retryObservation() {
+        observationTask?.cancel()
+        startObservation()
     }
 
     /// 打开名称编辑弹窗，提交前不会触发写库。
@@ -192,7 +199,10 @@ final class BookContributorManagementViewModel {
 
 private extension BookContributorManagementViewModel {
     func startObservation() {
-        contentState = .loading
+        observationErrorMessage = nil
+        if groups.isEmpty {
+            contentState = .loading
+        }
         let setting = BookshelfDisplaySetting.defaultValue(for: kind.dimension)
         observationTask = Task {
             do {
@@ -210,12 +220,18 @@ private extension BookContributorManagementViewModel {
                     }
                     await MainActor.run {
                         self.groups = nextGroups
+                        self.observationErrorMessage = nil
                         self.contentState = nextGroups.isEmpty ? .empty : .content
                     }
                 }
             } catch {
                 await MainActor.run {
-                    self.contentState = .error(error.localizedDescription)
+                    if self.groups.isEmpty {
+                        self.contentState = .error("暂时无法加载\(self.kind.title)")
+                    } else {
+                        self.contentState = .content
+                        self.observationErrorMessage = "\(self.kind.title)刷新失败"
+                    }
                 }
             }
         }
@@ -242,8 +258,8 @@ private extension BookContributorManagementViewModel {
             } catch {
                 await MainActor.run {
                     self.activeWriteAction = nil
-                    self.writeError = error.localizedDescription
-                    self.actionNotice = error.localizedDescription
+                    self.writeError = "操作失败"
+                    self.actionNotice = "操作失败"
                 }
             }
         }
