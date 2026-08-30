@@ -1,6 +1,6 @@
 # 业务 Sheet
 
-本参考只约束 XMNote 业务 Sheet 的系统级骨架与跨场景设计语言，不规定业务内容必须使用相同的 `VStack` 间距、Section 数量、表单结构、列表形式或文本组合。新增、修改或审查 Sheet 时读取本文件；任务同时涉及骨架之外的组件归位、通用颜色或固定圆角 token 时，再组合读取 [组件与交互](components-and-interaction.md)、[颜色、表层、图标与材质](color-surfaces-and-material.md) 或 [排版、间距与布局](typography-and-layout.md)。
+本参考只约束 XMNote 业务 Sheet 的系统级骨架与跨场景设计语言，不规定业务内容必须使用相同的 `VStack` 间距、Section 数量、表单结构、列表形式或文本组合。新增、修改或审查 Sheet 时读取本文件；任务同时涉及骨架之外的组件归位、通用颜色、图标或固定圆角 token 时，再组合读取 [组件与交互](components-and-interaction.md)、[颜色、表层与材质](color-surfaces-and-material.md)、[图标设计与使用](iconography.md) 或 [排版、间距与布局](typography-and-layout.md)。
 
 ## 事实来源与判断顺序
 

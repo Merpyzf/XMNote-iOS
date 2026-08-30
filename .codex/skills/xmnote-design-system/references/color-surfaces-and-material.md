@@ -1,4 +1,4 @@
-# 颜色、表层、图标与材质
+# 颜色、表层与材质
 
 颜色必须按用户任务和语义角色选择，而不是按当前 RGB、个人偏好或“看起来像绿色”选择。具体色值、浅深色和高对比度解析始终读取 `xmnote/Utilities/DesignSystem/SemanticColors.swift`；底层构造与允许路径读取 `ColorConstruction.swift` 和 `scripts/design-system/policy.json`。
 
@@ -63,15 +63,9 @@ token 存在不等于每个层级都必须使用。`surfaceBorderStrong`、`surf
 - 阅读状态、热力图、日历主题、评分、封面装饰等业务颜色由各自 catalog/Appearance owner 管理；页面不得把其颜色提升为全局 token。
 - Domain 只保留状态、等级或数值，颜色与图标映射留在 UIComponents 或具体页面 presentation owner。
 
-## 图标与 tint
+## 图标颜色边界
 
-- 先确认图标的业务语义和 owner，再选 SF Symbol。相同图形不等于相同业务角色。
-- 与文字并列的辅助图标不得比主文本更亮、更饱和或更大。
-- 普通菜单使用 `XMMenuLabel` 与 `xmMenuNeutralTint()`；顶部辅助操作在根级品牌 tint 环境中使用 `xmToolbarNeutralTint()` 或机器目录返回的等价入口。
-- 选中菜单使用尾部 checkmark 与可访问性 selected trait，颜色仍保持中性。
-- warning/destructive 图标使用对应反馈色；普通操作不因可点击而使用 `appTint`。
-- 字面量 SF Symbol 属于 `DSR001` 人工观察项：单点且语义清楚可保留，重复业务语义应查询已有图标组件；不要为了清零建立图标常量仓库。
-- glyph 可以由真实图标 owner 使用固定视觉尺寸；不要把它误判成生产文本的固定字号违规。
+图标来源、Reicon/SF Symbols 分工、Filled/Outline、资源接入、视觉校准、交互与可访问性统一读取 [图标设计与使用](iconography.md)。本文件只持有图标颜色边界：普通图标使用 `iconPrimary/iconSecondary`，菜单和顶部辅助操作使用对应的中性 tint 入口，反馈图标使用真实反馈语义；普通操作不因可点击而使用 `appTint`。
 
 ## Liquid Glass 与系统材质
 
