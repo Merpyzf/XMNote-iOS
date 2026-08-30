@@ -1492,7 +1492,7 @@ struct MainTabView: View {
         case .webdavServers:
             WebDAVServerListView()
         case .batchExport:
-            Text("批量导出")
+            Text("笔记导出")
         case .desktopWeb:
             DesktopWebView()
         case .apiIntegration:

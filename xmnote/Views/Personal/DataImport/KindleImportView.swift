@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 SwiftUI、UniformTypeIdentifiers、KindleImportViewModel 与统一导入预览/反馈组件
- * [OUTPUT]: 对外提供 KindleImportView，覆盖连接设备与普通 My Clippings.txt 两个真实系统文件入口
+ * [OUTPUT]: 对外提供 KindleImportView，以 Reicon 区分连接设备与普通 My Clippings.txt 两个真实系统文件入口
  * [POS]: Views/Personal/DataImport 的 Kindle 平台页面，不宣称 iOS 能自动枚举 MTP
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -66,7 +66,7 @@ struct KindleImportView: View {
 
     private var connectedDeviceCard: some View {
         importCard(
-            icon: "externaldrive.connected.to.line.below",
+            icon: .reiconExternalDriveOutline,
             title: "从已连接的 Kindle 导入",
             message: "先用 USB-C 或转接器连接 Kindle。若设备存储出现在系统“文件”中，请打开 Documents 并选择 My Clippings.txt。",
             actionTitle: "在“文件”中查找 Kindle",
@@ -76,7 +76,7 @@ struct KindleImportView: View {
 
     private var manualFileCard: some View {
         importCard(
-            icon: "doc.text",
+            icon: .reiconFileTextOutline,
             title: "选择 My Clippings.txt",
             message: "也可以选择已保存到 iCloud Drive、本机或其他文件提供方的 Kindle 书摘文件",
             actionTitle: "选择文件",
@@ -100,14 +100,22 @@ struct KindleImportView: View {
     }
 
     private func importCard(
-        icon: String,
+        icon: ImageResource,
         title: LocalizedStringKey,
         message: LocalizedStringKey,
         actionTitle: LocalizedStringKey,
         entryPoint: KindleImportEntryPoint
     ) -> some View {
         VStack(alignment: .leading, spacing: Spacing.base) {
-            Label(title, systemImage: icon)
+            Label {
+                Text(title)
+            } icon: {
+                Image(icon)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 18, height: 18)
+                    .accessibilityHidden(true)
+            }
                 .font(AppTypography.title3)
                 .foregroundStyle(Color.textPrimary)
             Text(message)

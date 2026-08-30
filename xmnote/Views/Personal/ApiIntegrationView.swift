@@ -1,13 +1,13 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer 注入 ExternalAppIntegrationRepositoryProtocol，依赖 ApiIntegrationViewModel 驱动状态概览与单项配置编辑
- * [OUTPUT]: 对外提供 ApiIntegrationView，以 17/15/13pt 设置层级承载 Flomo、Writeathon 与 Inbox 的关联应用状态列表和配置 Sheet
- * [POS]: Views/Personal 的 API 集成页面壳层，被 PersonalRoute.apiIntegration 导航消费
+ * [OUTPUT]: 对外提供 ApiIntegrationView，以 17/15/13pt 设置层级承载“应用关联”中的 Flomo、Writeathon 与 Inbox 状态列表和配置 Sheet
+ * [POS]: Views/Personal 的应用关联页面壳层，被 PersonalRoute.apiIntegration 导航消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
 
-/// API 集成配置页，提供关联应用状态概览并将具体配置编辑收进二级 Sheet。
+/// 应用关联配置页，提供外部应用状态概览并将具体配置编辑收进二级 Sheet。
 struct ApiIntegrationView: View {
     @Environment(RepositoryContainer.self) private var repositories
     @Environment(XMToastCenter.self) private var toastCenter
@@ -21,7 +21,7 @@ struct ApiIntegrationView: View {
                 Color.clear
             }
         }
-        .navigationTitle("API 集成")
+        .navigationTitle("应用关联")
         .navigationBarTitleDisplayMode(.inline)
         .task {
             guard viewModel == nil else { return }

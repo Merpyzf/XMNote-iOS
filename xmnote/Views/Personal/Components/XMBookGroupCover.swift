@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 XMBookCover 渲染书籍封面，依赖 XMBookCoverAppearance 与 DesignTokens 提供封面外观、圆角及描边语义
- * [OUTPUT]: 对外提供 XMBookGroupCover，用紧凑书籍叠放、书盒、规整裁片或轻托盘样式表达书籍分组封面
+ * [OUTPUT]: 对外提供 XMBookGroupCover，用紧凑书籍叠放、Reicon 空分组、书盒、规整裁片或轻托盘样式表达书籍分组封面
  * [POS]: Views/Personal/Components 的页面私有分组封面组件，仅服务书籍分组管理入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -140,8 +140,9 @@ struct XMBookGroupCover: View {
                 cornerRadius: metrics.trayCornerRadius
             )
 
-            Image(systemName: "folder")
-                .font(AppTypography.caption)
+            Image(.reiconFolderOutline)
+                .resizable()
+                .scaledToFit()
                 .foregroundStyle(Color.textHint)
                 .frame(width: metrics.emptyGlyphSize.width, height: metrics.emptyGlyphSize.height)
                 .position(
