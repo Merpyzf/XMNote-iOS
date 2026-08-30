@@ -9,6 +9,7 @@ replace Git hooks used by humans; it only issues and verifies AI attestations.
 from __future__ import annotations
 
 import argparse
+import difflib
 import hashlib
 import json
 import os
@@ -16,12 +17,13 @@ import re
 import shlex
 import subprocess
 import sys
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
 
-VERSION = 1
+VERSION = 2
 GATE_RELATIVE_DIR = Path("artifacts/git-commit-gate")
 ATTESTATION_NAME = "attestation.json"
 MESSAGE_NAME = "message.txt"
@@ -86,14 +88,41 @@ PERMANENTLY_FORBIDDEN_COMMANDS = {
 }
 SHELL_SEPARATORS = {";", "&&", "||", "|", "&", "\n"}
 
-GENERATED_OR_TEMP_PATTERNS = (
-    re.compile(r"(^|/)\.DS_Store$"),
-    re.compile(r"(^|/)(?:DerivedData|build|Build)(/|$)"),
-    re.compile(r"(^|/)xcuserdata(/|$)"),
-    re.compile(r"(^|/)artifacts/git-commit-gate(/|$)"),
-    re.compile(r"\.(?:log|tmp|temp|swp|swo)$", re.IGNORECASE),
+NEVER_COMMIT_PATH_PATTERNS = (
+    ("gate-artifact", re.compile(r"(^|/)artifacts/git-commit-gate(/|$)")),
+    ("xcode-local-data", re.compile(r"(^|/)(?:DerivedData|xcuserdata)(/|$)")),
+    ("xcode-local-data", re.compile(r"\.(?:xcuserstate|xcsettings)$", re.IGNORECASE)),
+    ("build-artifact", re.compile(r"(^|/)(?:build|Build|\.build)(/|$)")),
+    ("build-artifact", re.compile(r"\.(?:ipa|xcarchive|dSYM|xcresult)$", re.IGNORECASE)),
+    ("local-environment", re.compile(r"(^|/)\.DS_Store$")),
+    ("local-environment", re.compile(r"(^|/)\.env(?:\..*)?$", re.IGNORECASE)),
+    ("signing-credential", re.compile(r"\.(?:p12|pfx|mobileprovision)$", re.IGNORECASE)),
+    ("temporary-file", re.compile(r"\.(?:log|tmp|temp|swp|swo)$", re.IGNORECASE)),
 )
-DEBUG_MARKERS = ("debugPrint(", "print(", "TODO", "FIXME", "#warning")
+CONTROLLED_GENERATED_PATTERNS = (
+    re.compile(r"(^|/)(?:generated|Generated)(/|$)"),
+    re.compile(r"\.generated\.[^/]+$", re.IGNORECASE),
+)
+PRIVATE_KEY_RE = re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----")
+SUSPECTED_SECRET_RE = re.compile(
+    r"(?i)(?:api[_-]?key|client[_-]?secret|password|access[_-]?token)"
+    r"\s*[:=]\s*[\"']?[A-Za-z0-9_./+=-]{12,}"
+)
+CONFLICT_MARKER_RE = re.compile(r"^(?:<<<<<<< .+|=======|>>>>>>> .+)$")
+DEBUG_OUTPUT_RE = re.compile(r"\b(?:debugPrint|print|NSLog)\s*\(")
+TODO_MARKER_RE = re.compile(r"(?:\bTODO\b|\bFIXME\b|#warning)")
+PROHIBITED_SCOPE_MARKERS = (
+    "bug",
+    "issue",
+    "ticket",
+    "修复",
+    "任务",
+    "需求",
+    "临时",
+    "本次",
+    "调整",
+)
+LARGE_FILE_BYTES = 1024 * 1024
 
 
 class GateError(RuntimeError):
@@ -248,10 +277,14 @@ def workspace_digest(snapshot: dict[str, Any]) -> str:
     return sha256_text(stable_json(snapshot))
 
 
-def history_scopes(repo: Path) -> dict[str, dict[str, Any]]:
+def history_scopes(repo: Path, paths: Iterable[str] | None = None) -> dict[str, dict[str, Any]]:
     result: dict[str, dict[str, Any]] = {}
+    args = ["git", "log", "--all", "--no-merges", "--pretty=format:%H%x09%s"]
+    selected_paths = sorted(set(paths or []))
+    if selected_paths:
+        args.extend(["--", *selected_paths])
     log = run(
-        ["git", "log", "--all", "--pretty=format:%H%x09%s"],
+        args,
         cwd=repo,
         check=False,
     )
@@ -272,10 +305,161 @@ def history_scopes(repo: Path) -> dict[str, dict[str, Any]]:
     return dict(sorted(result.items(), key=lambda item: (-item[1]["count"], item[0])))
 
 
+def normalize_scope(scope: str) -> str:
+    value = unicodedata.normalize("NFKC", scope).casefold()
+    value = re.sub(r"[\s._/\\-]+", "", value)
+    if value.isascii() and len(value) > 3 and value.endswith("s") and not value.endswith("ss"):
+        value = value[:-1]
+    return value
+
+
+def similar_scopes(scope: str, existing: Iterable[str]) -> list[str]:
+    normalized = normalize_scope(scope)
+    matches: list[tuple[float, str]] = []
+    for candidate in existing:
+        other = normalize_scope(candidate)
+        ratio = difflib.SequenceMatcher(a=normalized, b=other).ratio()
+        if normalized == other or ratio >= 0.88:
+            matches.append((ratio, candidate))
+    return [candidate for _, candidate in sorted(matches, key=lambda item: (-item[0], item[1]))]
+
+
+def finding(
+    severity: str,
+    kind: str,
+    detail: str,
+    *,
+    path: str | None = None,
+    line: int | None = None,
+) -> dict[str, Any]:
+    identity = {"severity": severity, "kind": kind, "path": path, "line": line, "detail": detail}
+    value: dict[str, Any] = {
+        "id": f"{kind}:{sha256_text(stable_json(identity))[:16]}",
+        "severity": severity,
+        "kind": kind,
+        "detail": detail,
+    }
+    if path is not None:
+        value["path"] = path
+    if line is not None:
+        value["line"] = line
+    return value
+
+
+def path_findings(repo: Path, paths: Iterable[str]) -> list[dict[str, Any]]:
+    findings: list[dict[str, Any]] = []
+    for relative in sorted(set(paths)):
+        for kind, pattern in NEVER_COMMIT_PATH_PATTERNS:
+            if pattern.search(relative):
+                findings.append(
+                    finding(
+                        "blocker",
+                        kind,
+                        "禁止提交的本地、凭据或构建产物",
+                        path=relative,
+                    )
+                )
+                break
+        else:
+            if any(pattern.search(relative) for pattern in CONTROLLED_GENERATED_PATTERNS):
+                findings.append(
+                    finding(
+                        "warning",
+                        "controlled-generated",
+                        "受控生成文件必须确认来源、可复现性和纳入理由",
+                        path=relative,
+                    )
+                )
+        candidate = repo / relative
+        try:
+            if candidate.is_file() and candidate.stat().st_size > LARGE_FILE_BYTES:
+                findings.append(
+                    finding(
+                        "warning",
+                        "large-file",
+                        f"文件大小为 {candidate.stat().st_size} bytes，超过 1 MiB",
+                        path=relative,
+                    )
+                )
+        except OSError:
+            continue
+    return findings
+
+
+def staged_added_lines(repo: Path) -> list[tuple[str, int, str]]:
+    patch = git(repo, "diff", "--cached", "--unified=0", "--no-ext-diff", "--no-renames")
+    path = ""
+    line_number = 0
+    result: list[tuple[str, int, str]] = []
+    for line in patch.splitlines():
+        if line.startswith("+++ "):
+            value = line[4:]
+            path = value[2:] if value.startswith("b/") else value
+            continue
+        if line.startswith("@@ "):
+            match = re.search(r"\+(\d+)(?:,(\d+))?", line)
+            line_number = int(match.group(1)) if match else 0
+            continue
+        if line.startswith("+") and not line.startswith("+++"):
+            result.append((path, line_number, line[1:]))
+            line_number += 1
+        elif line.startswith("-") and not line.startswith("---"):
+            continue
+        elif line.startswith(" "):
+            line_number += 1
+    return result
+
+
+def staged_findings(repo: Path, paths: Iterable[str] | None = None) -> list[dict[str, Any]]:
+    selected_paths = sorted(set(paths if paths is not None else ordinary_staged_paths(repo)))
+    findings = path_findings(repo, selected_paths)
+
+    check_result = run(["git", "diff", "--cached", "--check"], cwd=repo, check=False)
+    if check_result.returncode != 0:
+        detail = (check_result.stdout.strip() or check_result.stderr.strip() or "格式检查失败")[-1000:]
+        findings.append(finding("blocker", "diff-check", detail))
+
+    unmerged = split_nul(git(repo, "diff", "--name-only", "-z", "--diff-filter=U"))
+    for relative in unmerged:
+        findings.append(finding("blocker", "unmerged", "存在未解决的 Git 冲突", path=relative))
+
+    for relative, line_number, content in staged_added_lines(repo):
+        if CONFLICT_MARKER_RE.fullmatch(content):
+            findings.append(
+                finding("blocker", "conflict-marker", "暂存内容包含冲突标记", path=relative, line=line_number)
+            )
+        if PRIVATE_KEY_RE.search(content):
+            findings.append(
+                finding("blocker", "private-key", "暂存内容包含私钥", path=relative, line=line_number)
+            )
+        elif SUSPECTED_SECRET_RE.search(content):
+            findings.append(
+                finding(
+                    "warning",
+                    "suspected-secret",
+                    "暂存内容疑似包含密钥、密码或 Token",
+                    path=relative,
+                    line=line_number,
+                )
+            )
+        if DEBUG_OUTPUT_RE.search(content):
+            findings.append(
+                finding("warning", "debug-output", "暂存内容包含调试输出", path=relative, line=line_number)
+            )
+        if TODO_MARKER_RE.search(content):
+            findings.append(
+                finding("warning", "todo-marker", "暂存内容包含 TODO、FIXME 或 #warning", path=relative, line=line_number)
+            )
+    unique = {item["id"]: item for item in findings}
+    return sorted(unique.values(), key=lambda item: (item["severity"], item.get("path", ""), item["id"]))
+
+
 def path_risks(paths: Iterable[str]) -> list[str]:
     risks: list[str] = []
     for path in sorted(paths):
-        if any(pattern.search(path) for pattern in GENERATED_OR_TEMP_PATTERNS):
+        if any(pattern.search(path) for _, pattern in NEVER_COMMIT_PATH_PATTERNS) or any(
+            pattern.search(path) for pattern in CONTROLLED_GENERATED_PATTERNS
+        ):
             risks.append(path)
     return risks
 
@@ -284,6 +468,7 @@ def inspect_state(repo: Path) -> dict[str, Any]:
     staged = ordinary_staged_paths(repo)
     unstaged = unstaged_paths(repo)
     untracked = untracked_paths(repo)
+    findings = staged_findings(repo, staged)
     return {
         "result": "INSPECT",
         "repository": str(repo),
@@ -295,6 +480,9 @@ def inspect_state(repo: Path) -> dict[str, Any]:
         "candidate": staged,
         "other_changes": sorted(set(unstaged + untracked) - set(staged)),
         "risks": path_risks(staged + unstaged + untracked),
+        "blockers": [item for item in findings if item["severity"] == "blocker"],
+        "warnings": [item for item in findings if item["severity"] == "warning"],
+        "path_scope_candidates": history_scopes(repo, staged) if staged else {},
         "historical_scopes": history_scopes(repo),
     }
 
@@ -307,6 +495,13 @@ def print_inspect(state: dict[str, Any]) -> None:
     print(f"- 未暂存：{', '.join(state['unstaged']) or '无'}")
     print(f"- 未跟踪：{', '.join(state['untracked']) or '无'}")
     print(f"- 风险项：{', '.join(state['risks']) or '无'}")
+    blocker_text = "；".join(f"{item['id']} {item['detail']}" for item in state["blockers"])
+    warning_text = "；".join(f"{item['id']} {item['detail']}" for item in state["warnings"])
+    print(f"- 硬阻断：{blocker_text or '无'}")
+    print(f"- 待确认风险：{warning_text or '无'}")
+    path_scopes = list(state["path_scope_candidates"].items())[:20]
+    path_scope_text = ", ".join(f"{name}({data['count']})" for name, data in path_scopes)
+    print(f"- 相关路径历史 scope：{path_scope_text or '无'}")
     scopes = list(state["historical_scopes"].items())[:20]
     scope_text = ", ".join(f"{name}({data['count']})" for name, data in scopes)
     print(f"- 历史 scope：{scope_text or '无'}")
@@ -585,17 +780,42 @@ def validate_message(message: str, paths: list[str], scope_review: dict[str, Any
         raise GateError("scope 决策必须记录至少一个历史检索词")
     if source == "historical":
         if scope not in scopes:
-            raise GateError(f"scope 标为 historical，但完整历史中不存在：{scope}")
+            near = similar_scopes(scope, scopes)
+            suffix = f"；相近历史 scope：{', '.join(near)}" if near else ""
+            raise GateError(f"scope 标为 historical，但完整历史中不存在：{scope}{suffix}")
     elif source == "new":
         candidates = scope_review.get("candidates")
         reason = str(scope_review.get("new_reason", "")).strip()
         if not reason:
             raise GateError("新增 scope 必须记录 new_reason")
+        if scope in scopes:
+            raise GateError(f"scope 已存在于完整历史，必须标为 historical：{scope}")
+        normalized_matches = [
+            candidate for candidate in scopes if normalize_scope(candidate) == normalize_scope(scope)
+        ]
+        if normalized_matches:
+            raise GateError(
+                "新 scope 与历史 scope 仅有大小写、单复数、空格或分隔符差异："
+                + ", ".join(normalized_matches)
+            )
+        lowered = scope.casefold()
+        if any(marker in lowered for marker in PROHIBITED_SCOPE_MARKERS):
+            raise GateError("新 scope 不能使用任务、BUG、需求、修复或一次性调整名称")
+        if re.search(r"[+,，、/&]", scope):
+            raise GateError("新 scope 不能组合多个范围")
         if scopes and (not isinstance(candidates, list) or not candidates):
             raise GateError("新增 scope 必须记录相邻历史候选及不适用理由")
+        reviewed_candidates: dict[str, str] = {}
         for candidate in candidates or []:
             if not isinstance(candidate, dict) or not str(candidate.get("name", "")).strip() or not str(candidate.get("reason", "")).strip():
                 raise GateError("每个新增 scope 候选必须包含 name 与 reason")
+            name = str(candidate["name"]).strip()
+            if name not in scopes:
+                raise GateError(f"新增 scope 候选不在完整历史中：{name}")
+            reviewed_candidates[name] = str(candidate["reason"]).strip()
+        unreviewed = [candidate for candidate in similar_scopes(scope, scopes) if candidate not in reviewed_candidates]
+        if unreviewed:
+            raise GateError("新增 scope 前必须逐项排除相近历史 scope：" + ", ".join(unreviewed))
     else:
         raise GateError("scope.source 必须是 historical 或 new")
 
@@ -732,16 +952,33 @@ def execute_baseline_validations(repo: Path, entries: list[dict[str, str]]) -> l
     return [by_command.get(entry["command"], entry) for entry in entries]
 
 
-def staged_debug_markers(repo: Path) -> list[str]:
-    diff = git(repo, "diff", "--cached", "--unified=0", "--no-ext-diff")
-    findings: list[str] = []
-    for line in diff.splitlines():
-        if not line.startswith("+") or line.startswith("+++"):
-            continue
-        for marker in DEBUG_MARKERS:
-            if marker in line:
-                findings.append(marker)
-    return sorted(set(findings))
+def validate_risk_acceptances(
+    review: dict[str, Any], warnings: list[dict[str, Any]]
+) -> list[dict[str, str]]:
+    raw = review.get("risk_acceptances")
+    if not isinstance(raw, list):
+        raise GateError("review.risk_acceptances 必须是数组；没有风险时使用空数组")
+    accepted: dict[str, dict[str, str]] = {}
+    for item in raw:
+        if not isinstance(item, dict):
+            raise GateError("每条 risk_acceptance 必须是对象")
+        finding_id = str(item.get("id", "")).strip()
+        reason = str(item.get("reason", "")).strip()
+        if not finding_id or not reason:
+            raise GateError("每条 risk_acceptance 必须包含精确 finding id 与非空 reason")
+        if finding_id in accepted:
+            raise GateError(f"risk_acceptances 包含重复 finding id：{finding_id}")
+        accepted[finding_id] = {"id": finding_id, "reason": reason}
+
+    warning_ids = {item["id"] for item in warnings}
+    accepted_ids = set(accepted)
+    missing = sorted(warning_ids - accepted_ids)
+    unknown = sorted(accepted_ids - warning_ids)
+    if missing:
+        raise GateError("以下风险尚未逐条说明并接受：" + ", ".join(missing))
+    if unknown:
+        raise GateError("risk_acceptances 包含已失效或伪造的 finding id：" + ", ".join(unknown))
+    return [accepted[finding_id] for finding_id in sorted(accepted)]
 
 
 def resolve_commit(repo: Path, value: str) -> str:
@@ -901,7 +1138,9 @@ def validate_review(
     analysis: dict[str, Any],
 ) -> dict[str, Any]:
     if review.get("version") != VERSION:
-        raise GateError(f"review.version 必须为 {VERSION}")
+        raise GateError(
+            f"review.version 必须为 {VERSION}；旧版 review 已过期，请重新执行 inspect 后生成"
+        )
     if analysis["forbidden"]:
         raise GateError("；".join(analysis["forbidden"]))
     if len(analysis["history"]) != 1:
@@ -945,10 +1184,6 @@ def validate_review(
                 "确保实际消息与 PASS 凭据一致"
             )
 
-    debug_markers = staged_debug_markers(repo) if ordinary_staged_paths(repo) else []
-    if debug_markers and review.get("debug_code_reviewed") is not True:
-        raise GateError(f"暂存 diff 含调试标记，需明确复核：{', '.join(debug_markers)}")
-
     message = str(review.get("message", ""))
     message_data: dict[str, str] | None = None
     history_audit: list[dict[str, Any]] = []
@@ -972,13 +1207,15 @@ def validate_review(
         }
     )
     actual_paths = effective_paths or included or audit_paths
-    risky = path_risks(actual_paths)
-    controlled_generated = sorted(review.get("controlled_generated_files") or [])
-    unapproved_risks = sorted(set(risky) - set(controlled_generated))
-    if unapproved_risks:
-        raise GateError(f"包含未批准的临时或生成文件：{', '.join(unapproved_risks)}")
-    if controlled_generated and not str(review.get("generated_reason", "")).strip():
-        raise GateError("受控生成文件必须说明 generated_reason")
+    findings = staged_findings(repo, actual_paths)
+    blockers = [item for item in findings if item["severity"] == "blocker"]
+    warnings = [item for item in findings if item["severity"] == "warning"]
+    if blockers:
+        details = "；".join(
+            f"{item['id']} {item.get('path', '')} {item['detail']}".strip() for item in blockers
+        )
+        raise GateError("暂存内容存在不可接受的硬阻断项：" + details)
+    risk_acceptances = validate_risk_acceptances(review, warnings)
     entries = validate_matrix(actual_paths, review)
 
     working_other = sorted(
@@ -999,6 +1236,8 @@ def validate_review(
         "subject": message_data["subject"] if message_data else "保留现有历史消息",
         "scope": review.get("scope") or {},
         "history_audit": history_audit,
+        "warnings": warnings,
+        "risk_acceptances": risk_acceptances,
     }
 
 
@@ -1049,6 +1288,14 @@ def prepare(repo: Path, review_path: Path, command: str) -> dict[str, Any]:
 
     snapshot = workspace_snapshot(repo)
     validation_digest = sha256_text(stable_json(decision["validation"]))
+    risk_digest = sha256_text(
+        stable_json(
+            {
+                "warnings": decision["warnings"],
+                "risk_acceptances": decision["risk_acceptances"],
+            }
+        )
+    )
     attestation = {
         "version": VERSION,
         "prepared_at": now_iso(),
@@ -1072,6 +1319,9 @@ def prepare(repo: Path, review_path: Path, command: str) -> dict[str, Any]:
         "validation_digest": validation_digest,
         "history_audit": decision["history_audit"],
         "history_audit_digest": sha256_text(stable_json(decision["history_audit"])),
+        "warnings": decision["warnings"],
+        "risk_acceptances": decision["risk_acceptances"],
+        "risk_digest": risk_digest,
         "review_digest": sha256_text(stable_json(review)),
         "summary": decision["summary"],
         "modules": decision["modules"],
@@ -1086,7 +1336,7 @@ def prepare(repo: Path, review_path: Path, command: str) -> dict[str, Any]:
 def compare_attestation(repo: Path, attestation: dict[str, Any], command: str, operation: str, targets: list[str]) -> list[str]:
     failures: list[str] = []
     if attestation.get("version") != VERSION:
-        failures.append("凭据版本不匹配")
+        failures.append(f"凭据版本已过期（当前要求 v{VERSION}），请重新执行 inspect/prepare")
     if Path(str(attestation.get("repository", ""))).resolve() != repo:
         failures.append("凭据不属于当前 worktree")
     if attestation.get("git_dir") != str(git_dir(repo)):
@@ -1125,6 +1375,19 @@ def compare_attestation(repo: Path, attestation: dict[str, Any], command: str, o
         failures.append("验证证据已被篡改")
     if attestation.get("history_audit_digest") != sha256_text(stable_json(attestation.get("history_audit"))):
         failures.append("历史 replay 审计已被篡改")
+    risk_payload = {
+        "warnings": attestation.get("warnings"),
+        "risk_acceptances": attestation.get("risk_acceptances"),
+    }
+    if attestation.get("risk_digest") != sha256_text(stable_json(risk_payload)):
+        failures.append("风险 findings 或接受理由已被篡改")
+    current_findings = staged_findings(repo, attestation.get("included_paths") or [])
+    current_blockers = [item for item in current_findings if item["severity"] == "blocker"]
+    current_warnings = [item for item in current_findings if item["severity"] == "warning"]
+    if current_blockers:
+        failures.append("实时暂存内容出现硬阻断项")
+    if current_warnings != attestation.get("warnings"):
+        failures.append("实时风险 findings 已变化")
     return failures
 
 
@@ -1269,6 +1532,9 @@ def print_pass(result: dict[str, Any]) -> None:
     if not_run:
         validation += "；未运行：" + "、".join(not_run)
     print(f"- 验证：{validation}")
+    accepted = result.get("risk_acceptances") or []
+    risk_text = "、".join(item["id"] for item in accepted) if accepted else "无"
+    print(f"- 已说明风险：{risk_text}")
     print(f"- 保留的其他修改：{', '.join(result['other_changes']) or '无'}")
     scope = result.get("scope") or {}
     if scope.get("source") == "historical":

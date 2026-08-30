@@ -103,7 +103,7 @@ class CommitGateTest(unittest.TestCase):
         extra: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         value: dict[str, Any] = {
-            "version": 1,
+            "version": gate.VERSION,
             "operation": operation,
             "summary": "根据实际暂存 diff 建立门禁",
             "included_paths": paths if paths is not None else ["feature.txt"],
@@ -118,6 +118,7 @@ class CommitGateTest(unittest.TestCase):
                 "candidates": [],
             },
             "validation": self.validations(),
+            "risk_acceptances": [],
             "message": message,
         }
         if extra:
@@ -146,6 +147,14 @@ class CommitGateTest(unittest.TestCase):
         if contains:
             self.assertIn(contains, specific.get("permissionDecisionReason", ""))
 
+    def accept_warnings(self, review: dict[str, Any]) -> list[dict[str, Any]]:
+        warnings = gate.inspect_state(self.repo)["warnings"]
+        review["risk_acceptances"] = [
+            {"id": item["id"], "reason": "临时仓库测试已确认该风险属于受控样例"}
+            for item in warnings
+        ]
+        return warnings
+
     def test_inspect_reports_staged_unrelated_untracked_and_scope_history(self) -> None:
         self.stage()
         (self.repo / "other.txt").write_text("other\n", encoding="utf-8")
@@ -155,6 +164,17 @@ class CommitGateTest(unittest.TestCase):
         self.assertEqual(state["other_changes"], ["other.txt", "trace.log"])
         self.assertIn("trace.log", state["risks"])
         self.assertIn("规范", state["historical_scopes"])
+        self.assertIn("blockers", state)
+        self.assertIn("warnings", state)
+        self.assertIn("path_scope_candidates", state)
+
+    def test_inspect_reports_path_specific_scope_history(self) -> None:
+        self.stage("feature.txt", "first\n")
+        run(self.repo, "git", "commit", "-q", "-m", "feat(路径功能): 增加路径历史样例")
+        self.stage("feature.txt", "second\n")
+        state = gate.inspect_state(self.repo)
+        self.assertIn("路径功能", state["path_scope_candidates"])
+        self.assertNotIn("规范", state["path_scope_candidates"])
 
     def test_prepare_passes_for_clean_single_scope_commit_and_reports_other_changes(self) -> None:
         self.stage()
@@ -206,6 +226,32 @@ class CommitGateTest(unittest.TestCase):
         with self.assertRaisesRegex(gate.GateError, "name 与 reason"):
             self.prepare(self.review(message="feat(提交门禁): 建立门禁", scope=scope))
 
+    def test_new_scope_rejects_normalized_duplicate_and_unreviewed_near_match(self) -> None:
+        self.stage("scope.txt", "scope\n")
+        run(self.repo, "git", "commit", "-q", "-m", "feat(GitCommitGateway): 增加门禁范围样例")
+        self.stage()
+        duplicate = {
+            "value": "git-commit-gateways",
+            "source": "new",
+            "search_terms": ["git", "commit"],
+            "candidates": [{"name": "GitCommitGateway", "reason": "大小写不同"}],
+            "new_reason": "尝试新增",
+        }
+        with self.assertRaisesRegex(gate.GateError, "大小写、单复数、空格或分隔符差异"):
+            self.prepare(
+                self.review(message="feat(git-commit-gateways): 建立门禁", scope=duplicate)
+            )
+
+        near = {
+            "value": "GitCommitGate",
+            "source": "new",
+            "search_terms": ["git", "gate"],
+            "candidates": [{"name": "规范", "reason": "范围过宽"}],
+            "new_reason": "需要更具体的边界",
+        }
+        with self.assertRaisesRegex(gate.GateError, "逐项排除相近历史 scope"):
+            self.prepare(self.review(message="feat(GitCommitGate): 建立门禁", scope=near))
+
     def test_mixed_file_and_staged_generated_file_fail(self) -> None:
         self.stage()
         mixed = self.review(extra={"mixed_files": ["feature.txt"]})
@@ -214,8 +260,84 @@ class CommitGateTest(unittest.TestCase):
 
         run(self.repo, "git", "reset", "-q")
         self.stage("trace.log", "generated\n")
-        with self.assertRaisesRegex(gate.GateError, "临时或生成文件"):
+        with self.assertRaisesRegex(gate.GateError, "硬阻断项"):
             self.prepare(self.review(paths=["trace.log"]))
+
+    def test_hard_blockers_cover_conflicts_private_keys_signing_and_xcode_local_data(self) -> None:
+        private_key_header = "-----BEGIN OPENSSH " + "PRIVATE KEY-----"
+        self.stage(
+            "secrets.txt",
+            f"<<<<<<< HEAD\n{private_key_header}\n=======\n>>>>>>> topic\n",
+        )
+        state = gate.inspect_state(self.repo)
+        kinds = {item["kind"] for item in state["blockers"]}
+        self.assertIn("conflict-marker", kinds)
+        self.assertIn("private-key", kinds)
+
+        run(self.repo, "git", "reset", "-q")
+        self.stage("Signing/distribution.p12", "credential\n")
+        signing = gate.inspect_state(self.repo)["blockers"]
+        self.assertTrue(any(item["kind"] == "signing-credential" for item in signing))
+
+        run(self.repo, "git", "reset", "-q")
+        self.stage("App.xcodeproj/xcuserdata/user.xcuserdatad/state.xcuserstate", "local\n")
+        local = gate.inspect_state(self.repo)["blockers"]
+        self.assertTrue(any(item["kind"] == "xcode-local-data" for item in local))
+
+    def test_unmerged_index_is_a_hard_blocker(self) -> None:
+        self.stage("conflict.txt", "base\n")
+        run(self.repo, "git", "commit", "-q", "-m", "test(规范): 增加冲突基线")
+        run(self.repo, "git", "checkout", "-q", "-b", "topic")
+        self.stage("conflict.txt", "topic\n")
+        run(self.repo, "git", "commit", "-q", "-m", "test(规范): 修改冲突分支")
+        run(self.repo, "git", "checkout", "-q", "master")
+        self.stage("conflict.txt", "master\n")
+        run(self.repo, "git", "commit", "-q", "-m", "test(规范): 修改主分支")
+        run(self.repo, "git", "merge", "topic", check=False)
+        blockers = gate.inspect_state(self.repo)["blockers"]
+        self.assertTrue(any(item["kind"] == "unmerged" for item in blockers))
+
+    def test_warnings_require_exact_acceptance_and_bind_to_attestation(self) -> None:
+        self.stage("config.txt", "api_key = 'abcdefghijklmnop'\nprint(\"debug\")  # TODO\n")
+        review = self.review(paths=["config.txt"])
+        warnings = gate.inspect_state(self.repo)["warnings"]
+        self.assertEqual(
+            {item["kind"] for item in warnings},
+            {"suspected-secret", "debug-output", "todo-marker"},
+        )
+        with self.assertRaisesRegex(gate.GateError, "尚未逐条说明并接受"):
+            self.prepare(review)
+
+        self.accept_warnings(review)
+        result = self.prepare(review)
+        self.assertEqual(
+            {item["id"] for item in result["warnings"]},
+            {item["id"] for item in review["risk_acceptances"]},
+        )
+        command = "git commit -F artifacts/git-commit-gate/message.txt"
+        self.assertEqual(self.pre(command), {})
+
+        path = self.repo / gate.GATE_RELATIVE_DIR / gate.ATTESTATION_NAME
+        value = json.loads(path.read_text(encoding="utf-8"))
+        value["risk_acceptances"][0]["reason"] = "篡改"
+        path.write_text(json.dumps(value, ensure_ascii=False), encoding="utf-8")
+        self.assert_denied(self.pre(command), "风险 findings 或接受理由已被篡改")
+
+    def test_large_and_controlled_generated_files_are_structured_warnings(self) -> None:
+        self.stage("Generated/Schema.swift", "generated\n")
+        large = self.repo / "large.bin"
+        large.write_bytes(b"x" * (gate.LARGE_FILE_BYTES + 1))
+        run(self.repo, "git", "add", "large.bin")
+        warnings = gate.inspect_state(self.repo)["warnings"]
+        kinds = {item["kind"] for item in warnings}
+        self.assertIn("controlled-generated", kinds)
+        self.assertIn("large-file", kinds)
+
+    def test_risk_acceptances_reject_unknown_or_stale_finding_ids(self) -> None:
+        self.stage()
+        review = self.review(extra={"risk_acceptances": [{"id": "fake:123", "reason": "伪造"}]})
+        with self.assertRaisesRegex(gate.GateError, "已失效或伪造"):
+            self.prepare(review)
 
     def test_multiple_files_require_structured_body(self) -> None:
         self.stage()
@@ -231,6 +353,41 @@ class CommitGateTest(unittest.TestCase):
             "验证命令与结果\n- 门禁测试通过\n"
         )
         self.assertEqual(self.prepare(review)["result"], "PASS")
+
+    def test_ios_message_policy_rejects_android_punctuation_and_types(self) -> None:
+        scope = {
+            "value": "规范",
+            "source": "historical",
+            "search_terms": ["规范"],
+            "candidates": [],
+        }
+        messages = (
+            "feat(规范)：使用全角冒号",
+            "optimize(规范): 优化门禁",
+            "style(规范): 调整门禁样式",
+        )
+        for message in messages:
+            with self.subTest(message=message):
+                with self.assertRaisesRegex(gate.GateError, r"type\(scope\):"):
+                    gate.validate_message(message, ["feature.txt"], scope, self.repo)
+
+    def test_v1_review_and_attestation_expire_with_actionable_error(self) -> None:
+        self.stage()
+        review = self.review()
+        review["version"] = 1
+        with self.assertRaisesRegex(gate.GateError, "旧版 review 已过期"):
+            self.prepare(review)
+
+        result = self.prepare(self.review())
+        path = self.repo / gate.GATE_RELATIVE_DIR / gate.ATTESTATION_NAME
+        value = json.loads(path.read_text(encoding="utf-8"))
+        value["version"] = 1
+        path.write_text(json.dumps(value, ensure_ascii=False), encoding="utf-8")
+        self.assert_denied(
+            self.pre("git commit -F artifacts/git-commit-gate/message.txt"),
+            "凭据版本已过期",
+        )
+        self.assertEqual(result["version"], gate.VERSION)
 
     def test_validation_matrix_requires_all_baseline_commands(self) -> None:
         self.stage()
@@ -535,7 +692,7 @@ def run_dry_run() -> int:
         (repo / "candidate.txt").write_text("candidate\n", encoding="utf-8")
         run(repo, "git", "add", "candidate.txt")
         review = {
-            "version": 1,
+            "version": gate.VERSION,
             "operation": "commit",
             "summary": "为候选修改验证一次性提交凭据",
             "included_paths": ["candidate.txt"],
@@ -559,6 +716,7 @@ def run_dry_run() -> int:
                     "reason": "本次仅验证 Skill/Hook，且用户未要求 App 测试",
                 }
             ],
+            "risk_acceptances": [],
             "message": "feat(规范): 验证一次性提交门禁",
         }
         review_path = repo / gate.GATE_RELATIVE_DIR / "review.json"

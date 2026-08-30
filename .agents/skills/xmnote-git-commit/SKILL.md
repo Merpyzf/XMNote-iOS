@@ -28,7 +28,7 @@ git diff
 git diff --cached
 ```
 
-必须读取完整工作区状态、暂存与未暂存 diff、未跟踪文件，以及目标命令实际会写入的内容。Commit Message 只能基于实际 diff，不得只根据对话、任务标题或最初需求推断。
+必须读取完整工作区状态、暂存与未暂存 diff、未跟踪文件、结构化 `blockers` / `warnings`、相关路径历史 scope，以及目标命令实际会写入的内容。Commit Message 只能基于实际 diff，不得只根据对话、任务标题或最初需求推断。
 
 ### 2. 划定提交边界
 
@@ -41,7 +41,7 @@ git diff --cached
 
 一个提交只包含一个可独立理解、验证和回滚的逻辑变更。多个独立变更拆成多个候选，每个候选分别暂存、检查、取得凭据和提交。若同一文件混有无法安全拆分的其他修改，输出 `FAIL`，不得扩大范围。
 
-禁止提交 `.DS_Store`、日志、临时文件、DerivedData、`xcuserdata`、门禁凭据、未说明来源的生成物和遗留调试代码。确需提交生成文件时，必须证明它是仓库约定的受控产物并在摘要中说明。
+未解决冲突、冲突标记、私钥、签名凭据、`.DS_Store`、日志、临时文件、DerivedData、`xcuserdata`、构建产物和门禁凭据属于硬阻断，不能用人工说明覆盖。疑似密钥、调试输出、TODO/FIXME、大于 1 MiB 的文件和受控生成物属于待确认风险；必须逐条复核 `inspect` 生成的 finding ID，并在 `review.risk_acceptances` 中写明理由。
 
 ### 3. 从完整历史选择 scope
 
@@ -61,7 +61,8 @@ git log --all --pretty=format:'%H%x09%s'
 
 - 有语义等价名称时，完全复用历史中文写法，不创造近义词。
 - 同一功能的代码、文档、术语和收口提交默认复用同一 scope。
-- 只有历史中不存在等价名称时才新增 scope；记录检索词、相邻候选以及逐项不适用理由。
+- 只有相关路径历史与全仓历史中都不存在等价名称时才新增 scope；记录检索词、相邻候选以及逐项不适用理由。
+- 新 scope 会按 Unicode、大小写、单复数、空格和分隔符归一化；与历史名称等价时必须复用，高相似候选未逐项排除时不得新增。
 - 新 scope 应简洁、稳定、面向业务；`基础设施`、`工程`、`工程配置`、`规范` 只在确属跨域或仓库治理且没有更具体历史 scope 时使用。
 
 ### 4. 根据实际 diff 编写消息
@@ -89,7 +90,7 @@ python3 scripts/design-system/ds.py lint --staged
 
 按变更类型追加证据：
 
-- 生产 Swift 或 Xcode 工程配置：提供与当前 worktree 规则一致的编译成功证据。
+- 生产 Swift 或 Xcode 工程配置：主 worktree 使用当前已启动 Simulator 的 `xcodebuild`；非主 worktree 使用 `Makefile.parallel-ios ai-build`，并提供成功证据。
 - UI：执行 `$xmnote-design-system` 要求的上下文与静态检查；涉及治理规则时追加设计系统测试或 audit。
 - 脚本、Skill 或 Hook：运行对应工具测试；Skill 运行 `quick_validate.py`；Hook 配置完成 JSON 解析；门禁逻辑运行临时仓库测试。
 - 单元测试和 UI Test 仍只在用户明确要求时运行；未运行时在验证摘要中写明仓库边界，不能伪装成已验证。
@@ -102,7 +103,7 @@ python3 scripts/design-system/ds.py lint --staged
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "operation": "commit",
   "summary": "基于实际暂存 diff 的一句话说明",
   "included_paths": ["实际暂存路径"],
@@ -119,11 +120,14 @@ python3 scripts/design-system/ds.py lint --staged
     {"command": "实际执行命令", "status": "passed", "result": "简短结果"},
     {"command": "未运行项", "status": "not_run", "reason": "明确原因"}
   ],
+  "risk_acceptances": [
+    {"id": "inspect 输出的精确 finding ID", "reason": "接受该风险的具体依据"}
+  ],
   "message": "完整 Commit Message"
 }
 ```
 
-`source` 为 `new` 时，`candidates` 至少记录相邻历史 scope 及不适用理由，并提供 `new_reason`。使用将要原样执行的精确命令准备凭据：
+没有待确认风险时，`risk_acceptances` 必须是空数组；有风险时必须与实时 warning ID 完全一致，遗漏、伪造、重复或过期 ID 都会失败。`source` 为 `new` 时，`candidates` 至少记录相邻历史 scope 及不适用理由，并提供 `new_reason`。使用将要原样执行的精确命令准备凭据：
 
 ```bash
 python3 .agents/skills/xmnote-git-commit/scripts/commit_gate.py prepare \
@@ -140,7 +144,7 @@ python3 .agents/skills/xmnote-git-commit/scripts/commit_gate.py prepare \
 
 `prepare` 会以参数数组重新执行全部基础验证命令，不接受仅在 review 中宣称“已通过”的结果；专项验证证据仍需先实际运行并记录。普通提交与 amend 必须通过 `-F artifacts/git-commit-gate/message.txt` 使用门禁生成的消息。
 
-凭据绑定 worktree、HEAD、分支、索引 tree、暂存文件、工作区快照、操作类型、目标、精确命令、消息摘要和验证证据。任一内容改变即失效；一次成功的历史写入后凭据被消费；命令失败且历史未改变时可原样重试。
+凭据绑定 worktree、HEAD、分支、索引 tree、暂存文件、工作区快照、操作类型、目标、精确命令、消息摘要、验证证据、风险 findings 与接受理由。v1 review/凭据已过期，必须重新执行 `inspect/prepare`；旧文件保留供审计，不自动删除。任一绑定内容改变即失效；一次成功的历史写入后凭据被消费；命令失败且历史未改变时可原样重试。
 
 ## 提交前用户可见输出
 
@@ -151,6 +155,7 @@ PASS
 - 准备提交：<实际内容>
 - 主要文件/模块：<范围>
 - 验证：<已通过；未运行项与原因>
+- 已说明风险：<无，或逐项 finding ID>
 - 保留的其他修改：<无，或路径与原因>
 - scope 依据：<复用的历史提交，或新建理由>
 - Commit Message：<完整主题；正文可压缩展示>
