@@ -4,7 +4,7 @@ import SwiftUI
 
 /**
  * [INPUT]: 依赖 SceneStorage 数据、AppRoute 类型安全路径与各模块可编码语义状态
- * [OUTPUT]: 对外提供 SceneStateStore、AppSceneSnapshot v3 迁移、原子导航更新与路径净化
+ * [OUTPUT]: 对外提供 SceneStateStore、仅接受 v4 的 AppSceneSnapshot 恢复、原子导航更新与路径净化
  * [POS]: AppState 模块的 scene 独立恢复容器，在交互页面挂载前一次性产出完整状态
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -42,7 +42,7 @@ final class SceneStateStore {
         persistenceSink = nil
     }
 
-    /// 从 SceneStorage 原子恢复当前 scene；v2 只迁移语义状态并一次性清空不可检查的旧导航表示。
+    /// 从 SceneStorage 原子恢复当前 scene；非当前版本直接重建，避免开发期历史快照进入运行态。
     func restore(from data: Data?, currentDataEpoch: Int) {
         guard let data else {
             replaceSnapshot(AppSceneSnapshot.empty(dataEpoch: currentDataEpoch), persist: true)
@@ -61,6 +61,15 @@ final class SceneStateStore {
             return
         }
 
+        guard restored.snapshotVersion == AppSceneSnapshot.currentVersion else {
+            replaceSnapshot(AppSceneSnapshot.empty(dataEpoch: currentDataEpoch), persist: true)
+            isRestored = true
+            Self.logger.error(
+                "Unsupported scene snapshot version=\(restored.snapshotVersion); reset"
+            )
+            return
+        }
+
         guard restored.dataEpoch == currentDataEpoch else {
             replaceSnapshot(AppSceneSnapshot.empty(dataEpoch: currentDataEpoch), persist: true)
             isRestored = true
@@ -70,31 +79,19 @@ final class SceneStateStore {
             return
         }
 
-        switch restored.snapshotVersion {
-        case AppSceneSnapshot.currentVersion:
-            var sanitized = restored
-            sanitized.navigation = restored.navigation.sanitized()
-            let didSanitize = sanitized.navigation != restored.navigation
-            replaceSnapshot(sanitized, persist: didSanitize)
-            if didSanitize {
-                Self.logger.warning("Sanitized restored v3 navigation paths")
-            }
-            if !didSanitize {
-                publishPersistedData(data)
-            }
-            Self.logger.info(
-                "Restored scene v3 depths reading=\(sanitized.navigation.reading.count) books=\(sanitized.navigation.books.count) notes=\(sanitized.navigation.notes.count) profile=\(sanitized.navigation.profile.count) search=\(sanitized.navigation.search.count)"
-            )
-        case 2:
-            var migrated = restored
-            migrated.snapshotVersion = AppSceneSnapshot.currentVersion
-            migrated.navigation = NavigationSceneSnapshot()
-            replaceSnapshot(migrated, persist: true)
-            Self.logger.notice("Migrated scene snapshot v2 to v3; preserved semantic state and cleared opaque paths")
-        default:
-            replaceSnapshot(AppSceneSnapshot.empty(dataEpoch: currentDataEpoch), persist: true)
-            Self.logger.error("Unsupported scene snapshot version=\(restored.snapshotVersion); reset")
+        var sanitized = restored
+        sanitized.navigation = restored.navigation.sanitized()
+        let didSanitize = sanitized.navigation != restored.navigation
+        replaceSnapshot(sanitized, persist: didSanitize)
+        if didSanitize {
+            Self.logger.warning("Sanitized restored v\(AppSceneSnapshot.currentVersion) navigation paths")
         }
+        if !didSanitize {
+            publishPersistedData(data)
+        }
+        Self.logger.info(
+            "Restored scene v\(AppSceneSnapshot.currentVersion) depths reading=\(sanitized.navigation.reading.count) books=\(sanitized.navigation.books.count) notes=\(sanitized.navigation.notes.count) profile=\(sanitized.navigation.profile.count) search=\(sanitized.navigation.search.count)"
+        )
         isRestored = true
     }
 
@@ -186,7 +183,7 @@ final class SceneStateStore {
 
 /// AppSceneSnapshot 是单个 scene 的轻量恢复快照，只保存高价值语义锚点。
 struct AppSceneSnapshot: Codable, Equatable {
-    static let currentVersion = 3
+    static let currentVersion = 4
 
     var snapshotVersion: Int
     var dataEpoch: Int
@@ -285,9 +282,9 @@ struct NotesSceneSnapshot: Codable, Equatable {
         starredChapterSearchText: String = "",
         relatedSearchText: String = "",
         reviewSearchText: String = "",
-        excerptSort: NoteExcerptGroupSort = .defaultOrder,
+        excerptSort: NoteExcerptGroupSort = .customOrder,
         starredSort: StarredChapterSort = .recentlyChanged,
-        relatedSort: RelatedCategorySort = .countDescending,
+        relatedSort: RelatedCategorySort = .createdAscending,
         reviewSort: BookReviewSortRule = .createdDescending
     ) {
         self.selectedSubTab = selectedSubTab
@@ -300,34 +297,6 @@ struct NotesSceneSnapshot: Codable, Equatable {
         self.starredSort = starredSort
         self.relatedSort = relatedSort
         self.reviewSort = reviewSort
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case selectedSubTab
-        case selectedCategory
-        case excerptSearchText
-        case starredChapterSearchText
-        case relatedSearchText
-        case reviewSearchText
-        case excerptSort
-        case starredSort
-        case relatedSort
-        case reviewSort
-    }
-
-    /// 旧快照只有 selectedSubTab；所有新增字段缺失或出现未知稳定码时回退到当前默认值。
-    init(from decoder: any Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        selectedSubTab = (try? container.decodeIfPresent(NoteSubTab.self, forKey: .selectedSubTab)) ?? .notes
-        selectedCategory = (try? container.decodeIfPresent(NoteCategory.self, forKey: .selectedCategory)) ?? .excerpts
-        excerptSearchText = (try? container.decodeIfPresent(String.self, forKey: .excerptSearchText)) ?? ""
-        starredChapterSearchText = (try? container.decodeIfPresent(String.self, forKey: .starredChapterSearchText)) ?? ""
-        relatedSearchText = (try? container.decodeIfPresent(String.self, forKey: .relatedSearchText)) ?? ""
-        reviewSearchText = (try? container.decodeIfPresent(String.self, forKey: .reviewSearchText)) ?? ""
-        excerptSort = (try? container.decodeIfPresent(NoteExcerptGroupSort.self, forKey: .excerptSort)) ?? .defaultOrder
-        starredSort = (try? container.decodeIfPresent(StarredChapterSort.self, forKey: .starredSort)) ?? .recentlyChanged
-        relatedSort = (try? container.decodeIfPresent(RelatedCategorySort.self, forKey: .relatedSort)) ?? .countDescending
-        reviewSort = (try? container.decodeIfPresent(BookReviewSortRule.self, forKey: .reviewSort)) ?? .createdDescending
     }
 }
 
@@ -353,46 +322,6 @@ struct ContentViewerSceneSnapshot: Codable, Equatable {
     var selectedItemID: ContentViewerItemID
 }
 
-extension AppSceneSnapshot {
-    private enum CodingKeys: String, CodingKey {
-        case snapshotVersion
-        case dataEpoch
-        case selectedTab
-        case searchQuery
-        case navigation
-        case reading
-        case books
-        case notes
-        case contentViewer
-    }
-
-    /// 兼容早期缺少后续模块字段的 scene 快照；未知或损坏的单个可选锚点降级为当前默认值。
-    init(from decoder: any Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        let dataEpoch = (try? container.decodeIfPresent(Int.self, forKey: .dataEpoch)) ?? 0
-        let defaults = Self.empty(dataEpoch: dataEpoch)
-        snapshotVersion = (try? container.decodeIfPresent(Int.self, forKey: .snapshotVersion))
-            ?? defaults.snapshotVersion
-        self.dataEpoch = dataEpoch
-        selectedTab = (try? container.decodeIfPresent(AppTab.self, forKey: .selectedTab))
-            ?? defaults.selectedTab
-        searchQuery = (try? container.decodeIfPresent(String.self, forKey: .searchQuery))
-            ?? defaults.searchQuery
-        navigation = (try? container.decodeIfPresent(NavigationSceneSnapshot.self, forKey: .navigation))
-            ?? defaults.navigation
-        reading = (try? container.decodeIfPresent(ReadingSceneSnapshot.self, forKey: .reading))
-            ?? defaults.reading
-        books = (try? container.decodeIfPresent(BooksSceneSnapshot.self, forKey: .books))
-            ?? defaults.books
-        notes = (try? container.decodeIfPresent(NotesSceneSnapshot.self, forKey: .notes))
-            ?? defaults.notes
-        contentViewer = try? container.decodeIfPresent(
-            ContentViewerSceneSnapshot.self,
-            forKey: .contentViewer
-        )
-    }
-}
-
 extension NavigationSceneSnapshot {
     private enum CodingKeys: String, CodingKey {
         case reading
@@ -412,7 +341,7 @@ extension NavigationSceneSnapshot {
         search = Self.decodePath(from: container, forKey: .search)
     }
 
-    /// 逐元素解码以保留坏节点之前的有效浏览链；旧版类型擦除对象不是数组时直接返回空路径。
+    /// 逐元素解码以保留坏节点之前的有效浏览链；字段不是数组时直接返回空路径。
     private static func decodePath(
         from container: KeyedDecodingContainer<CodingKeys>,
         forKey key: CodingKeys
@@ -429,40 +358,5 @@ extension NavigationSceneSnapshot {
             routes.append(route)
         }
         return routes
-    }
-}
-
-extension ReadingSceneSnapshot {
-    private enum CodingKeys: String, CodingKey {
-        case selectedSubTab
-        case timeline
-        case readCalendar
-    }
-
-    /// 阅读模块早期快照缺少高价值页面锚点时保留其可解码的二级 Tab。
-    init(from decoder: any Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        selectedSubTab = (try? container.decodeIfPresent(ReadingSubTab.self, forKey: .selectedSubTab))
-            ?? .reading
-        timeline = try? container.decodeIfPresent(TimelineSceneSnapshot.self, forKey: .timeline)
-        readCalendar = try? container.decodeIfPresent(
-            ReadCalendarSceneSnapshot.self,
-            forKey: .readCalendar
-        )
-    }
-}
-
-extension BooksSceneSnapshot {
-    private enum CodingKeys: String, CodingKey {
-        case selectedSubTab
-        case search
-    }
-
-    /// 书籍模块旧快照没有搜索锚点时恢复到书籍根页，避免整份 scene 数据解码失败。
-    init(from decoder: any Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        selectedSubTab = (try? container.decodeIfPresent(BookSubTab.self, forKey: .selectedSubTab))
-            ?? .books
-        search = try? container.decodeIfPresent(BookSearchSceneSnapshot.self, forKey: .search)
     }
 }

@@ -7,7 +7,7 @@
 
 /**
  * [INPUT]: 依赖 RepositoryContainer、AppNavigationCoordinator、SceneStateStore 与 NoteViewModel/NoteReviewViewModel，并向回顾页注入关联应用与 AI 仓储
- * [OUTPUT]: 对外提供 NoteContainerView 与 NoteSubTab 枚举，并上抛携带真实章节标题的笔记路由、书籍/目录定位、内容编辑及统一内容查看路由，同时提供方案 A 规格的新增、排序与回顾更多顶部操作
+ * [OUTPUT]: 对外提供 NoteContainerView 与 NoteSubTab 枚举，并上抛携带真实章节标题的笔记路由、书籍/目录定位、内容编辑及统一内容查看路由，同时提供方案 A 规格的新增、笔记更多与回顾更多顶部操作
  * [POS]: Note 模块容器壳层，承载笔记/回顾二级切换、四分类首页状态保持与下拉搜索入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -254,17 +254,23 @@ private struct NoteContentView: View {
     private func noteActionControl(presentation: TopBarActionPresentation) -> some View {
         if selectedSubTab == .notes {
             Menu {
-                noteSortMenu
+                Menu {
+                    noteSortMenu
+                } label: {
+                    XMMenuLabel("排序", systemImage: "arrow.up.arrow.down")
+                }
             } label: {
                 TopBarActionIcon(
-                    systemName: "arrow.up.arrow.down",
+                    systemName: "ellipsis",
                     iconSize: NoteTopBarMetrics.trailingIconSize,
                     foregroundColor: Color.iconPrimary.opacity(0.88),
                     hitShape: presentation == .pillSegment ? .rectangle : .circle
                 )
             }
             .topBarActionPresentationStyle(presentation)
-            .accessibilityLabel("排序")
+            .xmMenuNeutralTint()
+            .menuOrder(.fixed)
+            .accessibilityLabel("笔记更多操作")
         } else {
             Menu {
                 Button {
@@ -357,10 +363,10 @@ private extension StarredChapterSort {
 private extension RelatedCategorySort {
     var noteMenuTitle: String {
         switch self {
-        case .countAscending: "数量从少到多"
-        case .countDescending: "数量从多到少"
-        case .createdAscending: "最早创建"
-        case .createdDescending: "最近创建"
+        case .countAscending: "笔记数量 • 由少到多"
+        case .countDescending: "笔记数量 • 由多到少"
+        case .createdAscending: "创建时间 • 由旧到新"
+        case .createdDescending: "创建时间 • 由新到旧"
         }
     }
 }
@@ -368,10 +374,10 @@ private extension RelatedCategorySort {
 private extension BookReviewSortRule {
     var noteMenuTitle: String {
         switch self {
-        case .wordCountAscending: "字数从少到多"
-        case .wordCountDescending: "字数从多到少"
-        case .createdAscending: "最早创建"
-        case .createdDescending: "最近创建"
+        case .wordCountAscending: "字数 • 由少到多"
+        case .wordCountDescending: "字数 • 由多到少"
+        case .createdAscending: "创建时间 • 由旧到新"
+        case .createdDescending: "创建时间 • 由新到旧"
         }
     }
 }

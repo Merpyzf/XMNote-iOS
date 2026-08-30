@@ -289,7 +289,7 @@ nonisolated struct RelatedCategoryRequest: Hashable, Sendable, Codable {
     let query: String
     let sort: RelatedCategorySort
 
-    init(query: String = "", sort: RelatedCategorySort = .countDescending) {
+    init(query: String = "", sort: RelatedCategorySort = .createdAscending) {
         self.query = query
         self.sort = sort
     }
@@ -453,7 +453,7 @@ nonisolated struct BookReviewPageRequest: Hashable, Sendable, Codable {
     }
 }
 
-/// 全量书评卡片数据；wordCount 使用去除富文本标记后的正文计算。
+/// 全量书评卡片数据；wordCount 使用去除富文本标记后的可见标题与正文总字数。
 nonisolated struct BookReviewListItem: Identifiable, Hashable, Sendable {
     let id: Int64
     let bookID: Int64

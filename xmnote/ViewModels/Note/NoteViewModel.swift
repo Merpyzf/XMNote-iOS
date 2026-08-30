@@ -49,14 +49,14 @@ final class NoteViewModel {
         set { updateSearchText(newValue, for: selectedCategory) }
     }
 
-    var excerptSort: NoteExcerptGroupSort = .defaultOrder
+    var excerptSort: NoteExcerptGroupSort = .customOrder
     var starredSort: StarredChapterSort = .recentlyChanged {
         didSet {
             guard oldValue != starredSort, isObserving else { return }
             restartStarredObservation()
         }
     }
-    var relatedSort: RelatedCategorySort = .countDescending {
+    var relatedSort: RelatedCategorySort = .createdAscending {
         didSet {
             guard oldValue != relatedSort, isObserving else { return }
             restartRelatedObservation()
@@ -151,7 +151,7 @@ final class NoteViewModel {
 
     /// 当前书摘分组按搜索词和页内排序得到的稳定展示结果。
     var filteredDefaultGroups: [NoteExcerptGroupItem] {
-        sortedExcerptGroups(noteHomeSnapshot.defaultGroups.filter(matchesExcerptQuery))
+        noteHomeSnapshot.defaultGroups.filter(matchesExcerptQuery)
     }
 
     /// 当前用户标签按搜索词和页内排序得到的稳定展示结果。
@@ -448,7 +448,7 @@ final class NoteViewModel {
 
     private func sortedExcerptGroups(_ groups: [NoteExcerptGroupItem]) -> [NoteExcerptGroupItem] {
         switch excerptSort {
-        case .defaultOrder:
+        case .customOrder:
             groups.sorted { lhs, rhs in
                 if lhs.order != rhs.order { return lhs.order < rhs.order }
                 return lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
@@ -463,8 +463,6 @@ final class NoteViewModel {
                 if lhs.count != rhs.count { return lhs.count < rhs.count }
                 return lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
             }
-        case .titleAscending:
-            groups.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
         }
     }
 

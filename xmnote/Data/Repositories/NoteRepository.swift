@@ -1409,7 +1409,7 @@ private extension NoteRepository {
 }
 
 private extension NoteRepository {
-    /// 读取、过滤和排序全量书评；字数使用富文本可见正文计算，避免 HTML 标签污染排序。
+    /// 读取、过滤和排序全量书评；字数使用富文本可见标题与正文计算，避免 HTML 标签污染排序。
     nonisolated func fetchBookReviewList(
         _ db: Database,
         request: BookReviewPageRequest
@@ -1419,7 +1419,7 @@ private extension NoteRepository {
         // 关键过滤：书评与书籍有效，排除系统根书籍。
         // 排序：先按 id 稳定输出，最终搜索/字数/时间排序在内存侧统一完成。
         // 时间字段：created_date 为 Android 毫秒时间戳。
-        // 返回字段用途：构建 BookReviewListItem 并计算去 HTML 字数。
+        // 返回字段用途：构建 BookReviewListItem 并计算标题与正文的去 HTML 总字数。
         let sql = """
             SELECT rv.id, rv.book_id, COALESCE(rv.title, '') AS title,
                    COALESCE(rv.content, '') AS content, rv.created_date,
@@ -1442,7 +1442,7 @@ private extension NoteRepository {
                !content.localizedCaseInsensitiveContains(keyword) {
                 return nil
             }
-            return (row, title, content, content.count)
+            return (row, title, content, title.count + content.count)
         }
         switch request.sort {
         case .wordCountAscending:

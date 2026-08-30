@@ -12,7 +12,7 @@ enum NoteRoute: Hashable, Codable {
     case detail(noteId: Int64)
     case noteExcerpts(scope: NoteExcerptScope)
     case noteExcerptList(context: NoteExcerptListContext)
-    /// 保留既有参数形状，兼容其他章节入口并支持 v3 类型安全快照。
+    /// 保留既有参数形状，供其他章节入口与类型安全快照共同使用。
     case chapterNotes(bookID: Int64, chapterID: Int64, includeDescendants: Bool)
     /// 星标章节入口携带已展示名称，确保目的地首帧标题稳定。
     case chapterNoteList(context: ChapterNoteListContext)
