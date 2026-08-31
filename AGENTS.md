@@ -64,6 +64,12 @@
 - 危险操作审批边界（强制）：凡涉及删除或不可逆覆盖的操作，一律先获得用户批准再执行；包括 `rm`、`git rm`、`git reset --hard`、`git checkout --`、覆盖式移动/替换、批量清理目录，以及其他会隐式删除文件的命令。
 - 平台边界说明：仓库规则只约束协作默认行为；沙箱、系统服务、网络能力等平台级限制仍以运行环境的实际权限模型为准。
 
+### 项目编译预检
+- 编译入口约束（强制）：项目构建必须先通过当前环境的构建预检，预检未完成或结论不可信时禁止进入 Xcode 编译。
+- X5 识别顺序（强制）：预检报告 X5 卷 UUID 为 `missing` 或卷未挂载时，必须依次核对预检脚本实际读取的挂载点与预期卷名、当前系统可见的实际挂载点与卷名，以及非主 worktree 的 `.parallel-ios-env` 路径、链接目标和构建目录。
+- 沙箱复核（强制）：若沙箱内无法读取卷 UUID、`diskutil` 报告系统框架不可用，或各项挂载信息相互矛盾，必须先通过沙箱外的只读系统检查（如 `diskutil info /Volumes/X5`）确认；在此之前禁止直接认定 X5 未挂载、修改构建配置或重新初始化任务环境。
+- 故障判定（强制）：只有沙箱外检查也确认 X5 不存在或未挂载时，才按真实挂载故障停止构建并报告；主 worktree 不存在 `.parallel-ios-env` 属于正常状态，不得单独作为预检失败依据。
+
 ### Parallel iOS 任务 worktree
 - 主 worktree 保持本仓库现有构建、测试和 Simulator 流程，禁止被 Parallel iOS 自动接管或销毁。
 - 非主任务 worktree 的依赖准备、构建、测试、运行和截图统一通过 `Makefile.parallel-ios` 的 `ai-prepare`、`ai-build`、`ai-test`、`ai-run`、`ai-screenshot` 执行；首次调用会接管当前 worktree 并分配专属 Simulator。
