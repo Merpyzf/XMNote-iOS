@@ -1162,7 +1162,9 @@ struct MainTabView: View {
             }
         }
         .toolbarVisibility(
-            navigationCoordinator.isTabChromeSuppressed ? .hidden : .automatic,
+            navigationCoordinator.isTabChromeSuppressed || shouldHideTabBar(for: route)
+                ? .hidden
+                : .automatic,
             for: .tabBar
         )
         .onAppear {
@@ -1171,6 +1173,14 @@ struct MainTabView: View {
         .onChange(of: isRuntimeReady, initial: true) { _, _ in
             completeRestoredNavigationSurfaceIfReady(route: route, hostTab: hostTab)
         }
+    }
+
+    /// 提示词编辑属于沉浸式深层编辑页，只保留页面导航操作，避免底部主导航挤占键盘与编辑区域。
+    private func shouldHideTabBar(for route: AppRoute) -> Bool {
+        if case .personal(.aiPromptEditor(_)) = route {
+            return true
+        }
+        return false
     }
 
     /// 仅在恢复栈的最终目的页已经进入视图树且运行时可用后揭开页面，避免展示中间根页或半成品目的页。
@@ -1499,6 +1509,9 @@ struct MainTabView: View {
             ApiIntegrationView()
         case .aiConfiguration:
             AIConfigurationView()
+        case .aiPromptEditor(let kind):
+            AIPromptEditorView(kind: kind)
+                .toolbar(.hidden, for: .tabBar)
         case .tagManagement:
             TagManagementView()
         case .groupManagement:

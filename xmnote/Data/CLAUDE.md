@@ -7,7 +7,7 @@
 
 - `BookRepository.swift`: BookRepositoryProtocol 实现，书籍列表/详情/书摘查询
 - `ContentRepository.swift`: ContentRepositoryProtocol 实现，书摘/书评/相关内容的查看、编辑与 Android v45 `is_deleted` 软删除事务
-- `AIRepository.swift`: AIRepositoryProtocol 实现，配置读取、提示组装、流式/非流式生成与结果解析
+- `AIRepository.swift`: AIRepositoryProtocol 实现，配置读取、单任务 Prompt 原子保存、统一请求预览/试运行/优化、流式/非流式生成与结果解析
 - `BookContentSortQuery.swift`: 单书四域持久化排序规则读取与 SQL 片段映射
 - `BookGroupManagementRepository.swift`: BookGroupManagementRepositoryProtocol 实现，分组增改删、关系维护与手动排序事务
 - `BookReadingDetailRepository.swift`: BookReadingDetailRepositoryProtocol 实现，单书阅读详情观察与写入

@@ -34,6 +34,7 @@
 - xmnote/Views/Reading/ReadCalendar/ReadCalendarView.swift
 - xmnote/Views/Reading/Timeline/ReadingTimelineView.swift
 - xmnote/Views/Personal/PersonalView.swift
+- xmnote/Views/Personal/AIPromptEditorView.swift
 - xmnote/Views/Personal/BookGroupManagementView.swift
 - xmnote/Views/Personal/SourceManagementView.swift
 

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 DatabaseManager 读取书摘上下文，依赖 NoteRepositoryProtocol/AIConfigurationStore/OpenAICompatibleClient 管理标签、凭据与请求
- * [OUTPUT]: 对外提供 AIRepository，实现配置、供应商请求参数、固定 Markdown 展示契约、流式释义/AI 标签及标签写回
+ * [OUTPUT]: 对外提供 AIRepository，实现配置、单任务 Prompt 原子保存、统一请求预览/试运行/优化、流式释义/AI 标签及标签写回
  * [POS]: Data 层 AI 仓储实现，是 ViewModel 获取 AI/本地数据与提交业务结果的唯一入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -49,6 +49,146 @@ final class AIRepository: AIRepositoryProtocol, @unchecked Sendable {
         try await configurationStore.save(normalized, apiKey: apiKey)
     }
 
+    /// 校验 System/User 组合后只持久化当前任务，设置页中的其他未保存草稿不会参与本次写入。
+    func savePromptTemplate(_ template: AIPromptTemplate, for kind: AIPromptKind) async throws {
+        if let issue = AIPromptValidator.blockingIssue(in: template, kind: kind) {
+            throw AIRepositoryError.invalidConfiguration("\(kind.title)：\(issue.message)")
+        }
+        try await configurationStore.savePromptTemplate(template, for: kind)
+    }
+
+    /// 使用正式请求构建器生成离线预览，确保应用固定规则与变量替换不存在第二套逻辑。
+    func makePromptPreview(
+        kind: AIPromptKind,
+        template: AIPromptTemplate,
+        sample: AIPromptSampleContext
+    ) throws -> AIPromptRequestPreview {
+        try AIPromptRequestBuilder.preview(
+            kind: kind,
+            template: template,
+            replacements: sample.replacements
+        )
+    }
+
+    /// 读取最近有效书摘并映射到当前任务的白名单变量；没有数据时由页面继续使用内置样例。
+    func fetchRecentPromptSample(for kind: AIPromptKind) async throws -> AIPromptSampleContext? {
+        guard let note = try await fetchRecentNoteContext() else { return nil }
+        let replacements: [String: String]
+        switch kind {
+        case .noteExplanation:
+            replacements = [
+                "摘录": note.contentText,
+                "想法": note.ideaText,
+                "章节": note.chapterTitle,
+                "书籍名": note.bookTitle,
+                "作者名": note.bookAuthor,
+            ]
+        case .wordLookup:
+            replacements = [
+                "查询文本": String(note.contentText.prefix(12)),
+                "上下文": note.contentText,
+                "书籍名": note.bookTitle,
+            ]
+        case .autoTag:
+            replacements = [
+                "书摘内容": note.contentText,
+                "书籍名": note.bookTitle,
+                "作者名": note.bookAuthor,
+                "章节": note.chapterTitle,
+                "已有标签": "暂无已创建的标签",
+            ]
+        }
+        return AIPromptSampleContext(title: "最近书摘", replacements: replacements)
+    }
+
+    /// 使用生产请求参数试运行草稿；对照模式并发执行当前与默认版本，二者共用同一上下文。
+    func runPromptTrial(
+        kind: AIPromptKind,
+        template: AIPromptTemplate,
+        sample: AIPromptSampleContext,
+        comparesDefault: Bool
+    ) async throws -> AIPromptTrialResult {
+        let credentials = try await requestCredentials()
+        try Task.checkCancellation()
+        let currentPreview = try makePromptPreview(kind: kind, template: template, sample: sample)
+        if comparesDefault {
+            let defaultTemplate = AIPromptConfiguration.androidAlignedDefault.template(for: kind)
+            let defaultPreview = try makePromptPreview(
+                kind: kind,
+                template: defaultTemplate,
+                sample: sample
+            )
+            try Task.checkCancellation()
+            async let current = client.completion(
+                makeBusinessRequest(credentials: credentials, preview: currentPreview, isStreaming: false)
+            )
+            async let defaultVersion = client.completion(
+                makeBusinessRequest(credentials: credentials, preview: defaultPreview, isStreaming: false)
+            )
+            return try await AIPromptTrialResult(current: current, defaultVersion: defaultVersion)
+        }
+
+        try Task.checkCancellation()
+        let current = try await client.completion(
+            makeBusinessRequest(credentials: credentials, preview: currentPreview, isStreaming: false)
+        )
+        return AIPromptTrialResult(current: current, defaultVersion: nil)
+    }
+
+    /// 只把当前字段和用户期望交给模型，要求原样保留受控变量并返回可直接比较的纯文本建议。
+    func optimizePrompt(
+        kind: AIPromptKind,
+        field: AIPromptEditorField,
+        currentText: String,
+        instruction: String
+    ) async throws -> String {
+        let trimmedInstruction = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedInstruction.isEmpty else {
+            throw AIRepositoryError.invalidConfiguration("请先说明希望怎样调整")
+        }
+        let credentials = try await requestCredentials()
+        try Task.checkCancellation()
+        let allowedVariables = AIPromptVariableCatalog.definitions(for: kind)
+            .map(\.placeholder)
+            .joined(separator: "、")
+        let messages = [
+            OpenAIChatMessage(
+                role: "system",
+                content: """
+                你是提示词编辑助手。只优化用户提供的一个提示词字段。
+                保持原意和必要约束，删除重复表达，不添加解释、标题或代码围栏。
+                若文本包含 `${变量}`，必须原样保留；不得发明白名单之外的变量。
+                只返回优化后的完整字段文本。
+                """
+            ),
+            OpenAIChatMessage(
+                role: "user",
+                content: """
+                任务：\(kind.title)
+                字段：\(field.technicalTitle)
+                允许的变量：\(allowedVariables.isEmpty ? "无" : allowedVariables)
+                调整期望：\(trimmedInstruction)
+
+                当前文本：
+                \(currentText)
+                """
+            ),
+        ]
+        let request = makeRequest(
+            credentials: credentials,
+            messages: messages,
+            responseFormat: .text,
+            isStreaming: false,
+            frequencyPenalty: 0.1,
+            presencePenalty: 0,
+            temperature: 0.4,
+            topP: 0.9
+        )
+        try Task.checkCancellation()
+        return try await client.completion(request)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     /// 删除指定供应商密钥，保持另一供应商凭据与全部非敏感设置不变。
     func deleteAPIKey(for provider: AIProvider) async throws {
         try await configurationStore.deleteCredential(for: provider)
@@ -61,35 +201,21 @@ final class AIRepository: AIRepositoryProtocol, @unchecked Sendable {
                 do {
                     let note = try await fetchNoteContext(noteID: noteID)
                     let credentials = try await requestCredentials()
-                    let prompt = credentials.configuration.prompts.noteExplanation
-                    let userPrompt = Self.render(
-                        prompt.user,
+                    let preview = try AIPromptRequestBuilder.preview(
+                        kind: .noteExplanation,
+                        template: credentials.configuration.prompts.noteExplanation,
                         replacements: [
-                            "${摘录}": note.contentText,
-                            "${想法}": note.ideaText,
-                            "${章节}": note.chapterTitle,
-                            "${书籍名}": note.bookTitle,
-                            "${作者名}": note.bookAuthor,
+                            "摘录": note.contentText,
+                            "想法": note.ideaText,
+                            "章节": note.chapterTitle,
+                            "书籍名": note.bookTitle,
+                            "作者名": note.bookAuthor,
                         ]
                     )
-                    let request = makeRequest(
+                    let request = makeBusinessRequest(
                         credentials: credentials,
-                        messages: [
-                            OpenAIChatMessage(
-                                role: "system",
-                                content: Self.markdownSystemPrompt(
-                                    editablePrompt: prompt.system,
-                                    kind: .noteExplanation
-                                )
-                            ),
-                            OpenAIChatMessage(role: "user", content: userPrompt),
-                        ],
-                        responseFormat: .text,
-                        isStreaming: true,
-                        frequencyPenalty: 0.2,
-                        presencePenalty: 0.3,
-                        temperature: 0.85,
-                        topP: 0.95
+                        preview: preview,
+                        isStreaming: true
                     )
                     for try await content in client.streamCompletion(request) {
                         try Task.checkCancellation()
@@ -116,33 +242,19 @@ final class AIRepository: AIRepositoryProtocol, @unchecked Sendable {
                         throw AIRepositoryError.invalidConfiguration("请先选择需要释义的文字")
                     }
                     let credentials = try await requestCredentials()
-                    let prompt = credentials.configuration.prompts.wordLookup
-                    let userPrompt = Self.render(
-                        prompt.user,
+                    let preview = try AIPromptRequestBuilder.preview(
+                        kind: .wordLookup,
+                        template: credentials.configuration.prompts.wordLookup,
                         replacements: [
-                            "${查询文本}": query,
-                            "${上下文}": input.queryContext,
-                            "${书籍名}": input.bookTitle,
+                            "查询文本": query,
+                            "上下文": input.queryContext,
+                            "书籍名": input.bookTitle,
                         ]
                     )
-                    let request = makeRequest(
+                    let request = makeBusinessRequest(
                         credentials: credentials,
-                        messages: [
-                            OpenAIChatMessage(
-                                role: "system",
-                                content: Self.markdownSystemPrompt(
-                                    editablePrompt: prompt.system,
-                                    kind: .wordLookup
-                                )
-                            ),
-                            OpenAIChatMessage(role: "user", content: userPrompt),
-                        ],
-                        responseFormat: .text,
-                        isStreaming: true,
-                        frequencyPenalty: 0.2,
-                        presencePenalty: 0.3,
-                        temperature: 0.85,
-                        topP: 0.95
+                        preview: preview,
+                        isStreaming: true
                     )
                     for try await content in client.streamCompletion(request) {
                         try Task.checkCancellation()
@@ -172,32 +284,24 @@ final class AIRepository: AIRepositoryProtocol, @unchecked Sendable {
                     try Task.checkCancellation()
 
                     let credentials = try await requestCredentials()
-                    let prompt = credentials.configuration.prompts.autoTag
                     let existingNames = tags.map(\.title)
-                    let userPrompt = Self.render(
-                        prompt.user,
+                    let preview = try AIPromptRequestBuilder.preview(
+                        kind: .autoTag,
+                        template: credentials.configuration.prompts.autoTag,
                         replacements: [
-                            "${书摘内容}": note.contentText,
-                            "${书籍名}": note.bookTitle,
-                            "${作者名}": note.bookAuthor,
-                            "${章节}": note.chapterTitle,
-                            "${已有标签}": existingNames.isEmpty
+                            "书摘内容": note.contentText,
+                            "书籍名": note.bookTitle,
+                            "作者名": note.bookAuthor,
+                            "章节": note.chapterTitle,
+                            "已有标签": existingNames.isEmpty
                                 ? "暂无已创建的标签"
                                 : existingNames.joined(separator: "、"),
                         ]
                     )
-                    let request = makeRequest(
+                    let request = makeBusinessRequest(
                         credentials: credentials,
-                        messages: [
-                            OpenAIChatMessage(role: "system", content: prompt.system),
-                            OpenAIChatMessage(role: "user", content: userPrompt),
-                        ],
-                        responseFormat: .jsonObject,
-                        isStreaming: true,
-                        frequencyPenalty: 0,
-                        presencePenalty: 0,
-                        temperature: 0.7,
-                        topP: 0.9
+                        preview: preview,
+                        isStreaming: true
                     )
 
                     var finalContent = ""
@@ -299,19 +403,21 @@ private extension AIRepository {
         }
         for kind in AIPromptKind.allCases {
             let prompt = configuration.prompts.template(for: kind)
-            guard !prompt.system.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                  !prompt.user.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                throw AIRepositoryError.invalidConfiguration("\(kind.title) Prompt 不能为空")
+            if let issue = AIPromptValidator.blockingIssue(in: prompt, kind: kind) {
+                throw AIRepositoryError.invalidConfiguration("\(kind.title)：\(issue.message)")
             }
         }
     }
 
     func requestCredentials() async throws -> RequestCredentials {
         let snapshot = try await configurationStore.fetchSnapshot()
+        try Task.checkCancellation()
         let configuration = snapshot.configuration.normalized
         try validate(configuration)
         guard configuration.isEnabled else { throw AIRepositoryError.disabled }
-        guard let apiKey = try await configurationStore.credential(for: configuration.provider),
+        let apiKey = try await configurationStore.credential(for: configuration.provider)
+        try Task.checkCancellation()
+        guard let apiKey,
               !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw AIRepositoryError.missingAPIKey(configuration.provider)
         }
@@ -341,6 +447,42 @@ private extension AIRepository {
             temperature: temperature,
             topP: topP
         )
+    }
+
+    /// 把统一预览转换为生产请求；每类任务只在这里选择生成参数与 response format。
+    func makeBusinessRequest(
+        credentials: RequestCredentials,
+        preview: AIPromptRequestPreview,
+        isStreaming: Bool
+    ) -> OpenAICompletionRequest {
+        let messages = [
+            OpenAIChatMessage(role: "system", content: preview.systemPrompt),
+            OpenAIChatMessage(role: "user", content: preview.userPrompt),
+        ]
+        switch preview.kind {
+        case .noteExplanation, .wordLookup:
+            return makeRequest(
+                credentials: credentials,
+                messages: messages,
+                responseFormat: .text,
+                isStreaming: isStreaming,
+                frequencyPenalty: 0.2,
+                presencePenalty: 0.3,
+                temperature: 0.85,
+                topP: 0.95
+            )
+        case .autoTag:
+            return makeRequest(
+                credentials: credentials,
+                messages: messages,
+                responseFormat: .jsonObject,
+                isStreaming: isStreaming,
+                frequencyPenalty: 0,
+                presencePenalty: 0,
+                temperature: 0.7,
+                topP: 0.9
+            )
+        }
     }
 
     func fetchNoteContext(noteID: Int64) async throws -> NoteContext {
@@ -375,6 +517,38 @@ private extension AIRepository {
         }
     }
 
+    /// 读取最近书摘供显式试运行使用；只在用户打开试运行并选择该来源后执行。
+    func fetchRecentNoteContext() async throws -> NoteContext? {
+        try await databaseManager.database.dbPool.read { db in
+            // SQL 目的：读取最近一条有效书摘，作为提示词试运行的可选本地上下文。
+            // 涉及表：note LEFT JOIN book/chapter；关联缺失时保留书摘并以空字符串降级。
+            // 关键过滤：排除 note.is_deleted=1，并优先最近 created_date、再按 id 稳定排序。
+            // 时间字段：created_date 只参与排序，不向页面展示或转换时区。
+            // 返回字段用途：正文、想法、书籍、作者与章节映射到当前任务的受控变量。
+            let sql = """
+                SELECT n.content,
+                       n.idea,
+                       COALESCE(b.name, '') AS book_name,
+                       COALESCE(b.author, '') AS book_author,
+                       COALESCE(NULLIF(c.source_path, ''), c.title, '') AS chapter_title
+                FROM note n
+                LEFT JOIN book b ON b.id = n.book_id AND b.is_deleted = 0
+                LEFT JOIN chapter c ON c.id = n.chapter_id AND c.is_deleted = 0
+                WHERE n.is_deleted = 0
+                ORDER BY n.created_date DESC, n.id DESC
+                LIMIT 1
+                """
+            guard let row = try Row.fetchOne(db, sql: sql) else { return nil }
+            return NoteContext(
+                contentText: Self.plainText(row["content"] ?? ""),
+                ideaText: Self.plainText(row["idea"] ?? ""),
+                bookTitle: row["book_name"] ?? "",
+                bookAuthor: row["book_author"] ?? "",
+                chapterTitle: row["chapter_title"] ?? ""
+            )
+        }
+    }
+
     func parseAutoTagResponse(
         _ response: String,
         existingTagNames: Set<String>
@@ -399,41 +573,6 @@ private extension AIRepository {
                 isSelected: index == 0
             )
         }
-    }
-
-    nonisolated static func render(_ template: String, replacements: [String: String]) -> String {
-        replacements.reduce(template) { result, replacement in
-            result.replacingOccurrences(of: replacement.key, with: replacement.value)
-        }
-    }
-
-    /// 在可编辑业务提示词之后追加不可移除的预览格式契约，避免旧配置或自定义文案让 Markdown 结果退化为纯段落。
-    nonisolated static func markdownSystemPrompt(
-        editablePrompt: String,
-        kind: AIPromptKind
-    ) -> String {
-        let contract: String
-        switch kind {
-        case .noteExplanation:
-            contract = """
-                以下为应用固定的展示格式，若与前文格式要求冲突，以此处为准：
-                - 使用标准 Markdown，不输出一级标题、原始 HTML 或整篇代码围栏。
-                - 必须先输出「## 核心观点」，再输出「## 解析」。
-                - 只有存在多个并列观点时才使用无序列表；重点词可少量加粗。
-                - 「## 不同理解」和「## 延伸思考」仅在内容确有需要时输出，不输出空章节。
-                """
-        case .wordLookup:
-            contract = """
-                以下为应用固定的展示格式，若与前文格式要求冲突，以此处为准：
-                - 使用标准 Markdown，不输出一级标题、原始 HTML 或整篇代码围栏。
-                - 必须输出「## 释义」和「## 用法示例」。
-                - 「## 基本信息」和「## 补充说明」仅在内容确有需要时输出，不输出空章节。
-                - 多个含义或用法使用无序列表，重点词可少量加粗。
-                """
-        case .autoTag:
-            return editablePrompt
-        }
-        return "\(editablePrompt)\n\n\(contract)"
     }
 
     nonisolated static func plainText(_ html: String) -> String {

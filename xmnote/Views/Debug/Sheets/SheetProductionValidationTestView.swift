@@ -2084,6 +2084,45 @@ private struct SheetValidationAIRepository: AIRepositoryProtocol {
 
     func saveConfiguration(_ configuration: AIConfiguration, apiKey: String?) async throws { }
 
+    func savePromptTemplate(_ template: AIPromptTemplate, for kind: AIPromptKind) async throws { }
+
+    func makePromptPreview(
+        kind: AIPromptKind,
+        template: AIPromptTemplate,
+        sample: AIPromptSampleContext
+    ) throws -> AIPromptRequestPreview {
+        try AIPromptRequestBuilder.preview(
+            kind: kind,
+            template: template,
+            replacements: sample.replacements
+        )
+    }
+
+    func fetchRecentPromptSample(for kind: AIPromptKind) async throws -> AIPromptSampleContext? {
+        nil
+    }
+
+    func runPromptTrial(
+        kind: AIPromptKind,
+        template: AIPromptTemplate,
+        sample: AIPromptSampleContext,
+        comparesDefault: Bool
+    ) async throws -> AIPromptTrialResult {
+        AIPromptTrialResult(
+            current: "当前提示词的试运行结果",
+            defaultVersion: comparesDefault ? "默认提示词的试运行结果" : nil
+        )
+    }
+
+    func optimizePrompt(
+        kind: AIPromptKind,
+        field: AIPromptEditorField,
+        currentText: String,
+        instruction: String
+    ) async throws -> String {
+        currentText
+    }
+
     func deleteAPIKey(for provider: AIProvider) async throws { }
 
     func streamNoteExplanation(noteID: Int64) -> AsyncThrowingStream<String, Error> {

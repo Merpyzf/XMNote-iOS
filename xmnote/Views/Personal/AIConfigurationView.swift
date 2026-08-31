@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer 注入 AIRepositoryProtocol，依赖 AIConfigurationViewModel、设置分组卡片与统一反馈组件
- * [OUTPUT]: 对外提供 AIConfigurationView，以统一设置页文本层级承载 iOS 当前仅开放的 DeepSeek 模型、API 凭证管理和三类 Prompt 配置入口
+ * [OUTPUT]: 对外提供 AIConfigurationView，以统一设置页层级承载 DeepSeek 模型/API 凭证与三类独立 push Prompt 编辑入口
  * [POS]: Views/Personal 的 AI 配置页面壳层，被 PersonalRoute.aiConfiguration 导航消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -51,14 +51,14 @@ struct AIConfigurationView: View {
     }
 }
 
-/// 配置加载后的页面内容，集中承接单一 Prompt Sheet 与密钥删除确认。
+/// 配置加载后的页面内容，承接独立 Prompt push 入口与密钥删除确认。
 private struct AIConfigurationContentView: View {
     @Bindable var viewModel: AIConfigurationViewModel
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var activePromptKind: AIPromptKind?
     @State private var showsDeleteKeyAlert = false
     @State private var isEditingAPIKey = false
+    @State private var hasCompletedInitialAppearance = false
     @FocusState private var isAPIKeyFocused: Bool
 
     var body: some View {
@@ -77,11 +77,6 @@ private struct AIConfigurationContentView: View {
                 .disabled(!viewModel.canSave)
             }
         }
-        .sheet(item: $activePromptKind) { kind in
-            AIConfigurationPromptEditSheet(kind: kind, viewModel: viewModel)
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
-        }
         .xmSystemAlert(
             isPresented: $showsDeleteKeyAlert,
             descriptor: deleteKeyAlertDescriptor
@@ -91,6 +86,13 @@ private struct AIConfigurationContentView: View {
                 Color.overlay.ignoresSafeArea()
                 LoadingStateView("正在保存 AI 配置…", style: .card)
                     .transition(.opacity)
+            }
+        }
+        .onAppear {
+            if hasCompletedInitialAppearance {
+                Task { await viewModel.refreshPrompts() }
+            } else {
+                hasCompletedInitialAppearance = true
             }
         }
     }
@@ -178,9 +180,7 @@ private struct AIConfigurationContentView: View {
             ) {
                 VStack(spacing: Spacing.none) {
                     ForEach(AIPromptKind.allCases) { kind in
-                        Button {
-                            activePromptKind = kind
-                        } label: {
+                        NavigationLink(value: AppRoute.personal(.aiPromptEditor(kind))) {
                             HStack(spacing: Spacing.base) {
                                 Image(systemName: kind.systemImage)
                                     .font(AppTypography.bodyMedium)
@@ -200,6 +200,10 @@ private struct AIConfigurationContentView: View {
 
                                 Spacer(minLength: Spacing.base)
 
+                                Text(viewModel.isPromptCustomized(kind) ? "已自定义" : "默认")
+                                    .font(AppTypography.caption)
+                                    .foregroundStyle(Color.textSecondary)
+
                                 Image(systemName: "chevron.right")
                                     .font(AppTypography.captionSemibold)
                                     .foregroundStyle(Color.textHint)
@@ -209,7 +213,7 @@ private struct AIConfigurationContentView: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .accessibilityHint("编辑 System Prompt 与 User Prompt")
+                        .accessibilityHint("编辑用户提示词和系统提示词")
 
                         if kind != AIPromptKind.allCases.last {
                             settingsDivider

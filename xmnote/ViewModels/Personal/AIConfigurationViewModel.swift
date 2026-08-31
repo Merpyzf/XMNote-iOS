@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 AIRepositoryProtocol 读取 iOS 产品投影、保存 AI 配置并更新本机偏好中的 DeepSeek 凭据
- * [OUTPUT]: 对外提供 AIConfigurationViewModel 与 AIConfigurationFeedback，驱动 iOS 当前开放的 DeepSeek 模型、密钥和三类 Prompt 配置
+ * [OUTPUT]: 对外提供 AIConfigurationViewModel 与 AIConfigurationFeedback，驱动 DeepSeek 模型/密钥设置并同步三类 Prompt 的默认或自定义状态
  * [POS]: ViewModels/Personal 的 AI 设置状态编排器，被 AIConfigurationView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -63,15 +63,20 @@ final class AIConfigurationViewModel {
         !isLoading && !isSaving && hasPendingChanges && validationMessage == nil
     }
 
+    /// 判断单任务提示词是否偏离产品默认组合，供设置入口显示“默认/已自定义”。
+    func isPromptCustomized(_ kind: AIPromptKind) -> Bool {
+        configuration.prompts.template(for: kind)
+            != AIPromptConfiguration.androidAlignedDefault.template(for: kind)
+    }
+
     var validationMessage: String? {
         if configuration.selectedModelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return "请选择模型"
         }
         for kind in AIPromptKind.allCases {
             let template = configuration.prompts.template(for: kind)
-            if template.system.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                || template.user.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                return "\(kind.title) Prompt 不能为空"
+            if let issue = AIPromptValidator.blockingIssue(in: template, kind: kind) {
+                return "\(kind.title)：\(issue.message)"
             }
         }
         if configuration.isEnabled,
@@ -97,6 +102,24 @@ final class AIConfigurationViewModel {
             feedback = AIConfigurationFeedback(
                 role: .error,
                 message: "读取 AI 配置失败：\(error.localizedDescription)"
+            )
+        }
+    }
+
+    /// 从独立编辑页返回时只合并已持久化 Prompt，不覆盖模型、开关或 API Key 的上层未保存草稿。
+    func refreshPrompts() async {
+        guard !isLoading, !isSaving else { return }
+        do {
+            let snapshot = try await repository.fetchConfiguration()
+            try Task.checkCancellation()
+            configuration.prompts = snapshot.configuration.prompts
+            persistedConfiguration.prompts = snapshot.configuration.prompts
+        } catch is CancellationError {
+            return
+        } catch {
+            feedback = AIConfigurationFeedback(
+                role: .error,
+                message: "刷新提示词状态失败：\(error.localizedDescription)"
             )
         }
     }

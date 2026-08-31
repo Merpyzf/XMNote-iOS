@@ -19,6 +19,7 @@
 - `TimelineModels.swift`: TimelineEvent、TimelineSection、TimelineEventCategory、TimelineDayMarker 等时间线领域模型
 - `ReadingDashboardModels.swift`: BookReadingStatus、ReadingDashboardSnapshot、ReadingTrendMetric、ReadingDailyGoal、ReadingResumeBook、ReadingRecentBook、ReadingYearSummary 在读首页领域模型
 - `AIModels.swift`: AI 供应商配置、生成请求、流式事件与标签候选领域模型
+- `AIPromptEditingModels.swift`: 提示词字段、受控变量、校验问题、样例/试运行结果与唯一请求构建器
 - `BookContentWorkspaceModels.swift`: 单书目录/书摘/相关/书评四域、持久化排序与展示快照输入模型
 - `BookGroupManagementModels.swift`: 书籍分组管理快照、条目和写入输入模型
 - `BookReadingDetailModels.swift`: 阅读详情记录、汇总与编辑草稿模型

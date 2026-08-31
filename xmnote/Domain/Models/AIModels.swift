@@ -70,7 +70,7 @@ nonisolated struct AIModelOption: Identifiable, Hashable, Codable, Sendable {
 }
 
 /// 三类可编辑 Prompt，身份同时用于设置页 Sheet 与默认值恢复。
-nonisolated enum AIPromptKind: String, CaseIterable, Identifiable, Hashable, Sendable {
+nonisolated enum AIPromptKind: String, CaseIterable, Codable, Identifiable, Hashable, Sendable {
     case noteExplanation
     case wordLookup
     case autoTag

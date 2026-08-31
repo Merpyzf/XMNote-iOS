@@ -17,6 +17,7 @@
 - `XMScopeSelector使用说明.md`: XMScopeSelector 范围选择控件接入指南与参数说明。
 - `XMSearchHistorySection使用说明.md`: XMSearchHistorySection 搜索历史区块接入指南与参数说明。
 - `XMScrollEdgeChrome使用说明.md`: XMScrollEdgeChrome / XMScrollEdgeWash 滚动边缘容器与柔化层接入指南与参数说明。
+- `NavigationPopGuard使用说明.md`: navigationPopGuard 系统交互式返回保护、生命周期回调与脏状态接入指南。
 - `BookCoverProgressBar使用说明.md`: Reading 页面私有 BookCoverProgressBar 封面进度条接入指南。
 - `ExpandableRichText使用说明.md`: ExpandableRichText / RichText 富文本展示组件接入指南与参数说明。
 - `ImmersiveBottomChrome使用说明.md`: Content 页面私有 ImmersiveBottomChrome 底部沉浸遮罩接入指南。
@@ -60,6 +61,7 @@
 - `ReadCalendar使用说明.md`: ReadCalendarView 页面组件接入指南与参数说明。
 - `ReadingTimelineView使用说明.md`: ReadingTimelineView 页面组件接入指南与参数说明。
 - `PersonalView使用说明.md`: PersonalView 页面组件接入指南与参数说明。
+- `AIPromptEditorView使用说明.md`: AIPromptEditorView 单任务提示词编辑页的数据边界、路由接入与退出保护说明。
 - `BookGroupManagementView使用说明.md`: BookGroupManagementView 分组管理页面接入指南与参数说明。
 - `SourceManagementView使用说明.md`: SourceManagementView 来源管理页面接入指南与参数说明。
 
