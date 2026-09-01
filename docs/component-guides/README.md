@@ -6,6 +6,7 @@
 | ReadingDurationRankingChart | `xmnote/UIComponents/Charts/ReadingDurationRankingChart.swift` | `docs/component-guides/ReadingDurationRankingChart使用说明.md` | 已完成 |
 | XMRemoteImage | `xmnote/UIComponents/Media/Images/XMRemoteImage.swift` | `docs/component-guides/XMRemoteImage使用说明.md` | 已完成 |
 | XMGIFImageView | `xmnote/UIComponents/Media/Images/XMGIFImageView.swift` | `docs/component-guides/XMGIFImageView使用说明.md` | 已完成 |
+| AIMarkdownResultView | `xmnote/UIComponents/Media/Markdown/AIMarkdownResultView.swift` | `docs/component-guides/AIMarkdownResultView使用说明.md` | 已完成 |
 | XMBookCover | `xmnote/UIComponents/Foundation/XMBookCover.swift` | `docs/component-guides/XMBookCover使用说明.md` | 已完成 |
 | XMBookGroupCover | `xmnote/Views/Personal/Components/XMBookGroupCover.swift` | `docs/component-guides/XMBookGroupCover使用说明.md` | 页面私有 |
 | XMActivityShareSheet | `xmnote/UIComponents/System/Sharing/XMActivityShareSheet.swift` | `docs/component-guides/XMActivityShareSheet使用说明.md` | 已完成 |

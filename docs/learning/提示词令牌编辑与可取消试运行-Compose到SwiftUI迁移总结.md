@@ -51,6 +51,22 @@ Compose 的 `AnnotatedString` 与 TextKit attributed text 都适合展示标记�
 - 交互式返回取消：恢复页面出现状态和编辑焦点。
 - 真正退出前：先收起键盘与悬浮编辑栏，再执行导航返回。
 
+### 6. 原生文本选区是瞬态输入，不是可持久化业务字段
+
+`TextEditor(text:selection:)` 可以提供 `TextSelection`，但索引只对当时那份字符串有效。查词场景只接受 `.selection` 的非空连续范围；插入点、纯空白与 `.multiSelection` 都必须降级为无查询词。正文变化或更换本地书摘时立即清除选区，不能尝试把旧 `String.Index` 套到新字符串上。
+
+Compose 的 `TextFieldValue.selection` 同样属于编辑现场。跨平台迁移时应持久化用户最终确认的文字或领域 ID，而不是持久化平台选区对象。
+
+### 7. 对照实验要固定输入，只改变被比较变量
+
+“当前提示词 / 应用原始提示词”对照共享书摘、凭据、模型与生成参数，只替换 Prompt 模板。两侧各自维护 connecting、streaming、completed、failed，单侧失败不能取消另一侧；公共凭据或模型初始化失败才终止整个任务。这样用户看到的是可解释的结果差异，而不是不同输入和不同模型混在一起的伪对照。
+
+页面不展示调用次数。调用数量是实现细节，用户任务是判断两份输出哪一份更符合预期。
+
+### 8. 流式渲染器的公共化需要真实双场景证据
+
+`AIMarkdownResultView` 最初只服务内容 AI，提示词试运行成为第二个独立生产消费者后，才具备相同的累计 Markdown、选择、链接和表格交互合同，因此归位到 `UIComponents/Media/Markdown`。页面仍分别拥有网络任务、错误语义和分享 Sheet，公共组件不吸收业务状态。
+
 ## Compose 与 SwiftUI 对照
 
 | Android Compose | iOS 实现 | 迁移重点 |
@@ -60,6 +76,8 @@ Compose 的 `AnnotatedString` 与 TextKit attributed text 都适合展示标记�
 | `HorizontalPager` | 分段 Picker + 单编辑器 | 对齐双字段业务意图，不机械复制 Android 页面结构 |
 | `BackHandler` | `navigationPopGuard` + 系统 Alert | 覆盖顶部返回与交互式返回，不丢失 iOS 原生手势 |
 | `viewModelScope.launch` + Job | Sheet Task + request ID + 输入快照 | 取消网络之外还要拒绝晚到结果 |
+| `TextFieldValue.selection` | `TextEditor` + `TextSelection` | 选区只属于当前字符串快照，编辑或换源后立即失效 |
+| 两个并发 Flow | 按目标枚举的 `AsyncThrowingStream` 事件 | 固定共同输入、隔离每侧状态、允许单侧失败 |
 | 多个 SharedPreferences setter | Actor 内局部替换完整快照 | 防止 System/User 半保存和跨页面旧快照覆盖 |
 
 ## 最小示例：快照安全的异步建议

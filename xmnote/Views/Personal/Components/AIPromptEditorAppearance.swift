@@ -68,6 +68,8 @@ enum AIPromptEditorAppearance {
     enum Metrics {
         static let editorLineSpacing: CGFloat = 3
         static let editorParagraphSpacing: CGFloat = 5
+        static let diffLineSpacing: CGFloat = 5
+        static let diffParagraphSpacing: CGFloat = 8
 
         static let chipHeight: CGFloat = 28
         static let chipCornerRadius: CGFloat = chipHeight / 2
@@ -108,6 +110,16 @@ enum AIPromptEditorAppearance {
         )
     }
 
+    /// 返回当前 Dynamic Type 环境下的差异正文字体，以 15pt subheadline 层级保持长文本阅读密度。
+    static func uiDiffBodyFont(compatibleWith traits: UITraitCollection?) -> UIFont {
+        AppTypography.uiFixed(
+            baseSize: 15,
+            textStyle: .subheadline,
+            minimumPointSize: 15,
+            compatibleWith: traits
+        )
+    }
+
     /// 返回当前 Dynamic Type 环境下的令牌 UIKit 字体，默认保持 12pt 的紧凑密度。
     static func uiTokenFont(compatibleWith traits: UITraitCollection?) -> UIFont {
         AppTypography.uiFixed(
@@ -128,6 +140,20 @@ enum AIPromptEditorAppearance {
         paragraphStyle.paragraphSpacing = Metrics.editorParagraphSpacing
         return [
             .font: uiEditorBodyFont(compatibleWith: traits),
+            .foregroundColor: UIColor.xmResolved(Color.textPrimary),
+            .paragraphStyle: paragraphStyle,
+        ]
+    }
+
+    /// 返回只读差异正文基础属性；字体、行距、段距与新增正文色由该 feature owner 统一维护。
+    static func diffBaseAttributes(
+        compatibleWith traits: UITraitCollection?
+    ) -> [NSAttributedString.Key: Any] {
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineSpacing = Metrics.diffLineSpacing
+        paragraphStyle.paragraphSpacing = Metrics.diffParagraphSpacing
+        return [
+            .font: uiDiffBodyFont(compatibleWith: traits),
             .foregroundColor: UIColor.xmResolved(Color.textPrimary),
             .paragraphStyle: paragraphStyle,
         ]

@@ -7,6 +7,7 @@
 
 - `AIConfigurationViewModel.swift`: AI 供应商、模型、密钥与三类提示词入口状态编排
 - `AIPromptEditorViewModel.swift`: 单任务双字段提示词草稿、校验、恢复、预览、试运行与优化状态编排
+- `AIPromptExcerptPickerViewModel.swift`: 提示词试运行书摘选择的搜索、分页、保留内容刷新失败与取消状态编排
 - `ApiIntegrationViewModel.swift`: API 集成设置状态编排
 - `BookGroupManagementViewModel.swift`: 分组搜索、选择、编辑、排序、删除和回滚状态编排
 - `SourceManagementViewModel.swift`: 来源范围、搜索、编辑、排序、删除和反馈状态编排

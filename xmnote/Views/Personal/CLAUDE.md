@@ -18,7 +18,7 @@
 - `Components/AIPromptEditorAppearance.swift`: 提示词变量令牌的 feature-private 图标、语义配色、排版与局部尺寸 owner
 - `Components/AIPromptTokenTextEditor.swift`: SwiftUI 与 TextKit 的提示词令牌编辑桥接，负责原子变量、选区和撤销/重做
 - `Sheets/BookGroupNameEditSheet.swift`: 分组新增与重命名业务 Sheet
-- `Sheets/AIPromptEditorSheets.swift`: 提示词实际请求预览、试运行和字段优化业务 Sheet
+- `Sheets/AIPromptEditorSheets.swift`: 提示词实际请求预览、可编辑书摘流式试运行、本地书摘选择和字段优化业务 Sheet
 - `Sheets/AIPromptExplanationSheet.swift`: 用户提示词、系统提示词与变量边界说明 Sheet
 - `Components/TagManagementCollectionView.swift`: 标签管理页面私有集合视图
 

@@ -275,7 +275,7 @@
         "xmnote/Views/Book/BookshelfTypography.swift",
         "xmnote/Views/Book/Components/BookWorkspaceCollectionView.swift",
         "xmnote/Views/Book/Components/BookWorkspaceNoteItem.swift",
-        "xmnote/Views/Content/Components/AIMarkdownResultView.swift",
+        "xmnote/UIComponents/Media/Markdown/AIMarkdownResultView.swift",
         "xmnote/Views/Content/ContentEditorTypography.swift",
         "xmnote/Views/Content/ContentViewerDetailBodies.swift",
         "xmnote/Views/Note/Components/NoteHomeCategoryViews.swift",

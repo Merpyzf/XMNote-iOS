@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 DatabaseManager 读取书摘上下文，依赖 NoteRepositoryProtocol/AIConfigurationStore/OpenAICompatibleClient 管理标签、凭据与请求
- * [OUTPUT]: 对外提供 AIRepository，实现配置、单任务 Prompt 原子保存、统一请求预览/试运行/优化、流式释义/AI 标签及标签写回
+ * [OUTPUT]: 对外提供 AIRepository，实现配置、单任务 Prompt 原子保存、统一请求预览/流式试运行/优化、流式释义/AI 标签及标签写回
  * [POS]: Data 层 AI 仓储实现，是 ViewModel 获取 AI/本地数据与提交业务结果的唯一入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -70,69 +70,86 @@ final class AIRepository: AIRepositoryProtocol, @unchecked Sendable {
         )
     }
 
-    /// 读取最近有效书摘并映射到当前任务的白名单变量；没有数据时由页面继续使用内置样例。
-    func fetchRecentPromptSample(for kind: AIPromptKind) async throws -> AIPromptSampleContext? {
-        guard let note = try await fetchRecentNoteContext() else { return nil }
-        let replacements: [String: String]
-        switch kind {
-        case .noteExplanation:
-            replacements = [
-                "摘录": note.contentText,
-                "想法": note.ideaText,
-                "章节": note.chapterTitle,
-                "书籍名": note.bookTitle,
-                "作者名": note.bookAuthor,
-            ]
-        case .wordLookup:
-            replacements = [
-                "查询文本": String(note.contentText.prefix(12)),
-                "上下文": note.contentText,
-                "书籍名": note.bookTitle,
-            ]
-        case .autoTag:
-            replacements = [
-                "书摘内容": note.contentText,
-                "书籍名": note.bookTitle,
-                "作者名": note.bookAuthor,
-                "章节": note.chapterTitle,
-                "已有标签": "暂无已创建的标签",
-            ]
-        }
-        return AIPromptSampleContext(title: "最近书摘", replacements: replacements)
-    }
-
-    /// 使用生产请求参数试运行草稿；对照模式并发执行当前与默认版本，二者共用同一上下文。
-    func runPromptTrial(
+    /// 使用生产请求参数流式试运行草稿；对照模式共享上下文并发执行，单侧失败不取消另一侧。
+    func streamPromptTrial(
         kind: AIPromptKind,
         template: AIPromptTemplate,
         sample: AIPromptSampleContext,
         comparesDefault: Bool
-    ) async throws -> AIPromptTrialResult {
-        let credentials = try await requestCredentials()
-        try Task.checkCancellation()
-        let currentPreview = try makePromptPreview(kind: kind, template: template, sample: sample)
-        if comparesDefault {
-            let defaultTemplate = AIPromptConfiguration.androidAlignedDefault.template(for: kind)
-            let defaultPreview = try makePromptPreview(
-                kind: kind,
-                template: defaultTemplate,
-                sample: sample
-            )
-            try Task.checkCancellation()
-            async let current = client.completion(
-                makeBusinessRequest(credentials: credentials, preview: currentPreview, isStreaming: false)
-            )
-            async let defaultVersion = client.completion(
-                makeBusinessRequest(credentials: credentials, preview: defaultPreview, isStreaming: false)
-            )
-            return try await AIPromptTrialResult(current: current, defaultVersion: defaultVersion)
-        }
+    ) -> AsyncThrowingStream<AIPromptTrialEvent, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    let credentials = try await requestCredentials()
+                    try Task.checkCancellation()
 
-        try Task.checkCancellation()
-        let current = try await client.completion(
-            makeBusinessRequest(credentials: credentials, preview: currentPreview, isStreaming: false)
-        )
-        return AIPromptTrialResult(current: current, defaultVersion: nil)
+                    let currentPreview = try makePromptPreview(
+                        kind: kind,
+                        template: template,
+                        sample: sample
+                    )
+                    var requests: [(AIPromptTrialTarget, OpenAICompletionRequest)] = [
+                        (
+                            .current,
+                            makeBusinessRequest(
+                                credentials: credentials,
+                                preview: currentPreview,
+                                isStreaming: true
+                            )
+                        ),
+                    ]
+                    if comparesDefault {
+                        let defaultPreview = try makePromptPreview(
+                            kind: kind,
+                            template: AIPromptConfiguration.androidAlignedDefault.template(for: kind),
+                            sample: sample
+                        )
+                        requests.append(
+                            (
+                                .appDefault,
+                                makeBusinessRequest(
+                                    credentials: credentials,
+                                    preview: defaultPreview,
+                                    isStreaming: true
+                                )
+                            )
+                        )
+                    }
+
+                    let client = client
+                    try await withThrowingTaskGroup(of: Void.self) { group in
+                        for (target, request) in requests {
+                            group.addTask {
+                                do {
+                                    for try await markdown in client.streamCompletion(request) {
+                                        try Task.checkCancellation()
+                                        continuation.yield(.content(target: target, markdown: markdown))
+                                    }
+                                    try Task.checkCancellation()
+                                    continuation.yield(.completed(target: target))
+                                } catch is CancellationError {
+                                    throw CancellationError()
+                                } catch {
+                                    continuation.yield(
+                                        .failed(
+                                            target: target,
+                                            error: Self.trialError(from: error)
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                        try await group.waitForAll()
+                    }
+                    continuation.finish()
+                } catch is CancellationError {
+                    continuation.finish(throwing: CancellationError())
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { @Sendable _ in task.cancel() }
+        }
     }
 
     /// 只把当前字段和用户期望交给模型，要求原样保留受控变量并返回可直接比较的纯文本建议。
@@ -517,38 +534,6 @@ private extension AIRepository {
         }
     }
 
-    /// 读取最近书摘供显式试运行使用；只在用户打开试运行并选择该来源后执行。
-    func fetchRecentNoteContext() async throws -> NoteContext? {
-        try await databaseManager.database.dbPool.read { db in
-            // SQL 目的：读取最近一条有效书摘，作为提示词试运行的可选本地上下文。
-            // 涉及表：note LEFT JOIN book/chapter；关联缺失时保留书摘并以空字符串降级。
-            // 关键过滤：排除 note.is_deleted=1，并优先最近 created_date、再按 id 稳定排序。
-            // 时间字段：created_date 只参与排序，不向页面展示或转换时区。
-            // 返回字段用途：正文、想法、书籍、作者与章节映射到当前任务的受控变量。
-            let sql = """
-                SELECT n.content,
-                       n.idea,
-                       COALESCE(b.name, '') AS book_name,
-                       COALESCE(b.author, '') AS book_author,
-                       COALESCE(NULLIF(c.source_path, ''), c.title, '') AS chapter_title
-                FROM note n
-                LEFT JOIN book b ON b.id = n.book_id AND b.is_deleted = 0
-                LEFT JOIN chapter c ON c.id = n.chapter_id AND c.is_deleted = 0
-                WHERE n.is_deleted = 0
-                ORDER BY n.created_date DESC, n.id DESC
-                LIMIT 1
-                """
-            guard let row = try Row.fetchOne(db, sql: sql) else { return nil }
-            return NoteContext(
-                contentText: Self.plainText(row["content"] ?? ""),
-                ideaText: Self.plainText(row["idea"] ?? ""),
-                bookTitle: row["book_name"] ?? "",
-                bookAuthor: row["book_author"] ?? "",
-                chapterTitle: row["chapter_title"] ?? ""
-            )
-        }
-    }
-
     func parseAutoTagResponse(
         _ response: String,
         existingTagNames: Set<String>
@@ -588,6 +573,14 @@ private extension AIRepository {
             guard !normalized.isEmpty, seen.insert(normalized).inserted else { return nil }
             return normalized
         }
+    }
+
+    /// 把意外的底层错误收敛为仓储错误，确保单侧失败事件保持 Sendable 且具备用户可读说明。
+    nonisolated static func trialError(from error: Error) -> AIRepositoryError {
+        if let repositoryError = error as? AIRepositoryError {
+            return repositoryError
+        }
+        return .network(error.localizedDescription)
     }
 
     nonisolated static func extractedJSONObject(from response: String) -> String {

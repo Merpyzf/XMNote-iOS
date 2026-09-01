@@ -477,15 +477,13 @@ nonisolated protocol AIRepositoryProtocol: Sendable {
         template: AIPromptTemplate,
         sample: AIPromptSampleContext
     ) throws -> AIPromptRequestPreview
-    /// 读取最近一条有效书摘并转换为当前任务的受控变量样例；没有书摘时返回 nil。
-    func fetchRecentPromptSample(for kind: AIPromptKind) async throws -> AIPromptSampleContext?
-    /// 用相同模型、参数和上下文试运行当前草稿；需要对照时额外执行一次默认版本请求。
-    func runPromptTrial(
+    /// 用相同模型、参数和上下文流式试运行当前草稿；对照时并发输出当前与应用原始提示词事件。
+    func streamPromptTrial(
         kind: AIPromptKind,
         template: AIPromptTemplate,
         sample: AIPromptSampleContext,
         comparesDefault: Bool
-    ) async throws -> AIPromptTrialResult
+    ) -> AsyncThrowingStream<AIPromptTrialEvent, Error>
     /// 根据自然语言期望优化当前字段；不读取或上传任何书摘正文。
     func optimizePrompt(
         kind: AIPromptKind,

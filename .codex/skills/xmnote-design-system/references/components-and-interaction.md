@@ -128,6 +128,8 @@ XMSettingsPage {
 
 机器目录目前没有可泛化到所有业务的主按钮或通用表单字段组件；catalog 缺席时使用原生控件和页面私有组合，不得从未登记文件或某个 feature 的私有按钮反推公共规范。
 
+任务涉及文本输入焦点、键盘收起模式、滚动手势、键盘避让、提交前失焦或 UIKit first responder 桥接时，必须同时读取 [软键盘与输入焦点](keyboard-and-focus.md)。本文件只决定输入控件归位与视觉语义，不重复维护键盘策略。
+
 按钮先按任务成本分层：
 
 - 页面唯一的提交、创建或确认可以使用 `primaryActionFill + primaryActionForeground`；标准业务 Sheet 的提交外观与位置由 [业务 Sheet](sheets.md) 和 scaffold 持有，不在内容层重建。同一任务面内通常只保留一个同权主按钮。

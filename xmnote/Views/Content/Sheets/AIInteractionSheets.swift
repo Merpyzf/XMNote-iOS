@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 AITextResultViewModel/AIAutoTagViewModel、AIRepositoryProtocol、AIMarkdownResultView、XMPopupButton、系统 NavigationStack/Toolbar/safeAreaBar、iOS 26 Liquid Glass、LoadingGate、xmMinimumHitTarget 与现有反馈组件
+ * [INPUT]: 依赖 AITextResultViewModel/AIAutoTagViewModel、AIRepositoryProtocol、AIMarkdownResultView、AIGenerationWaitingView、XMPopupButton、系统 NavigationStack/Toolbar/safeAreaBar、iOS 26 Liquid Glass、LoadingGate、xmMinimumHitTarget 与现有反馈组件
  * [OUTPUT]: 对外提供 AITextResultSheet、AIAutoTagSheet 及可复现等待/空结果/失败状态的业务展示单元；AI 释义承接模型切换、流式结果和编辑器请求，AI 标签承接系统确认与写回生命周期
  * [POS]: Views/Content/Sheets 的 AI 业务 Sheet，被通用 viewer 及单页详情入口复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -278,7 +278,10 @@ struct AITextResultSheet: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .transition(.opacity)
         } else if loadingGate.isVisible {
-            AIGenerationWaitingView(reduceMotion: reduceMotion)
+            AIGenerationWaitingView(
+                "正在生成…",
+                accessibilityLabel: "正在生成 AI 释义"
+            )
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .transition(.opacity)
         } else {
@@ -324,33 +327,6 @@ struct AITextResultSheet: View {
     private func syncLoadingGate() {
         let shouldShow = viewModel.isGenerating && viewModel.content.isEmpty
         loadingGate.update(intent: shouldShow ? .read : .none)
-    }
-}
-
-/// 首个可见 token 返回前，以低干扰文字呼吸表达生成中的页面私有等待态。
-private struct AIGenerationWaitingView: View {
-    let reduceMotion: Bool
-
-    var body: some View {
-        if reduceMotion {
-            waitingText
-                .opacity(0.82)
-        } else {
-            PhaseAnimator([0.90, 0.55]) { opacity in
-                waitingText
-                    .opacity(opacity)
-            } animation: { _ in
-                .easeInOut(duration: 0.7)
-            }
-        }
-    }
-
-    private var waitingText: some View {
-        Text("正在生成…")
-            .font(AppTypography.footnote)
-            .foregroundStyle(Color.textSecondary)
-            .fixedSize(horizontal: false, vertical: true)
-            .accessibilityLabel("正在生成 AI 释义")
     }
 }
 

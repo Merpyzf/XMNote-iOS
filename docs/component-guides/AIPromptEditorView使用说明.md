@@ -4,7 +4,7 @@
 
 - 源码路径：`xmnote/Views/Personal/AIPromptEditorView.swift`。
 - 角色：“我的 > AI 配置”内三类任务的独立提示词编辑页。
-- 边界：页面持有导航、焦点、选区和 Sheet 等 UI 瞬态；`AIPromptEditorViewModel` 持有草稿与异步状态；`AIRepositoryProtocol` 负责读取、校验、原子保存和请求能力。
+- 边界：页面持有导航、焦点、选区和 Sheet 等 UI 瞬态；`AIPromptEditorViewModel` 持有草稿与异步状态；`AIRepositoryProtocol` 负责读取、校验、原子保存和请求能力；`NoteRepositoryProtocol` 只为试运行书摘选择提供分页数据。
 - 归属：UI 核心页面，不是跨功能复用组件；变量编辑器和次级 Sheet 继续保持 Personal feature-private。
 
 ## 快速接入
@@ -36,7 +36,7 @@ case .aiPromptEditor(let kind):
 
 | 环境值 | 说明 |
 | --- | --- |
-| `RepositoryContainer` | 提供 `aiRepository`，View/ViewModel 不直接访问 UserDefaults、数据库或网络客户端。 |
+| `RepositoryContainer` | 提供 `aiRepository` 与 `noteRepository`，View/ViewModel 不直接访问 UserDefaults、数据库或网络客户端。 |
 
 ## 示例
 
@@ -65,6 +65,10 @@ struct PromptEntryExample: View {
 - 恢复默认只修改草稿；用户仍需显式保存。
 - 有未保存内容时，顶部返回和系统交互式返回共用保存/放弃/继续编辑确认。
 - 试运行和优化只由用户显式触发；关闭 Sheet 或输入快照变化后，旧响应不能回写。
+- 试运行默认使用《百年孤独》固定书摘；正文可直接编辑，也可从本地书摘搜索选择，选择后保留书名、作者、章节、想法与标签元数据。
+- AI 查词必须在原生正文编辑器中选中单段非空文字；插入点、空白和多重选区不能开始测试。
+- “与应用原始提示词对比”始终复用同一书摘、凭据、模型和生成参数，只替换模板；两个流独立完成或失败，并通过选择器和水平滑动查看。
+- AI 结果统一使用 `AIMarkdownResultView` 渲染累计 Markdown，不展示请求或调用次数。
 
 ## 常见问题
 
@@ -76,9 +80,9 @@ struct PromptEntryExample: View {
 
 编辑页只拥有当前任务 Prompt。Repository 会让 Actor Store 读取最新配置、替换当前任务并一次写回，避免覆盖设置页或其他任务的较新修改。
 
-### 为什么试运行有时会产生两次请求？
+### “与应用原始提示词对比”具体比较什么？
 
-默认只运行当前草稿一次。开启“与默认版本对照”后，会在相同模型、参数和上下文下并发运行当前与默认模板，因此界面会在执行前明确提示两次请求。
+它比较当前编辑中的模板与 `AIPromptConfiguration.androidAlignedDefault`。两边使用完全相同的书摘、凭据、模型和生成参数，页面只呈现两份原始结果，不再额外生成总结或评分。当前模板与应用原始模板一致时，对比入口会禁用。
 
 ### 为什么变量视觉不能直接写入配置？
 

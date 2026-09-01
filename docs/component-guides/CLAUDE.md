@@ -9,6 +9,7 @@
 - `ReadingDurationRankingChart使用说明.md`: ReadingDurationRankingChart 阅读时长排行组件接入指南与参数说明。
 - `XMRemoteImage使用说明.md`: XMRemoteImage 统一远程图片组件接入指南与参数说明。
 - `XMGIFImageView使用说明.md`: XMGIFImageView GIF 动画承载组件接入指南与参数说明。
+- `AIMarkdownResultView使用说明.md`: AI 流式 Markdown 标准结果组件的累计快照、交互控制器与多结果隔离接入指南。
 - `XMBookCover使用说明.md`: XMBookCover 统一书籍封面组件接入指南与参数说明。
 - `XMBookGroupCover使用说明.md`: Personal 页面私有 XMBookGroupCover 书籍分组组合封面接入指南。
 - `XMActivityShareSheet使用说明.md`: XMActivityShareSheet 稳定系统分享宿主接入指南与参数说明。

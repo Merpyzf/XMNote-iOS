@@ -243,6 +243,16 @@
       "guidePath": "docs/component-guides/XMStatePresentation使用说明.md"
     },
     {
+      "path": "xmnote/UIComponents/Feedback/Loading/AIGenerationWaitingView.swift",
+      "symbols": ["AIGenerationWaitingView"],
+      "status": "canonical", "category": "foundationVisual", "layer": "feedback", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "loading", "readOnly"],
+      "dependencies": ["DesignSystem", "SwiftUI.PhaseAnimator", "SwiftUI.accessibilityReduceMotion"],
+      "useWhen": "AI 生成在首个可见结果前需要低干扰、可降级的文字等待反馈", "avoidWhen": "普通读取加载、确定进度、已有流式内容或按钮写入反馈",
+      "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Feedback/Loading/AIGenerationWaitingView.swift"},
+      "guidePath": null
+    },
+    {
       "path": "xmnote/UIComponents/Feedback/LoadingStateView.swift",
       "symbols": ["LoadingStateView"],
       "status": "canonical", "category": "foundationVisual", "layer": "feedback", "framework": "swiftui", "usageScope": "crossFeature",
@@ -318,7 +328,7 @@
       "status": "canonical", "category": "layout", "layer": "foundation", "framework": "swiftui", "usageScope": "crossFeature",
       "stateCoverage": ["normal", "readOnly"],
       "dependencies": ["DesignSystem"],
-      "useWhen": "内容需要统一卡片表层、连续圆角与可选描边", "avoidWhen": "设置分组、交互按钮或业务含义明确的复合卡片",
+      "useWhen": "普通独立内容卡需要统一表层、默认 12pt 连续圆角与可选描边，或调用方需要显式注入语义 Shape", "avoidWhen": "设置分组、交互按钮、业务含义明确的复合卡片，或把默认 12pt Shape 用作 Sheet 主复合内容面板",
       "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Foundation/CardContainer.swift"},
       "guidePath": null
     },
@@ -441,6 +451,16 @@
       "useWhen": "跨模块远程图片需要统一静态图、GIF、占位与失败降级", "avoidWhen": "书籍封面、需要 JX Zoom 转场的缩略图或本地资产",
       "previewPolicy": {"kind": "hosted", "path": "xmnote/Views/Debug/ImageLoadingTestView.swift", "reason": "需要真实网络、静态图/GIF/失败链路与缓存来源验证"},
       "guidePath": "docs/component-guides/XMRemoteImage使用说明.md"
+    },
+    {
+      "path": "xmnote/UIComponents/Media/Markdown/AIMarkdownResultView.swift",
+      "symbols": ["AIStreamingMarkdownSource", "AIMarkdownTableExport", "AIMarkdownInteractionController", "AIMarkdownResultView"],
+      "status": "canonical", "category": "foundationVisual", "layer": "media", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "loading", "selected", "readOnly", "error"],
+      "dependencies": ["DesignSystem", "SwiftStreamingMarkdown", "XMToast", "XMActivityShareSheet"],
+      "useWhen": "AI 生成的标准 Markdown 需要累计快照流式渲染、文本选择、链接和表格交互", "avoidWhen": "HTML 富文本、Markdown 源码编辑、普通静态短文本或非 AI 内容",
+      "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Media/Markdown/AIMarkdownResultView.swift"},
+      "guidePath": "docs/component-guides/AIMarkdownResultView使用说明.md"
     },
     {
       "path": "xmnote/UIComponents/Media/RichText/CollapsedRichTextPreview.swift",
@@ -638,7 +658,7 @@
       "status": "canonical", "category": "layout", "layer": "sheet", "framework": "swiftui", "usageScope": "crossFeature",
       "stateCoverage": ["normal", "pressed", "disabled", "loading", "error"],
       "dependencies": ["DesignSystem", "SwiftUI.ConcentricRectangle", "TopBarActionIcon", "XMScrollEdgeChrome"],
-      "useWhen": "业务 Sheet 需要标准标题、普通内容的标题区后间距、关闭或双侧操作、滚动回弹、固定栏或内部复合内容面板的同心轮廓；contentTopBar 场景自动排除标准内容顶部间距", "avoidWhen": "系统选择器、中心弹窗、普通列表行或没有业务 Sheet 关系的页面",
+      "useWhen": "业务 Sheet 需要标准标题、普通内容的标题区后间距、关闭或双侧操作、滚动回弹、固定栏；承担主任务、组合两个以上协同区域且与外缘平行的面板必须显式消费 xmSheetContentPanel，普通 block 继续使用固定圆角；contentTopBar 场景自动排除标准内容顶部间距", "avoidWhen": "系统选择器、中心弹窗、普通列表行或没有业务 Sheet 关系的页面",
       "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Sheet/XMSheetScaffold.swift"},
       "guidePath": "docs/component-guides/XMSheetScaffold使用说明.md"
     },

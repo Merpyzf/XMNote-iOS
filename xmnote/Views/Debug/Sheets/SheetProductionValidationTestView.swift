@@ -2098,20 +2098,31 @@ private struct SheetValidationAIRepository: AIRepositoryProtocol {
         )
     }
 
-    func fetchRecentPromptSample(for kind: AIPromptKind) async throws -> AIPromptSampleContext? {
-        nil
-    }
-
-    func runPromptTrial(
+    func streamPromptTrial(
         kind: AIPromptKind,
         template: AIPromptTemplate,
         sample: AIPromptSampleContext,
         comparesDefault: Bool
-    ) async throws -> AIPromptTrialResult {
-        AIPromptTrialResult(
-            current: "当前提示词的试运行结果",
-            defaultVersion: comparesDefault ? "默认提示词的试运行结果" : nil
-        )
+    ) -> AsyncThrowingStream<AIPromptTrialEvent, Error> {
+        AsyncThrowingStream { continuation in
+            continuation.yield(
+                .content(
+                    target: .current,
+                    markdown: "## 核心观点\n\n当前提示词的试运行结果"
+                )
+            )
+            continuation.yield(.completed(target: .current))
+            if comparesDefault {
+                continuation.yield(
+                    .content(
+                        target: .appDefault,
+                        markdown: "## 核心观点\n\n应用原始提示词的试运行结果"
+                    )
+                )
+                continuation.yield(.completed(target: .appDefault))
+            }
+            continuation.finish()
+        }
     }
 
     func optimizePrompt(

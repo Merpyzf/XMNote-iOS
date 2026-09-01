@@ -1,13 +1,13 @@
 /**
- * [INPUT]: 依赖 AIRepositoryProtocol 读取与原子保存单任务 Prompt，生成离线预览并执行显式试运行或字段优化
- * [OUTPUT]: 对外提供 AIPromptEditorViewModel，统一管理双字段草稿、校验、恢复、预览、试运行与优化建议
+ * [INPUT]: 依赖 AIRepositoryProtocol 读取与原子保存单任务 Prompt，生成离线预览并执行字段优化
+ * [OUTPUT]: 对外提供 AIPromptEditorViewModel，统一管理双字段草稿、校验、恢复、预览与优化建议
  * [POS]: ViewModels/Personal 的提示词编辑状态源，被独立 push 编辑页及其三个按需 Sheet 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import Foundation
 
-/// 提示词编辑状态源；网络任务在调用方结构化 Task 中运行，取消后不回写过期页面状态。
+/// 提示词编辑状态源；试运行由独立 Sheet 会话持有，避免 Push/Pop 改变编辑器业务状态。
 @MainActor
 @Observable
 final class AIPromptEditorViewModel {
@@ -20,12 +20,6 @@ final class AIPromptEditorViewModel {
     var errorMessage: String?
 
     var preview: AIPromptRequestPreview?
-    var recentSample: AIPromptSampleContext?
-    var isLoadingRecentSample = false
-
-    var trialResult: AIPromptTrialResult?
-    var isRunningTrial = false
-    var trialErrorMessage: String?
 
     var optimizationInstruction = ""
     private(set) var optimizationSuggestion: String?
@@ -33,7 +27,6 @@ final class AIPromptEditorViewModel {
     var optimizationErrorMessage: String?
 
     private var persistedTemplate = AIPromptTemplate(system: "", user: "")
-    private var activeTrialRequestID: UUID?
     private var activeOptimizationRequest: OptimizationRequest?
     private var optimizationSuggestionRequest: OptimizationRequest?
     private let repository: any AIRepositoryProtocol
@@ -71,8 +64,6 @@ final class AIPromptEditorViewModel {
                 template.system = newValue
             }
             preview = nil
-            trialResult = nil
-            trialErrorMessage = nil
             optimizationSuggestion = nil
             optimizationSuggestionRequest = nil
             optimizationErrorMessage = nil
@@ -107,8 +98,8 @@ final class AIPromptEditorViewModel {
         !isLoading && !isSaving && hasUnsavedChanges && !hasBlockingIssues
     }
 
-    var canRunTrial: Bool {
-        !isLoading && !isSaving && !isRunningTrial && !hasBlockingIssues
+    var canPresentTrial: Bool {
+        !isLoading && !isSaving && !hasBlockingIssues
     }
 
     var optimizationSourceText: String? {
@@ -194,64 +185,6 @@ final class AIPromptEditorViewModel {
         }
     }
 
-    /// 按需读取最近书摘样例；不存在或读取失败时仍可继续使用内置样例。
-    func loadRecentSample() async {
-        guard !isLoadingRecentSample else { return }
-        isLoadingRecentSample = true
-        defer { isLoadingRecentSample = false }
-        do {
-            let sample = try await repository.fetchRecentPromptSample(for: kind)
-            try Task.checkCancellation()
-            recentSample = sample
-        } catch is CancellationError {
-            return
-        } catch {
-            trialErrorMessage = "最近书摘读取失败：\(error.localizedDescription)"
-        }
-    }
-
-    /// 显式执行一次或两次网络请求；取消或新请求会使旧 request ID 失效，旧结果不得回写页面。
-    func runTrial(sample: AIPromptSampleContext, comparesDefault: Bool) async {
-        guard !isRunningTrial else { return }
-        let requestID = UUID()
-        let templateSnapshot = template
-        activeTrialRequestID = requestID
-        isRunningTrial = true
-        trialResult = nil
-        trialErrorMessage = nil
-        defer {
-            if activeTrialRequestID == requestID {
-                activeTrialRequestID = nil
-                isRunningTrial = false
-            }
-        }
-        do {
-            let result = try await repository.runPromptTrial(
-                kind: kind,
-                template: templateSnapshot,
-                sample: sample,
-                comparesDefault: comparesDefault
-            )
-            try Task.checkCancellation()
-            guard activeTrialRequestID == requestID,
-                  template == templateSnapshot else {
-                return
-            }
-            trialResult = result
-        } catch is CancellationError {
-            return
-        } catch {
-            guard activeTrialRequestID == requestID else { return }
-            trialErrorMessage = error.localizedDescription
-        }
-    }
-
-    /// 使当前运行请求失效；调用方同时取消其结构化 Task，避免 Sheet 关闭后继续产生网络消耗。
-    func cancelTrial() {
-        activeTrialRequestID = nil
-        isRunningTrial = false
-    }
-
     /// 请求优化发起时锁定字段、双字段草稿和指令；取消、切换或草稿变化后均不接纳旧响应。
     func optimizeCurrentField() async {
         guard !isOptimizing else { return }
@@ -325,7 +258,6 @@ final class AIPromptEditorViewModel {
         optimizationSuggestionRequest = nil
         optimizationInstruction = ""
         preview = nil
-        trialResult = nil
         return true
     }
 
@@ -341,7 +273,6 @@ final class AIPromptEditorViewModel {
 
     private func clearDerivedResults() {
         preview = nil
-        trialResult = nil
         optimizationSuggestion = nil
         optimizationSuggestionRequest = nil
         optimizationErrorMessage = nil

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 SwiftUI/UIKit/TextKit 2、Observation、AIPromptEditorAppearance、变量目录与校验问题，接收纯文本、原始选区、插入请求、焦点绑定、命令控制器和悬浮栏内容避让高度
- * [OUTPUT]: 对内提供 AIPromptTokenTextEditor 与 AIPromptEditorCommandController，把已识别 `${变量名}` 显示为不可拆分的原子令牌，并桥接滚动避让、字段/整模板撤销重做与 UIKit 最终清理
+ * [OUTPUT]: 对内提供可编辑与只读的提示词 TextKit 渲染器及 AIPromptEditorCommandController，把已识别 `${变量名}` 显示为不可拆分的原子令牌，并桥接滚动避让、字段/整模板撤销重做与 UIKit 最终清理
  * [POS]: Views/Personal/Components 的 feature-private UIKit 桥接，被 AIPromptEditorView 的单一主编辑器消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -1006,6 +1006,135 @@ struct AIPromptTokenTextEditor: UIViewRepresentable {
             }
             textView.undoManager?.setActionName(actionName)
             scheduleCommandStateRefresh(for: textView)
+        }
+    }
+}
+
+/// 只读提示词的差异语义；删除态只作用于普通文字，变量附件继续保持编辑器同源 Chip 外观。
+enum AIPromptReadOnlyTokenTextStyle {
+    case removed
+    case added
+
+    var accessibilityPrefix: String {
+        switch self {
+        case .removed:
+            "删除"
+        case .added:
+            "新增"
+        }
+    }
+}
+
+/// 提示词差异的只读 TextKit 2 渲染桥接，复用编辑器变量投影与附件视图，并使用差异专属阅读排版。
+struct AIPromptReadOnlyTokenTextView: UIViewRepresentable {
+    let text: String
+    let kind: AIPromptKind
+    let field: AIPromptEditorField
+    let style: AIPromptReadOnlyTokenTextStyle
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+
+    /// 创建不可编辑但允许选择复制的 TextKit 2 视图，并移除系统 TextView 默认内边距。
+    func makeUIView(context: Context) -> UITextView {
+        AIPromptTokenAttachment.registerViewProviderIfNeeded()
+        let textView = UITextView(frame: .zero, textContainer: nil)
+        textView.backgroundColor = .clear
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.isScrollEnabled = false
+        textView.contentInsetAdjustmentBehavior = .never
+        textView.textContainerInset = .zero
+        textView.textContainer.lineFragmentPadding = 0
+        textView.adjustsFontForContentSizeCategory = false
+        textView.dataDetectorTypes = []
+        textView.setContentHuggingPriority(.required, for: .vertical)
+        renderContent(in: textView)
+        return textView
+    }
+
+    /// 随差异文本、字段和外观环境重新建立投影，确保浅深色、高对比度与 Dynamic Type 同步更新。
+    func updateUIView(_ textView: UITextView, context: Context) {
+        _ = dynamicTypeSize
+        _ = colorScheme
+        _ = colorSchemeContrast
+        renderContent(in: textView)
+    }
+
+    /// 使用 SwiftUI 提议宽度计算 TextKit 完整高度，使长差异留在 Sheet 的唯一滚动容器中。
+    func sizeThatFits(
+        _ proposal: ProposedViewSize,
+        uiView: UITextView,
+        context: Context
+    ) -> CGSize? {
+        guard let width = proposal.width else { return nil }
+        let fittingSize = uiView.sizeThatFits(
+            CGSize(width: width, height: .greatestFiniteMagnitude)
+        )
+        return CGSize(width: width, height: ceil(fittingSize.height))
+    }
+
+    /// 复用编辑器投影识别完整已知变量，并仅为删除态的普通文字添加删除线和次级前景色。
+    private func renderContent(in textView: UITextView) {
+        let projection = AIPromptTextProjection.build(
+            rawText: text,
+            kind: kind,
+            field: field,
+            issues: [],
+            traits: textView.traitCollection
+        )
+        let attributedText = NSMutableAttributedString(
+            attributedString: projection.attributedText
+        )
+        applyDiffTextAttributes(
+            to: attributedText,
+            compatibleWith: textView.traitCollection
+        )
+
+        if style == .removed {
+            applyRemovedTextAttributes(to: attributedText)
+        }
+
+        textView.attributedText = attributedText
+        textView.accessibilityLabel = "\(style.accessibilityPrefix)，\(projection.accessibilityText)"
+        textView.invalidateIntrinsicContentSize()
+    }
+
+    /// 在变量投影完成后统一应用差异正文排版，使普通文字与附件共享同一段落节奏和基线环境。
+    private func applyDiffTextAttributes(
+        to attributedText: NSMutableAttributedString,
+        compatibleWith traits: UITraitCollection?
+    ) {
+        guard attributedText.length > 0 else { return }
+        attributedText.addAttributes(
+            AIPromptEditorAppearance.diffBaseAttributes(compatibleWith: traits),
+            range: NSRange(location: 0, length: attributedText.length)
+        )
+    }
+
+    /// 跳过附件字符逐段设置删除样式，避免破坏变量 Chip 的同源颜色、图标与排版。
+    private func applyRemovedTextAttributes(
+        to attributedText: NSMutableAttributedString
+    ) {
+        var location = 0
+        while location < attributedText.length {
+            var effectiveRange = NSRange(location: 0, length: 0)
+            let attachment = attributedText.attribute(
+                .attachment,
+                at: location,
+                effectiveRange: &effectiveRange
+            ) as? NSTextAttachment
+            if attachment == nil {
+                attributedText.addAttributes(
+                    [
+                        .foregroundColor: UIColor.xmResolved(Color.textSecondary),
+                        .strikethroughStyle: NSUnderlineStyle.single.rawValue,
+                    ],
+                    range: effectiveRange
+                )
+            }
+            location = NSMaxRange(effectiveRange)
         }
     }
 }

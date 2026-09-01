@@ -16,10 +16,9 @@
 - `ReviewEditorView.swift`: 书评最小编辑页
 - `RelevantDetailView.swift`: 相关内容单页详情页
 - `RelevantEditorView.swift`: 相关内容最小编辑页
-- `Components/AIMarkdownResultView.swift`: AI Markdown 流式渲染、跨区块文本选择与表格交互的页面私有组件
 - `Sheets/AIInteractionSheets.swift`: AI 释义与自动标签业务 Sheet，承接流式内容、空结果、保留部分结果的失败反馈与专属恢复路径
 - `Sheets/RelatedBookRelationEditorSheet.swift`: 阅读日历与单书工作台复用的相关书籍关系编辑业务 Sheet
 
-Viewer 无内容与无可用内容失败使用 `XMContentStateView`；已有正文时的局部错误卡由页面适配器委托给 `XMInlineStatusBanner`，不得覆盖可信内容。
+Viewer 无内容与无可用内容失败使用 `XMContentStateView`；已有正文时的局部错误卡由页面适配器委托给 `XMInlineStatusBanner`，不得覆盖可信内容。AI 结果复用 `UIComponents/Media/Markdown/AIMarkdownResultView`，Content 不再拥有私有 Markdown 渲染器。
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

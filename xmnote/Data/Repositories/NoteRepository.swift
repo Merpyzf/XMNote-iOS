@@ -633,7 +633,11 @@ private extension NoteRepository {
         _ db: Database,
         request: NoteExcerptPageRequest
     ) throws -> NoteExcerptListSnapshot {
-        let filter = noteExcerptFilter(scope: request.scope, query: request.query)
+        let filter = noteExcerptFilter(
+            scope: request.scope,
+            query: request.query,
+            searchScope: request.searchScope
+        )
         let whereClause = filter.predicates.joined(separator: "\n              AND ")
 
         // SQL 目的：统计当前 scope 与搜索条件共同命中的书摘总数。
@@ -858,7 +862,11 @@ private extension NoteRepository {
     }
 
     /// 生成书摘 scope/search SQL 条件，确保列表、计数与随机 ID 查询共用同一事实来源。
-    nonisolated func noteExcerptFilter(scope: NoteExcerptScope, query: String) -> NoteCollectionSQLFilter {
+    nonisolated func noteExcerptFilter(
+        scope: NoteExcerptScope,
+        query: String,
+        searchScope: NoteExcerptSearchScope
+    ) -> NoteCollectionSQLFilter {
         var filter = NoteCollectionSQLFilter(
             predicates: ["n.is_deleted = 0"],
             arguments: []
@@ -897,12 +905,26 @@ private extension NoteRepository {
         let keyword = query.trimmingCharacters(in: .whitespacesAndNewlines)
         if !keyword.isEmpty {
             let pattern = "%\(Self.escapeLikePattern(keyword))%"
-            filter.predicates.append("""
-                (COALESCE(n.content, '') LIKE ? ESCAPE '\\' COLLATE NOCASE
-                 OR COALESCE(n.idea, '') LIKE ? ESCAPE '\\' COLLATE NOCASE)
-                """)
-            filter.arguments.append(pattern)
-            filter.arguments.append(pattern)
+            switch searchScope {
+            case .contentAndIdea:
+                filter.predicates.append("""
+                    (COALESCE(n.content, '') LIKE ? ESCAPE '\\' COLLATE NOCASE
+                     OR COALESCE(n.idea, '') LIKE ? ESCAPE '\\' COLLATE NOCASE)
+                    """)
+                filter.arguments.append(pattern)
+                filter.arguments.append(pattern)
+            case .contentIdeaAndBookMetadata:
+                filter.predicates.append("""
+                    (COALESCE(n.content, '') LIKE ? ESCAPE '\\' COLLATE NOCASE
+                     OR COALESCE(n.idea, '') LIKE ? ESCAPE '\\' COLLATE NOCASE
+                     OR COALESCE(b.name, '') LIKE ? ESCAPE '\\' COLLATE NOCASE
+                     OR COALESCE(b.author, '') LIKE ? ESCAPE '\\' COLLATE NOCASE)
+                    """)
+                filter.arguments.append(pattern)
+                filter.arguments.append(pattern)
+                filter.arguments.append(pattern)
+                filter.arguments.append(pattern)
+            }
         }
         return filter
     }

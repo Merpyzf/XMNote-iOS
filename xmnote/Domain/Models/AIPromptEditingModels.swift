@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Foundation 提供字符串索引、集合与值语义，接收提示词种类、字段文本和运行时替换值
- * [OUTPUT]: 对外提供提示词字段、变量目录、校验问题、请求预览、样例上下文、试运行结果与唯一请求构建器
+ * [OUTPUT]: 对外提供提示词字段、变量目录、校验问题、请求预览、含书籍封面的可编辑试运行书摘、流式事件与唯一请求构建器
  * [POS]: Domain/Models 的提示词编辑业务规则层，被 AIRepository 与编辑页共享，确保保存、预览和正式请求使用同一契约
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -114,10 +114,119 @@ nonisolated struct AIPromptSampleContext: Equatable, Sendable {
     let replacements: [String: String]
 }
 
-/// 一次试运行结果；默认版本为空表示只产生一次 AI 请求。
-nonisolated struct AIPromptTrialResult: Equatable, Sendable {
-    let current: String
-    let defaultVersion: String?
+/// 提示词试运行使用的可编辑书摘快照；本地记录后续变化不会改写已经打开的测试现场。
+nonisolated struct AIPromptTrialExcerpt: Equatable, Sendable {
+    let localNoteID: Int64?
+    let bookTitle: String
+    let bookAuthor: String
+    let bookCoverURL: String
+    let chapterTitle: String
+    let idea: String
+    let tagNames: [String]
+    let originalText: String
+
+    /// 使用用户选中的本地书摘建立稳定快照；富文本已由 NoteRepository 转换为可见纯文本。
+    init(note: NoteExcerptListItem) {
+        self.localNoteID = note.id
+        self.bookTitle = note.bookTitle
+        self.bookAuthor = note.bookAuthor
+        self.bookCoverURL = note.bookCoverURL
+        self.chapterTitle = note.chapterTitle
+        self.idea = note.plainIdea
+        self.tagNames = note.tags.map(\.title)
+        self.originalText = note.plainContent
+    }
+
+    private init(
+        localNoteID: Int64?,
+        bookTitle: String,
+        bookAuthor: String,
+        bookCoverURL: String,
+        chapterTitle: String,
+        idea: String,
+        tagNames: [String],
+        originalText: String
+    ) {
+        self.localNoteID = localNoteID
+        self.bookTitle = bookTitle
+        self.bookAuthor = bookAuthor
+        self.bookCoverURL = bookCoverURL
+        self.chapterTitle = chapterTitle
+        self.idea = idea
+        self.tagNames = tagNames
+        self.originalText = originalText
+    }
+
+    /// 产品默认试运行书摘；正文与来源固定，避免“示例内容”成为无法解释的抽象来源。
+    static let hundredYearsOfSolitude = AIPromptTrialExcerpt(
+        localNoteID: nil,
+        bookTitle: "百年孤独",
+        bookAuthor: "加西亚·马尔克斯",
+        bookCoverURL: "",
+        chapterTitle: "第一章",
+        idea: "第一次读时只觉得“冰块”很神奇，后来才意识到，这句话把死亡、童年和记忆放在了同一个瞬间，也像是在提醒我：人走得再远，仍可能被最初的经验牵引。",
+        tagNames: ["记忆", "时间", "命运"],
+        originalText: "多年以后，面对行刑队，奥雷里亚诺·布恩迪亚上校将会回想起父亲带他去见识冰块的那个遥远的下午。"
+    )
+
+    /// 把可编辑正文与所选书摘元数据映射为当前任务的受控变量，界面无需理解 Prompt 占位符。
+    func sampleContext(
+        for kind: AIPromptKind,
+        editedText: String,
+        selectedQuery: String? = nil
+    ) -> AIPromptSampleContext {
+        let title = bookTitle.isEmpty ? "测试书摘" : bookTitle
+        switch kind {
+        case .noteExplanation:
+            return AIPromptSampleContext(
+                title: title,
+                replacements: [
+                    "摘录": editedText,
+                    "想法": idea,
+                    "章节": chapterTitle,
+                    "书籍名": bookTitle,
+                    "作者名": bookAuthor,
+                ]
+            )
+        case .wordLookup:
+            return AIPromptSampleContext(
+                title: title,
+                replacements: [
+                    "查询文本": selectedQuery ?? "",
+                    "上下文": editedText,
+                    "书籍名": bookTitle,
+                ]
+            )
+        case .autoTag:
+            return AIPromptSampleContext(
+                title: title,
+                replacements: [
+                    "书摘内容": editedText,
+                    "书籍名": bookTitle,
+                    "作者名": bookAuthor,
+                    "章节": chapterTitle,
+                    "已有标签": tagNames.isEmpty
+                        ? "暂无已创建的标签"
+                        : tagNames.joined(separator: "、"),
+                ]
+            )
+        }
+    }
+}
+
+/// 对照试运行中的独立输出目标；原始提示词只替换模板，不改变模型、参数或书摘上下文。
+nonisolated enum AIPromptTrialTarget: String, CaseIterable, Hashable, Identifiable, Sendable {
+    case current
+    case appDefault
+
+    var id: String { rawValue }
+}
+
+/// 试运行流式事件；单侧失败作为目标事件返回，使另一侧仍能继续生成并保留部分内容。
+nonisolated enum AIPromptTrialEvent: Equatable, Sendable {
+    case content(target: AIPromptTrialTarget, markdown: String)
+    case completed(target: AIPromptTrialTarget)
+    case failed(target: AIPromptTrialTarget, error: AIRepositoryError)
 }
 
 /// 三类任务的受控变量目录，禁止编辑页生成任意自定义变量。
@@ -372,39 +481,12 @@ nonisolated enum AIPromptRequestBuilder {
     }
 
     static func builtInSample(for kind: AIPromptKind) -> AIPromptSampleContext {
-        switch kind {
-        case .noteExplanation:
-            AIPromptSampleContext(
-                title: "内置书摘",
-                replacements: [
-                    "摘录": "真正的发现之旅，不在于寻找新的风景，而在于拥有新的眼光。",
-                    "想法": "改变观察方式，也许比获得更多信息更重要。",
-                    "章节": "观看与理解",
-                    "书籍名": "阅读样例",
-                    "作者名": "内置样例",
-                ]
-            )
-        case .wordLookup:
-            AIPromptSampleContext(
-                title: "内置查词",
-                replacements: [
-                    "查询文本": "语境",
-                    "上下文": "理解一个词，往往不能脱离它出现的语境。",
-                    "书籍名": "阅读样例",
-                ]
-            )
-        case .autoTag:
-            AIPromptSampleContext(
-                title: "内置书摘",
-                replacements: [
-                    "书摘内容": "好的知识管理不是收集更多，而是让重要信息在需要时重新出现。",
-                    "书籍名": "阅读样例",
-                    "作者名": "内置样例",
-                    "章节": "整理与回顾",
-                    "已有标签": "知识管理、复习",
-                ]
-            )
-        }
+        let excerpt = AIPromptTrialExcerpt.hundredYearsOfSolitude
+        return excerpt.sampleContext(
+            for: kind,
+            editedText: excerpt.originalText,
+            selectedQuery: kind == .wordLookup ? "冰块" : nil
+        )
     }
 
     static func applicationRules(for kind: AIPromptKind) -> String {

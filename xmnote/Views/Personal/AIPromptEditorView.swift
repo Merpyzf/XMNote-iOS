@@ -53,6 +53,7 @@ private struct AIPromptEditorContentView: View {
     @Bindable var viewModel: AIPromptEditorViewModel
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(RepositoryContainer.self) private var repositories
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var editorRawSelection = NSRange(location: 0, length: 0)
@@ -206,7 +207,7 @@ private struct AIPromptEditorContentView: View {
             }
             .labelStyle(.iconOnly)
             .xmToolbarNeutralTint()
-            .disabled(!viewModel.canRunTrial || viewModel.isSaving)
+            .disabled(!viewModel.canPresentTrial || viewModel.isSaving)
 
             Menu {
                 Button {
@@ -266,7 +267,7 @@ private struct AIPromptEditorContentView: View {
             .buttonStyle(.borderedProminent)
             .buttonBorderShape(.circle)
             .tint(Color.primaryActionFill)
-            .disabled(!viewModel.canSave || viewModel.isRunningTrial)
+            .disabled(!viewModel.canSave)
             .accessibilityLabel(viewModel.isSaving ? "保存中" : "保存")
         }
     }
@@ -490,7 +491,12 @@ private struct AIPromptEditorContentView: View {
                 )
             }
         case .trial:
-            AIPromptTrialSheet(viewModel: viewModel)
+            AIPromptTrialSheet(
+                kind: viewModel.kind,
+                template: viewModel.template,
+                aiRepository: repositories.aiRepository,
+                noteRepository: repositories.noteRepository
+            )
         case .optimize:
             AIPromptOptimizationSheet(viewModel: viewModel)
         case .explanation:

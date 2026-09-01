@@ -121,14 +121,17 @@ Sheet 自身已经是容器。增加 `surfaceCard` 前必须说明它承担哪�
 ## iOS 26 圆角
 
 - Sheet 外轮廓与系统 presentation shape 由系统持有。普通业务调用方不设置固定 `.presentationCornerRadius`，也不绘制相似外壳覆盖系统形状。
-- 与 Sheet 外容器形成视觉同心关系的容器级复合面板，优先使用 `CardContainer(shape: ConcentricRectangle.xmSheetContentPanel)`。
+- 同时满足“承担 Sheet 主要任务表层、内部组合两个以上协同区域、边界与 Sheet 外缘形成平行关系”的容器级复合面板，必须显式使用 `CardContainer(shape: ConcentricRectangle.xmSheetContentPanel)`。
 - `xmSheetContentPanel` 是当前项目的 Sheet 面板 Shape owner；它逐角读取系统容器关系并保留项目曲率下限。调用方只消费语义 Shape，不复制 minimum 数值或手算内外半径。
+- Sheet 中的普通独立内容卡仍可使用 `CardContainer` 默认初始化，但调用方必须能说明其单一 block 角色；默认 Shape 只代表 `CornerRadius.blockLarge`，不代表 Sheet 面板圆角。
 - 小型输入框、列表行、按钮、chip、inlay 和不依赖外容器关系的普通 block 继续使用自身组件或 `CornerRadius` token owner；同心面板不是新版通用圆角。
+- 不修改 `CardContainer` 全局默认值，也不让组件自动读取 Sheet 环境；容器无法仅凭所处层级判断自己是主复合面板还是普通内容块，Shape 语义必须由真实调用方显式选择。
 - 嵌套边界与外容器明显平行、距离接近时保持同心和连续；不通过给内外层写相同半径制造“统一”。不形成外缘关系时，使用元素自己的 block/container 角色。
 - 系统 Sheet/Popover 已提供 container shape。只有 feature 自建外容器时，才在核对当前 SDK 后使用 `containerShape(_:)` 建立容器语义；不要为了相似观感硬编码半径。
 
 ## Detent、键盘与退出
 
+- Sheet 含任何文本输入、搜索、富文本或 UIKit first responder 时，必须同时读取 [软键盘与输入焦点](keyboard-and-focus.md)；键盘收起模式、两级手势、焦点生命周期和避让策略以该文件为唯一 owner。
 - Detent、drag indicator 和 presentation 配置不由 scaffold 持有。仅与当前呈现上下文有关时由调用点决定；内容固有且需要跨多个调用点保持一致时由专项 Sheet wrapper 持有。
 - 优先使用系统 detent。固定数字高度只允许给内容封闭、文本边界明确且经过尺寸与 Dynamic Type 矩阵验证的局部 owner。
 - 包含输入、多行文本、错误或动态内容时，确保键盘和辅助功能字号下所有内容与操作可达；使用 `.large` 或由专项 owner 按内容计算，不把任一方案推广为所有 Sheet 的统一规则。
