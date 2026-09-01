@@ -118,9 +118,15 @@ struct BookCollectionSummarySheet: View {
 
 /// 书单创建/编辑任务面板，用更稳定的空间承载标题与简介输入。
 struct BookCollectionFormSheet: View {
+    private enum Field: Hashable {
+        case title
+        case description
+    }
+
     @Environment(\.dismiss) private var dismiss
     @State private var title: String
     @State private var description: String
+    @FocusState private var focusedField: Field?
 
     let presentation: BookCollectionFormPresentation
     let isSaving: Bool
@@ -143,7 +149,7 @@ struct BookCollectionFormSheet: View {
         XMSheetScaffold(
             title: presentation.title,
             subtitle: "标题与简介",
-            onClose: { dismiss() },
+            onClose: close,
             isConfirmationDisabled: !canSave,
             isConfirming: isSaving,
             confirmationAction: submit
@@ -154,7 +160,9 @@ struct BookCollectionFormSheet: View {
                         .font(AppTypography.body)
                         .foregroundStyle(Color.textPrimary)
                         .textInputAutocapitalization(.sentences)
-                        .submitLabel(.done)
+                        .submitLabel(.next)
+                        .focused($focusedField, equals: .title)
+                        .onSubmit { focusedField = .description }
                         .padding(.horizontal, Spacing.base)
                         .frame(minHeight: 52)
                         .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
@@ -167,6 +175,7 @@ struct BookCollectionFormSheet: View {
                 fieldGroup(title: "简介") {
                     ZStack(alignment: .topLeading) {
                         TextEditor(text: $description)
+                            .focused($focusedField, equals: .description)
                             .font(AppTypography.body)
                             .foregroundStyle(Color.textPrimary)
                             .scrollContentBackground(.hidden)
@@ -195,6 +204,7 @@ struct BookCollectionFormSheet: View {
             .padding(.horizontal, Spacing.screenEdge)
             .padding(.bottom, Spacing.contentEdge)
         }
+        .scrollDismissesKeyboard(.interactively)
         .background(Color.surfaceSheet.ignoresSafeArea())
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.hidden)
@@ -214,7 +224,13 @@ struct BookCollectionFormSheet: View {
 
     private func submit() {
         guard canSave, !isSaving else { return }
+        focusedField = nil
         onSave(trimmedTitle, trimmedDescription)
+    }
+
+    private func close() {
+        focusedField = nil
+        dismiss()
     }
 
     private func fieldGroup<Content: View>(
@@ -235,6 +251,7 @@ struct BookCollectionFormSheet: View {
 struct BookCollectionRecommendSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var recommend: String
+    @FocusState private var isRecommendFocused: Bool
 
     let edit: BookCollectionRecommendEdit
     let isSaving: Bool
@@ -259,7 +276,7 @@ struct BookCollectionRecommendSheet: View {
         XMSheetScaffold(
             title: presentation.editActionTitle(hasText: !edit.item.recommend.isEmpty),
             subtitle: presentation.title,
-            onClose: { dismiss() },
+            onClose: close,
             isConfirming: isSaving,
             confirmationAction: submit
         ) {
@@ -268,6 +285,7 @@ struct BookCollectionRecommendSheet: View {
 
                 ZStack(alignment: .topLeading) {
                     TextEditor(text: $recommend)
+                        .focused($isRecommendFocused)
                         .font(AppTypography.body)
                         .foregroundStyle(Color.textPrimary)
                         .scrollContentBackground(.hidden)
@@ -300,6 +318,7 @@ struct BookCollectionRecommendSheet: View {
             .padding(.horizontal, Spacing.screenEdge)
             .padding(.bottom, Spacing.contentEdge)
         }
+        .scrollDismissesKeyboard(.interactively)
         .background(Color.surfaceSheet.ignoresSafeArea())
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.hidden)
@@ -347,12 +366,27 @@ struct BookCollectionRecommendSheet: View {
 
     private func submit() {
         guard !isSaving else { return }
+        isRecommendFocused = false
         onSave(trimmedRecommend)
+    }
+
+    private func close() {
+        isRecommendFocused = false
+        dismiss()
     }
 }
 
 /// 书单内书籍元信息编辑面板，补齐占位书恢复前的标题、作者、出版社、出版日期、封面与推荐语编辑。
 struct BookCollectionBookMetadataEditSheet: View {
+    private enum Field: Hashable {
+        case coverURL
+        case title
+        case author
+        case press
+        case pubDate
+        case recommend
+    }
+
     @Environment(\.dismiss) private var dismiss
     @State private var title: String
     @State private var author: String
@@ -365,6 +399,7 @@ struct BookCollectionBookMetadataEditSheet: View {
     @State private var coverSelectionMessage: String?
     @State private var coverSelectionError: String?
     @State private var showsCoverSearch = false
+    @FocusState private var focusedField: Field?
 
     let edit: BookCollectionBookMetadataEdit
     let isSaving: Bool
@@ -394,7 +429,7 @@ struct BookCollectionBookMetadataEditSheet: View {
         XMSheetScaffold(
             title: "编辑书籍信息",
             subtitle: edit.item.isPlaceholder ? "未加入书架" : "书单内书籍",
-            onClose: { dismiss() },
+            onClose: close,
             isConfirmationDisabled: !canSave,
             isConfirming: isSaving,
             confirmationAction: submit
@@ -407,6 +442,7 @@ struct BookCollectionBookMetadataEditSheet: View {
             .padding(.horizontal, Spacing.screenEdge)
             .padding(.bottom, Spacing.contentEdge)
         }
+        .scrollDismissesKeyboard(.interactively)
         .background(Color.surfaceSheet.ignoresSafeArea())
         .presentationDetents([.large])
         .presentationDragIndicator(.hidden)
@@ -423,6 +459,7 @@ struct BookCollectionBookMetadataEditSheet: View {
         }
         .onChange(of: selectedCoverItem) { _, item in
             guard let item else { return }
+            focusedField = nil
             Task {
                 await consumeCoverItem(item)
             }
@@ -453,6 +490,9 @@ struct BookCollectionBookMetadataEditSheet: View {
 
                 VStack(alignment: .leading, spacing: Spacing.cozy) {
                     TextField("封面链接", text: $coverURL, axis: .vertical)
+                        .focused($focusedField, equals: .coverURL)
+                        .submitLabel(.next)
+                        .onSubmit { focusedField = .title }
                         .font(AppTypography.body)
                         .foregroundStyle(Color.textPrimary)
                         .textInputAutocapitalization(.never)
@@ -468,6 +508,7 @@ struct BookCollectionBookMetadataEditSheet: View {
 
                     HStack(spacing: Spacing.cozy) {
                         Button {
+                            focusedField = nil
                             showsCoverSearch = true
                         } label: {
                             Label("在线匹配", systemImage: "magnifyingglass")
@@ -510,21 +551,33 @@ struct BookCollectionBookMetadataEditSheet: View {
         VStack(alignment: .leading, spacing: Spacing.base) {
             textFieldGroup(title: "标题") {
                 TextField("书名", text: $title)
+                    .focused($focusedField, equals: .title)
+                    .submitLabel(.next)
+                    .onSubmit { focusedField = .author }
                     .textInputAutocapitalization(.sentences)
             }
 
             textFieldGroup(title: "作者") {
                 TextField("作者", text: $author)
+                    .focused($focusedField, equals: .author)
+                    .submitLabel(.next)
+                    .onSubmit { focusedField = .press }
                     .textInputAutocapitalization(.words)
             }
 
             textFieldGroup(title: "出版社") {
                 TextField("出版社", text: $press)
+                    .focused($focusedField, equals: .press)
+                    .submitLabel(.next)
+                    .onSubmit { focusedField = .pubDate }
                     .textInputAutocapitalization(.words)
             }
 
             textFieldGroup(title: "出版日期") {
                 TextField("出版日期", text: $pubDate)
+                    .focused($focusedField, equals: .pubDate)
+                    .submitLabel(.next)
+                    .onSubmit { focusedField = .recommend }
                     .textInputAutocapitalization(.never)
             }
         }
@@ -538,6 +591,7 @@ struct BookCollectionBookMetadataEditSheet: View {
 
             ZStack(alignment: .topLeading) {
                 TextEditor(text: $recommend)
+                    .focused($focusedField, equals: .recommend)
                     .font(AppTypography.body)
                     .foregroundStyle(Color.textPrimary)
                     .scrollContentBackground(.hidden)
@@ -617,6 +671,7 @@ struct BookCollectionBookMetadataEditSheet: View {
 
     private func submit() {
         guard canSave, !isSaving else { return }
+        focusedField = nil
         onSave(
             BookCollectionBookMetadataEditDraft(
                 title: trimmedTitle,
@@ -628,6 +683,11 @@ struct BookCollectionBookMetadataEditSheet: View {
                 selectedCover: selectedCover
             )
         )
+    }
+
+    private func close() {
+        focusedField = nil
+        dismiss()
     }
 
     @MainActor
@@ -658,6 +718,7 @@ struct BookCollectionBookMetadataEditSheet: View {
 struct BookCollectionAnnualDescriptionSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var description: String
+    @FocusState private var isDescriptionFocused: Bool
 
     let edit: BookCollectionAnnualDescriptionEdit
     let isSaving: Bool
@@ -678,7 +739,7 @@ struct BookCollectionAnnualDescriptionSheet: View {
         XMSheetScaffold(
             title: "编辑年度说明",
             subtitle: subtitle,
-            onClose: { dismiss() },
+            onClose: close,
             isConfirming: isSaving,
             confirmationAction: submit
         ) {
@@ -690,6 +751,7 @@ struct BookCollectionAnnualDescriptionSheet: View {
 
                 ZStack(alignment: .topLeading) {
                     TextEditor(text: $description)
+                        .focused($isDescriptionFocused)
                         .font(AppTypography.body)
                         .foregroundStyle(Color.textPrimary)
                         .scrollContentBackground(.hidden)
@@ -717,6 +779,7 @@ struct BookCollectionAnnualDescriptionSheet: View {
             .padding(.horizontal, Spacing.screenEdge)
             .padding(.bottom, Spacing.contentEdge)
         }
+        .scrollDismissesKeyboard(.interactively)
         .background(Color.surfaceSheet.ignoresSafeArea())
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.hidden)
@@ -735,7 +798,13 @@ struct BookCollectionAnnualDescriptionSheet: View {
 
     private func submit() {
         guard !isSaving else { return }
+        isDescriptionFocused = false
         onSave(trimmedDescription)
+    }
+
+    private func close() {
+        isDescriptionFocused = false
+        dismiss()
     }
 }
 
@@ -743,6 +812,7 @@ struct BookCollectionAnnualDescriptionSheet: View {
 struct BookCollectionWereadImportSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var link: String = ""
+    @FocusState private var isLinkFocused: Bool
 
     let isLoading: Bool
     let errorMessage: String?
@@ -752,7 +822,7 @@ struct BookCollectionWereadImportSheet: View {
         XMSheetScaffold(
             title: "导入微信读书书单",
             subtitle: "粘贴链接",
-            onClose: { dismiss() },
+            onClose: close,
             isConfirmationDisabled: trimmedLink.isEmpty,
             isConfirming: isLoading,
             confirmationAction: submit
@@ -764,6 +834,9 @@ struct BookCollectionWereadImportSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 TextField("https://weread.qq.com/...", text: $link, axis: .vertical)
+                    .focused($isLinkFocused)
+                    .submitLabel(.go)
+                    .onSubmit(submit)
                     .font(AppTypography.body)
                     .foregroundStyle(Color.textPrimary)
                     .textInputAutocapitalization(.never)
@@ -797,6 +870,7 @@ struct BookCollectionWereadImportSheet: View {
             .padding(.horizontal, Spacing.screenEdge)
             .padding(.bottom, Spacing.contentEdge)
         }
+        .scrollDismissesKeyboard(.interactively)
         .background(Color.surfaceSheet.ignoresSafeArea())
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.hidden)
@@ -808,7 +882,13 @@ struct BookCollectionWereadImportSheet: View {
 
     private func submit() {
         guard !trimmedLink.isEmpty, !isLoading else { return }
+        isLinkFocused = false
         onParse(trimmedLink)
+    }
+
+    private func close() {
+        isLinkFocused = false
+        dismiss()
     }
 }
 

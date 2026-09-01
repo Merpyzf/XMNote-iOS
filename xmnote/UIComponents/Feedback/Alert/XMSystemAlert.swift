@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 SwiftUI 的 UIViewControllerRepresentable 桥接与 UIKit 的 UIAlertController，统一承接系统型中心弹窗的标题、正文、动作、轻输入与呈现通道协调
- * [OUTPUT]: 对外提供 XMSystemAlertDescriptor、XMSystemAlertAction、XMSystemAlertTextField、XMSystemAlertController 与 View.xmSystemAlert(...)，覆盖 SwiftUI/UIKit 双调用路径及可取消延迟重试
+ * [OUTPUT]: 对外提供 XMSystemAlertDescriptor、XMSystemAlertAction、XMSystemAlertTextField、XMSystemAlertController 与 View.xmSystemAlert(...)，覆盖 SwiftUI/UIKit 双调用路径、输入焦点顺序及可取消延迟重试
  * [POS]: UIComponents/Feedback/Alert 的系统中心弹窗基础设施，负责用 UIKit 原生 Alert 表达业务提示，并在菜单或转场占用 presentation 通道时保留请求直至真正展示
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -151,6 +151,13 @@ enum XMSystemAlertController {
                 observer.configure(textField)
             }
         }
+        let alertTextFields = alertController.textFields ?? []
+        for (index, observer) in textFieldObservers.enumerated() {
+            let nextTextField = alertTextFields.indices.contains(index + 1)
+                ? alertTextFields[index + 1]
+                : nil
+            observer.configureReturnKey(nextTextField: nextTextField)
+        }
         objc_setAssociatedObject(
             alertController,
             &AssociatedKeys.textFieldObservers,
@@ -192,14 +199,17 @@ enum XMSystemAlertController {
         static var textFieldObservers: UInt8 = 0
     }
 
-    private final class TextFieldObserver: NSObject {
+    private final class TextFieldObserver: NSObject, UITextFieldDelegate {
         private let configuration: XMSystemAlertTextField
+        private weak var textField: UITextField?
+        private weak var nextTextField: UITextField?
 
         init(configuration: XMSystemAlertTextField) {
             self.configuration = configuration
         }
 
         func configure(_ textField: UITextField) {
+            self.textField = textField
             textField.placeholder = configuration.placeholder
             textField.text = configuration.text()
             textField.keyboardType = configuration.keyboardType
@@ -207,7 +217,23 @@ enum XMSystemAlertController {
             textField.autocapitalizationType = configuration.textInputAutocapitalization
             textField.autocorrectionType = configuration.autocorrectionType
             textField.isSecureTextEntry = configuration.isSecureTextEntry
+            textField.delegate = self
             textField.addTarget(self, action: #selector(handleEditingChanged(_:)), for: .editingChanged)
+        }
+
+        /// 多字段使用 Next 进入下一项，末字段使用 Done 结束焦点；Return 不触发弹窗业务动作。
+        func configureReturnKey(nextTextField: UITextField?) {
+            self.nextTextField = nextTextField
+            textField?.returnKeyType = nextTextField == nil ? .done : .next
+        }
+
+        func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+            if let nextTextField {
+                nextTextField.becomeFirstResponder()
+            } else {
+                textField.resignFirstResponder()
+            }
+            return true
         }
 
         @objc

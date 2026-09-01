@@ -460,12 +460,6 @@ private struct AIPromptEditorContentView: View {
         focusTask?.cancel()
         focusTask = nil
         isEditorFocused = false
-        UIApplication.shared.sendAction(
-            #selector(UIResponder.resignFirstResponder),
-            to: nil,
-            from: nil,
-            for: nil
-        )
     }
 
     /// 程序化返回先给 SwiftUI 一个更新周期拆下悬浮栏，再交给系统导航执行 push 的逆转场。

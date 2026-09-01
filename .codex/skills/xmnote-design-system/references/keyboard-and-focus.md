@@ -13,29 +13,6 @@
 
 社区文章、代码片段或第三方库不能覆盖 Apple 平台语义，也不能单独证明 XMNote 应新增公共抽象。Apple 没有规定所有页面使用同一种收起模式；必须按用户任务、滚动 owner 和手势关系选择。
 
-## 当前 App 事实快照
-
-以下数据来自 2026-09-01 当前 worktree，只用于说明既有模式和迁移起点，不是永久统计。修改相关页面前必须重新搜索真实代码，不能引用本节数字代替现场审计。
-
-- 46 个生产 Swift 文件直接使用 `TextField`、`SecureField`、`TextEditor` 或 `.searchable`。
-- 11 个场景显式使用 SwiftUI `.scrollDismissesKeyboard(.interactively)`；`GlobalSearchRootView` 有一个 `.never` 的连续搜索例外。
-- 3 个 UIKit 文本编辑器使用 `keyboardDismissMode = .interactive`，包括富文本、提示词 Token 编辑和优化要求编辑。
-- 5 个 UIKit 集合列表使用 `.onDrag`，用于搜索或浏览时首拖快速释放内容空间。
-- 13 个文件使用 `@FocusState`；`XMInlineSearchField` 是纯 SwiftUI 焦点范例，`XMSystemSearchBar` 是受控 UIKit first responder 桥接。
-- `BookshelfCollectionKeyboardAvoidanceCoordinator` 与 `NoteEditorView` 监听键盘 frame。前者处理集合 inset，后者还承担编辑器展开/收束时序；两者都不是普通页面模板。
-- `BookContainerView`、`BookSearchView`、`BookshelfBookListView` 和 `AIPromptEditorView` 仍存在全局 `UIApplication.sendAction` 遗留调用。新代码不得复制，后续按真实焦点 owner 逐步迁移。
-
-代表性现状可归纳为：
-
-| 类型 | 当前代表 owner | 结论 |
-| --- | --- | --- |
-| SwiftUI 滚动编辑 | `AIConfigurationView`、`ReviewEditorView`、`RelevantEditorView` | 由页面主滚动容器交互式收起 |
-| SwiftUI 表单 Sheet | `ChapterBatchImportSheet`、`XMTagSelectionSheet` | 由 `Form` 或 scaffold 根滚动 owner 收起 |
-| 连续全局搜索 | `GlobalSearchRootView` | 有意 `.never`；不是搜索页默认值 |
-| UIKit 可编辑正文 | `RichTextEditorView`、`AIPromptTokenTextEditor` | 编辑器自身使用 `.interactive` |
-| UIKit 浏览集合 | 书架与标签管理 collection host | 使用 `.onDrag` 快速收起 |
-| 复杂键盘避让 | 书架集合协调器、笔记编辑器 | feature 级 frame/lifecycle 处理，不公共化 |
-
 ## 核心原则
 
 ### 系统优先

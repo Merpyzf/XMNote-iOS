@@ -92,6 +92,7 @@ struct AIPromptTrialSheet: View {
     @State private var currentMarkdownController = AIMarkdownInteractionController()
     @State private var defaultMarkdownController = AIMarkdownInteractionController()
     @State private var resultPageHeights: [AIPromptTrialTarget: CGFloat] = [:]
+    @FocusState private var isExcerptFocused: Bool
 
     /// 使用编辑页当前草稿建立一次稳定测试会话；书摘仓储只服务用户主动打开的选择 Sheet。
     init(
@@ -121,7 +122,11 @@ struct AIPromptTrialSheet: View {
             AIPromptTrialPreparationView(
                 session: session,
                 excerptSelection: $excerptSelection,
-                onChooseExcerpt: { activeSheet = .excerptPicker }
+                isExcerptFocused: $isExcerptFocused,
+                onChooseExcerpt: {
+                    isExcerptFocused = false
+                    activeSheet = .excerptPicker
+                }
             )
             .padding(.horizontal, Spacing.screenEdge)
             .padding(.bottom, Spacing.double)
@@ -135,6 +140,7 @@ struct AIPromptTrialSheet: View {
                 )
             }
         }
+        .scrollDismissesKeyboard(.interactively)
         .presentationDetents([.large])
         .sheet(item: $activeSheet) { sheet in
             switch sheet {
@@ -196,6 +202,7 @@ struct AIPromptTrialSheet: View {
             }
         }
         .onDisappear {
+            isExcerptFocused = false
             session.cancelAndDiscard()
             currentMarkdownController.discardPendingTableExport()
             defaultMarkdownController.discardPendingTableExport()
@@ -234,6 +241,7 @@ struct AIPromptTrialSheet: View {
             showsResult = true
             return
         }
+        isExcerptFocused = false
         currentMarkdownController.resetForNewGeneration()
         defaultMarkdownController.resetForNewGeneration()
         guard session.start() else { return }
@@ -281,6 +289,7 @@ struct AIPromptTrialSheet: View {
     }
 
     private func close() {
+        isExcerptFocused = false
         session.cancelAndDiscard()
         dismiss()
     }
@@ -290,6 +299,7 @@ struct AIPromptTrialSheet: View {
 private struct AIPromptTrialPreparationView: View {
     @Bindable var session: AIPromptTrialSessionViewModel
     @Binding var excerptSelection: TextSelection?
+    @FocusState.Binding var isExcerptFocused: Bool
     let onChooseExcerpt: () -> Void
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -314,6 +324,7 @@ private struct AIPromptTrialPreparationView: View {
         CardContainer(shape: ConcentricRectangle.xmSheetContentPanel) {
             VStack(alignment: .leading, spacing: Spacing.none) {
                 TextEditor(text: $session.excerptText, selection: $excerptSelection)
+                    .focused($isExcerptFocused)
                     .font(AppTypography.body)
                     .foregroundStyle(Color.textPrimary)
                     .scrollContentBackground(.hidden)
@@ -781,7 +792,10 @@ private struct AIPromptExcerptPickerSheet: View {
     var body: some View {
         XMSheetScaffold(
             title: "选择书摘",
-            onClose: { dismiss() },
+            onClose: {
+                isSearchActive = false
+                dismiss()
+            },
             contentTopBar: {
                 XMSystemSearchBar(
                     text: Binding(
@@ -799,6 +813,7 @@ private struct AIPromptExcerptPickerSheet: View {
                 .padding(.horizontal, Spacing.screenEdge)
                 .padding(.bottom, Spacing.contentEdge)
         }
+        .scrollDismissesKeyboard(.immediately)
         .presentationDetents([.large])
         .onAppear(perform: viewModel.start)
         .onDisappear(perform: viewModel.cancel)
@@ -841,6 +856,7 @@ private struct AIPromptExcerptPickerSheet: View {
                         query: viewModel.query,
                         isSelected: item.id == selectedNoteID,
                         onSelect: {
+                            isSearchActive = false
                             onSelect(item)
                             dismiss()
                         }

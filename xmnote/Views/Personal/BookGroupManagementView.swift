@@ -356,7 +356,7 @@ private struct BookGroupManagementContentView: View {
         .contentMargins(.top, Spacing.tight, for: .scrollContent)
         .contentMargins(.bottom, Spacing.double, for: .scrollContent)
         .scrollBounceBehavior(.always)
-        .scrollDismissesKeyboard(.interactively)
+        .scrollDismissesKeyboard(.immediately)
         .scrollEdgeEffectStyle(.soft, for: [.top, .bottom])
         .environment(\.defaultMinListRowHeight, 1)
         .environment(\.editMode, .constant(isReordering ? .active : .inactive))

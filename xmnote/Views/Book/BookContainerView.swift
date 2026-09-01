@@ -665,8 +665,6 @@ private struct BookContentView: View {
             viewModel.exitEditing()
             editingPresentation.resetForContextLoss()
         }
-
-        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 
     /// 同步输入框焦点变化，让 drawer 激活态与 UIKit first responder 不脱节。
@@ -694,7 +692,6 @@ private struct BookContentView: View {
         if !viewModel.hasSearchKeyword {
             viewModel.deactivateSearch()
         }
-        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 
     /// 当当前维度不支持搜索时收束搜索状态，避免关键词泄漏到状态维度。

@@ -21,6 +21,11 @@ struct ReadingTimerFinishDraft {
 
 /// 阅读计时结束确认弹层，保持保存前的必要字段补充，不把表单堆回主计时页。
 struct ReadingTimerFinishSheet: View {
+    private enum Field: Hashable {
+        case position
+        case insight
+    }
+
     @Bindable var coordinator: ReadingTimerCoordinator
     let onSave: (ReadingTimerFinishDraft) -> Void
     let onDiscard: () -> Void
@@ -37,6 +42,7 @@ struct ReadingTimerFinishSheet: View {
     @State private var originalStartAt = Date()
     @State private var originalEndAt = Date()
     @State private var shouldPresentBookPicker = false
+    @FocusState private var focusedField: Field?
 
     private var book: ReadingTimerBookContext? {
         coordinator.bookContext
@@ -79,6 +85,7 @@ struct ReadingTimerFinishSheet: View {
             title: "保存阅读记录",
             onClose: {
                 guard !coordinator.isWriting else { return }
+                focusedField = nil
                 dismiss()
             },
             isConfirming: coordinator.isWriting,
@@ -94,6 +101,7 @@ struct ReadingTimerFinishSheet: View {
                                 .contentTransition(.numericText())
 
                             Button {
+                                focusedField = nil
                                 shouldPresentBookPicker = true
                             } label: {
                                 HStack(spacing: Spacing.cozy) {
@@ -150,6 +158,9 @@ struct ReadingTimerFinishSheet: View {
                         TextField(positionPlaceholder, text: $positionText)
                             .font(AppTypography.body)
                             .keyboardType(positionKeyboardType)
+                            .focused($focusedField, equals: .position)
+                            .submitLabel(.next)
+                            .onSubmit { focusedField = .insight }
                             .frame(minHeight: XMSettingsPageLayout.inputMinHeight)
 
                         if let positionErrorMessage {
@@ -182,6 +193,7 @@ struct ReadingTimerFinishSheet: View {
             .padding(.bottom, Spacing.contentEdge)
             .disabled(coordinator.isWriting)
         }
+        .scrollDismissesKeyboard(.interactively)
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
         .presentationBackground(Color.surfacePage)
@@ -236,6 +248,7 @@ struct ReadingTimerFinishSheet: View {
         HStack(spacing: Spacing.base) {
             if canContinue {
                 Button {
+                    focusedField = nil
                     onContinue()
                 } label: {
                     Label("继续计时", systemImage: "play")
@@ -247,6 +260,7 @@ struct ReadingTimerFinishSheet: View {
             }
 
             Button(role: .destructive) {
+                focusedField = nil
                 onDiscard()
             } label: {
                 Label("放弃本次", systemImage: "trash")
@@ -290,6 +304,7 @@ struct ReadingTimerFinishSheet: View {
             }
 
             TextEditor(text: $insight)
+                .focused($focusedField, equals: .insight)
                 .font(AppTypography.body)
                 .frame(minHeight: 96)
                 .scrollContentBackground(.hidden)
@@ -357,6 +372,7 @@ struct ReadingTimerFinishSheet: View {
             coordinator.errorMessage = "阅读位置格式不正确"
             return
         }
+        focusedField = nil
         let draft = ReadingTimerFinishDraft(
             targetBookId: targetBookId,
             startAt: startAt,

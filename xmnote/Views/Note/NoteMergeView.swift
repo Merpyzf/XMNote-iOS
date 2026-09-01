@@ -30,6 +30,7 @@ struct NoteMergeView: View {
     @State private var bootstrapLoadingGate = LoadingGate()
     @State private var presentedSheet: NoteMergeSheet?
     @State private var pendingSubmitConfirmation = false
+    @FocusState private var isPositionFocused: Bool
 
     var body: some View {
         Group {
@@ -61,6 +62,7 @@ struct NoteMergeView: View {
         .onAppear(perform: syncBootstrapLoading)
         .onChange(of: viewModel == nil) { _, _ in syncBootstrapLoading() }
         .onDisappear {
+            isPositionFocused = false
             bootstrapLoadingGate.hideImmediately()
             guard let viewModel else { return }
             Task { await viewModel.discardImageSessionIfNeeded() }
@@ -90,6 +92,7 @@ struct NoteMergeView: View {
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button(submitButtonTitle(viewModel)) {
+                    isPositionFocused = false
                     pendingSubmitConfirmation = true
                 }
                 .disabled(
@@ -165,7 +168,7 @@ struct NoteMergeView: View {
                     emptyMessage: "合并后正文为空",
                     editTitle: "编辑正文"
                 ) {
-                    presentedSheet = .composer(.content)
+                    presentSheet(.composer(.content))
                 }
 
                 NoteMergeOrderSection(
@@ -183,7 +186,7 @@ struct NoteMergeView: View {
                     emptyMessage: "合并后没有想法",
                     editTitle: "编辑想法"
                 ) {
-                    presentedSheet = .composer(.idea)
+                    presentSheet(.composer(.idea))
                 }
 
                 metadataSection(draft, viewModel: viewModel)
@@ -192,6 +195,7 @@ struct NoteMergeView: View {
             .padding(.horizontal, Spacing.screenEdge)
             .padding(.vertical, Spacing.base)
         }
+        .scrollDismissesKeyboard(.interactively)
         .scrollContentBackground(.hidden)
         .overlay(alignment: .top) {
             if viewModel.isRegenerating {
@@ -282,7 +286,7 @@ struct NoteMergeView: View {
                 .foregroundStyle(Color.textPrimary)
 
             Button {
-                presentedSheet = .chapters
+                presentSheet(.chapters)
             } label: {
                 HStack(spacing: Spacing.base) {
                     Label("章节", systemImage: "text.book.closed")
@@ -308,6 +312,9 @@ struct NoteMergeView: View {
                 .multilineTextAlignment(.trailing)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
+                .focused($isPositionFocused)
+                .submitLabel(.done)
+                .onSubmit { isPositionFocused = false }
             }
 
             Menu {
@@ -362,7 +369,7 @@ struct NoteMergeView: View {
                             .font(AppTypography.subheadlineMedium)
                             .foregroundStyle(Color.textPrimary)
                         Spacer(minLength: Spacing.compact)
-                        Button("编辑") { presentedSheet = .tags }
+                        Button("编辑") { presentSheet(.tags) }
                             .font(AppTypography.subheadline)
                     }
                     if draft.selectedTags.isEmpty {
@@ -386,7 +393,7 @@ struct NoteMergeView: View {
                             .font(AppTypography.subheadlineMedium)
                             .foregroundStyle(Color.textPrimary)
                         Spacer(minLength: Spacing.compact)
-                        Button("编辑") { presentedSheet = .images }
+                        Button("编辑") { presentSheet(.images) }
                             .font(AppTypography.subheadline)
                     }
                     if draft.imageItems.isEmpty {
@@ -420,6 +427,11 @@ struct NoteMergeView: View {
         guard timestamp > 0 else { return "未记录时间" }
         return Date(timeIntervalSince1970: TimeInterval(timestamp) / 1_000)
             .formatted(date: .abbreviated, time: .shortened)
+    }
+
+    private func presentSheet(_ sheet: NoteMergeSheet) {
+        isPositionFocused = false
+        presentedSheet = sheet
     }
 
     private func submit(_ viewModel: NoteMergeViewModel) {

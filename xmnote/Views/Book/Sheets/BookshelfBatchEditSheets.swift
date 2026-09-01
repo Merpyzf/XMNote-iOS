@@ -49,7 +49,7 @@ struct BookshelfMoveGroupSheet: View {
         XMSheetScaffold(
             title: "移入分组",
             subtitle: "已选\(selectedCount)本",
-            onClose: { dismiss() },
+            onClose: close,
             isConfirmationDisabled: !canSubmit || isCreating || isLoading || hasLoadError,
             confirmationAction: submitSelection,
             contentTopBar: {
@@ -91,6 +91,7 @@ struct BookshelfMoveGroupSheet: View {
             .animation(sheetAnimation, value: selectedID)
             .animation(sheetAnimation, value: canCreateSearchedGroup)
         }
+        .scrollDismissesKeyboard(.immediately)
         .background(Color.surfaceSheet.ignoresSafeArea())
         .presentationDetents([.large])
         .presentationDragIndicator(.hidden)
@@ -153,13 +154,20 @@ struct BookshelfMoveGroupSheet: View {
 
     private func submitSelection() {
         guard let selectedID, !isCreating, !isLoading, !hasLoadError else { return }
+        isSearchActive = false
         onConfirm(selectedID)
         dismiss()
     }
 
     private func selectGroup(_ id: Int64) {
         guard !isLoading, !isCreating else { return }
+        isSearchActive = false
         selectedID = id
+    }
+
+    private func close() {
+        isSearchActive = false
+        dismiss()
     }
 
     private func createGroup() {
@@ -250,7 +258,7 @@ struct BookshelfBookCollectionSheet: View {
         XMSheetScaffold(
             title: "加入书单",
             subtitle: "已选\(selectedCount)本",
-            onClose: { dismiss() },
+            onClose: close,
             isConfirmationDisabled: !canSubmit || isCreating || isLoading || hasLoadError,
             confirmationAction: submitSelection,
             contentTopBar: {
@@ -292,6 +300,7 @@ struct BookshelfBookCollectionSheet: View {
             .animation(sheetAnimation, value: selectedID)
             .animation(sheetAnimation, value: canCreateSearchedCollection)
         }
+        .scrollDismissesKeyboard(.immediately)
         .background(Color.surfaceSheet.ignoresSafeArea())
         .presentationDetents([.large])
         .presentationDragIndicator(.hidden)
@@ -354,13 +363,20 @@ struct BookshelfBookCollectionSheet: View {
 
     private func submitSelection() {
         guard let selectedID, !isCreating, !isLoading, !hasLoadError else { return }
+        isSearchActive = false
         onConfirm(selectedID)
         dismiss()
     }
 
     private func selectCollection(_ id: Int64) {
         guard !isLoading, !isCreating else { return }
+        isSearchActive = false
         selectedID = id
+    }
+
+    private func close() {
+        isSearchActive = false
+        dismiss()
     }
 
     private func createCollection() {
@@ -476,6 +492,7 @@ struct BookshelfBatchSourceSheet: View {
     @State private var createName = ""
     @State private var createError: String?
     @State private var isCreating = false
+    @FocusState private var isCreateNameFocused: Bool
 
     let selectedCount: Int
     let onCreate: (String) async throws -> BookshelfSourceOption
@@ -502,7 +519,7 @@ struct BookshelfBatchSourceSheet: View {
         XMSheetScaffold(
             title: "设置来源",
             subtitle: "已选\(selectedCount)本",
-            onClose: { dismiss() },
+            onClose: close,
             isConfirmationDisabled: selectedID == nil || isCreating,
             confirmationAction: submitSelection,
             contentTopBar: {
@@ -524,6 +541,7 @@ struct BookshelfBatchSourceSheet: View {
                         actionTitle: "添加",
                         isProcessing: isCreating,
                         errorMessage: createError,
+                        isFocused: $isCreateNameFocused,
                         onSubmit: createSource
                     )
                 }
@@ -583,6 +601,7 @@ struct BookshelfBatchSourceSheet: View {
             .animation(sheetAnimation, value: optionsState)
             .animation(sheetAnimation, value: selectedID)
         }
+        .scrollDismissesKeyboard(.immediately)
         .background(Color.surfaceSheet.ignoresSafeArea())
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.hidden)
@@ -610,6 +629,7 @@ struct BookshelfBatchSourceSheet: View {
 
     private func submitSelection() {
         guard let selectedID else { return }
+        releaseFocus()
         onConfirm(selectedID)
         dismiss()
     }
@@ -617,6 +637,8 @@ struct BookshelfBatchSourceSheet: View {
     private func createSource() {
         guard !isCreating else { return }
         let draft = createName
+        guard !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        releaseFocus()
         isCreating = true
         createError = nil
         Task {
@@ -638,6 +660,16 @@ struct BookshelfBatchSourceSheet: View {
                 }
             }
         }
+    }
+
+    private func close() {
+        releaseFocus()
+        dismiss()
+    }
+
+    private func releaseFocus() {
+        isCreateNameFocused = false
+        isSearchActive = false
     }
 }
 
@@ -1084,12 +1116,16 @@ private struct BookshelfBatchCreateField: View {
     let actionTitle: String
     let isProcessing: Bool
     let errorMessage: String?
+    @FocusState.Binding var isFocused: Bool
     let onSubmit: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.tight) {
             HStack(spacing: Spacing.tight) {
                 TextField(placeholder, text: $text)
+                    .focused($isFocused)
+                    .submitLabel(.done)
+                    .onSubmit(onSubmit)
                     .font(AppTypography.body)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled(true)

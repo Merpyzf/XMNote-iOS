@@ -37,6 +37,7 @@ final class BookshelfBookListSearchCell: UICollectionViewCell {
             showsInput: configuration.showsExpandedSearchSurface,
             showsClearAction: configuration.hasBrowseSearchText || configuration.hasBrowseSearchKeyword,
             usesAccessibilityLayout: configuration.searchDrawerHeight > BookshelfBookListChromeMetrics.normalSearchAreaHeight,
+            isFocused: configuration.isBrowseSearchFocused,
             focusTrigger: configuration.browseSearchFocusTrigger,
             accessibilityLabel: configuration.browseSearchPlaceholder,
             onActivate: configuration.onActivateBrowseSearch,

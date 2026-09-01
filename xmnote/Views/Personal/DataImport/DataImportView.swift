@@ -346,6 +346,7 @@ private struct WereadImportPreviewView: View {
             }
         }
         .searchable(text: $viewModel.query, prompt: "搜索书名或作者")
+        .scrollDismissesKeyboard(.immediately)
         .navigationTitle("导入预览")
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {

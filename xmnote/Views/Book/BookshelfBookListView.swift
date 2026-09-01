@@ -565,7 +565,6 @@ private struct BookshelfBookListContentView: View {
         if !viewModel.hasSearchKeyword {
             viewModel.clearSearchKeyword()
         }
-        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 
     /// 退出整理模式时恢复普通顶部 chrome；业务选择清理由 ViewModel 执行。

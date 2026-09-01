@@ -28,10 +28,10 @@ struct TagNameEditSheet: View {
     var body: some View {
         XMSheetScaffold(
             title: edit.title,
-            onClose: { viewModel.dismissNameEdit() },
+            onClose: close,
             isConfirmationDisabled: !viewModel.canSubmitNameEdit,
             isConfirming: isWriting,
-            confirmationAction: { viewModel.submitNameEdit() }
+            confirmationAction: submit
         ) {
             VStack(spacing: Spacing.section) {
                 VStack(alignment: .leading, spacing: Spacing.half) {
@@ -44,9 +44,7 @@ struct TagNameEditSheet: View {
                                 .focused($isNameFocused)
                                 .disabled(isWriting)
                                 .submitLabel(.done)
-                                .onSubmit {
-                                    viewModel.submitNameEdit()
-                                }
+                                .onSubmit(submit)
                                 .onChange(of: viewModel.nameEditText) {
                                     hasEditedName = true
                                 }
@@ -91,6 +89,7 @@ struct TagNameEditSheet: View {
             .padding(.horizontal, Spacing.screenEdge)
             .padding(.bottom, Spacing.contentEdge)
         }
+        .scrollDismissesKeyboard(.interactively)
         .interactiveDismissDisabled(isWriting)
         .onAppear { isNameFocused = true }
         .presentationDetents([.height(300), .medium])
@@ -102,6 +101,17 @@ struct TagNameEditSheet: View {
             get: { viewModel.nameEditText },
             set: { viewModel.updateNameEditText($0) }
         )
+    }
+
+    private func close() {
+        isNameFocused = false
+        viewModel.dismissNameEdit()
+    }
+
+    private func submit() {
+        guard viewModel.canSubmitNameEdit else { return }
+        isNameFocused = false
+        viewModel.submitNameEdit()
     }
 
     private var validationText: String? {

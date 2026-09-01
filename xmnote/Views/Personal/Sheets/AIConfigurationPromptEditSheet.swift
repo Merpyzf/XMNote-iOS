@@ -9,6 +9,11 @@ import SwiftUI
 
 /// 单类 Prompt 编辑 Sheet；只有“保存”会把本地文本回写页面配置草稿。
 struct AIConfigurationPromptEditSheet: View {
+    private enum Field: Hashable {
+        case system
+        case user
+    }
+
     let kind: AIPromptKind
     @Bindable var viewModel: AIConfigurationViewModel
 
@@ -16,6 +21,7 @@ struct AIConfigurationPromptEditSheet: View {
     @State private var systemPrompt: String
     @State private var userPrompt: String
     @State private var activeAlert: PromptEditAlert?
+    @FocusState private var focusedField: Field?
 
     /// 从页面当前草稿建立 Sheet 自有编辑副本，取消时不会污染待保存配置。
     init(kind: AIPromptKind, viewModel: AIConfigurationViewModel) {
@@ -37,15 +43,18 @@ struct AIConfigurationPromptEditSheet: View {
                 promptEditor(
                     title: "System Prompt",
                     hint: "定义角色、输出结构与边界",
-                    text: $systemPrompt
+                    text: $systemPrompt,
+                    field: .system
                 )
                 promptEditor(
                     title: "User Prompt",
                     hint: "可保留当前默认模板中的中文占位符",
-                    text: $userPrompt
+                    text: $userPrompt,
+                    field: .user
                 )
 
                 Button(role: .destructive) {
+                    focusedField = nil
                     activeAlert = .reset
                 } label: {
                     Label("恢复此项默认 Prompt", systemImage: "arrow.counterclockwise")
@@ -58,6 +67,7 @@ struct AIConfigurationPromptEditSheet: View {
             .padding(.horizontal, Spacing.screenEdge)
             .padding(.bottom, Spacing.section)
         }
+        .scrollDismissesKeyboard(.interactively)
         .interactiveDismissDisabled(hasChanges)
         .xmSystemAlert(item: $activeAlert, descriptor: alertDescriptor)
     }
@@ -79,7 +89,8 @@ struct AIConfigurationPromptEditSheet: View {
     private func promptEditor(
         title: String,
         hint: String,
-        text: Binding<String>
+        text: Binding<String>,
+        field: Field
     ) -> some View {
         XMSettingsGroup {
             VStack(alignment: .leading, spacing: Spacing.cozy) {
@@ -91,6 +102,7 @@ struct AIConfigurationPromptEditSheet: View {
                     .foregroundStyle(Color.textSecondary)
 
                 TextEditor(text: text)
+                    .focused($focusedField, equals: field)
                     .font(AppTypography.body)
                     .foregroundStyle(Color.textPrimary)
                     .textInputAutocapitalization(.sentences)
@@ -108,6 +120,7 @@ struct AIConfigurationPromptEditSheet: View {
     }
 
     private func requestDismiss() {
+        focusedField = nil
         if hasChanges {
             activeAlert = .discard
         } else {
@@ -117,6 +130,7 @@ struct AIConfigurationPromptEditSheet: View {
 
     private func save() {
         guard canSave else { return }
+        focusedField = nil
         viewModel.updatePrompt(
             AIPromptTemplate(system: systemPrompt, user: userPrompt),
             for: kind
@@ -125,6 +139,7 @@ struct AIConfigurationPromptEditSheet: View {
     }
 
     private func restoreDefault() {
+        focusedField = nil
         let template = AIPromptConfiguration.androidAlignedDefault.template(for: kind)
         systemPrompt = template.system
         userPrompt = template.user

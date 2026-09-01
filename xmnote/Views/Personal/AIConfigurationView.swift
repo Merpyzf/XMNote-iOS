@@ -248,6 +248,7 @@ private struct AIConfigurationContentView: View {
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .submitLabel(.done)
+                .onSubmit { isAPIKeyFocused = false }
                 .padding(.horizontal, Spacing.base)
                 .frame(minHeight: XMSettingsPageLayout.inputMinHeight)
                 .background(
@@ -287,6 +288,7 @@ private struct AIConfigurationContentView: View {
                 }
 
                 Button(role: .destructive) {
+                    isAPIKeyFocused = false
                     showsDeleteKeyAlert = true
                 } label: {
                     Label("移除", systemImage: "trash")
@@ -347,6 +349,7 @@ private struct AIConfigurationContentView: View {
 
     /// 在主 Actor 上启动现有保存流程；非结构化任务不随页面消失自动取消，并由 ViewModel 防止重复写入。
     private func saveConfiguration() {
+        isAPIKeyFocused = false
         Task { @MainActor in
             guard await viewModel.save() else { return }
             resetAPIKeyEditing(animated: true)

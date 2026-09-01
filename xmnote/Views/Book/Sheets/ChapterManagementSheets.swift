@@ -60,6 +60,7 @@ struct ChapterMoveSheet: View {
                     } else {
                         List(visibleTargets) { target in
                             Button {
+                                isSearchActive = false
                                 onSelect(target.id)
                             } label: {
                                 ChapterMoveTargetRow(target: target)
@@ -72,12 +73,14 @@ struct ChapterMoveSheet: View {
                     }
                 }
             }
+            .scrollDismissesKeyboard(.immediately)
             .background(Color.surfaceSheet.ignoresSafeArea())
             .navigationTitle(request.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button {
+                        isSearchActive = false
                         dismiss()
                     } label: {
                         Image(systemName: "xmark")
@@ -250,6 +253,9 @@ struct ChapterBatchImportSheet: View {
         .presentationDragIndicator(.visible)
         .interactiveDismissDisabled(isBusy)
         .task(id: selectedPhotoItem) {
+            if selectedPhotoItem != nil {
+                isEditorFocused = false
+            }
             await consumeSelectedPhoto()
         }
         .fullScreenCover(isPresented: $showsCamera) {
@@ -267,6 +273,7 @@ struct ChapterBatchImportSheet: View {
             dismiss()
         }
         .onDisappear {
+            isEditorFocused = false
             cameraAuthorizationTask?.cancel()
             cameraAuthorizationTask = nil
             viewModel.cancelPendingWork()
@@ -439,6 +446,7 @@ private extension ChapterBatchImportSheet {
     var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .cancellationAction) {
             Button {
+                isEditorFocused = false
                 dismiss()
             } label: {
                 Image(systemName: "xmark")
@@ -451,7 +459,7 @@ private extension ChapterBatchImportSheet {
             XMSheetConfirmationAction(
                 isDisabled: !viewModel.canImport || isReadingPhoto,
                 isConfirming: viewModel.isImporting,
-                action: viewModel.importChapters
+                action: importChapters
             )
         }
     }
@@ -550,6 +558,7 @@ private extension ChapterBatchImportSheet {
 
     /// 拍照入口复用项目既有权限分层；只有硬件与授权均可用时才呈现系统相机。
     func requestCameraPresentation() {
+        isEditorFocused = false
         guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
             cameraAlert = .unavailable
             return
@@ -576,6 +585,13 @@ private extension ChapterBatchImportSheet {
         @unknown default:
             cameraAlert = .unavailable
         }
+    }
+
+    /// 有效提交前先释放目录编辑焦点，失败时保留全文草稿且不主动抢回键盘。
+    func importChapters() {
+        guard viewModel.canImport, !isReadingPhoto else { return }
+        isEditorFocused = false
+        viewModel.importChapters()
     }
 
     /// 将系统相机结果转换为 OCR 输入；用户取消保持安静，处理失败给出可行动反馈。
@@ -883,6 +899,7 @@ struct ChapterRemoteSyncSheet: View {
                 } else {
                     ForEach(visibleCandidates) { candidate in
                         Button {
+                            isSearchActive = false
                             withAnimation(reduceMotion ? nil : .snappy(duration: 0.22)) {
                                 viewModel.selectCandidate(candidate)
                             }
@@ -899,6 +916,7 @@ struct ChapterRemoteSyncSheet: View {
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
+        .scrollDismissesKeyboard(.immediately)
     }
 
     private var catalogList: some View {
@@ -969,6 +987,7 @@ struct ChapterRemoteSyncSheet: View {
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
+        .scrollDismissesKeyboard(.immediately)
     }
 
     @ViewBuilder
@@ -1010,6 +1029,7 @@ struct ChapterRemoteSyncSheet: View {
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .cancellationAction) {
             Button {
+                isSearchActive = false
                 dismiss()
             } label: {
                 Image(systemName: "xmark")
@@ -1024,7 +1044,7 @@ struct ChapterRemoteSyncSheet: View {
                 XMSheetConfirmationAction(
                     isDisabled: viewModel.selectedItemIDs.isEmpty,
                     isConfirming: viewModel.isImporting,
-                    action: viewModel.importSelected
+                    action: importSelected
                 )
             }
         }
@@ -1032,6 +1052,11 @@ struct ChapterRemoteSyncSheet: View {
 
     private func syncLoadingGate() {
         loadingGate.update(intent: viewModel.phase == .loading ? .read : .none)
+    }
+
+    private func importSelected() {
+        isSearchActive = false
+        viewModel.importSelected()
     }
 
     private var importErrorBinding: Binding<Bool> {

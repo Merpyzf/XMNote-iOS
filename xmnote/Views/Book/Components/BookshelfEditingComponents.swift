@@ -147,6 +147,7 @@ struct BookshelfSearchSurfaceConfiguration {
     let showsInput: Bool
     let showsClearAction: Bool
     let usesAccessibilityLayout: Bool
+    let isFocused: Bool
     let focusTrigger: Int
     let accessibilityLabel: String
     let onActivate: () -> Void
@@ -301,7 +302,10 @@ final class BookshelfSearchSurfaceView: UIView, UITextFieldDelegate {
             setNeedsLayout()
         }
 
-        if configuration.showsInput, configuration.focusTrigger != lastFocusTrigger {
+        if !configuration.isFocused, textField.isFirstResponder {
+            pendingFocusTrigger = nil
+            textField.resignFirstResponder()
+        } else if configuration.showsInput, configuration.focusTrigger != lastFocusTrigger {
             requestInputFocus(for: configuration.focusTrigger)
         } else if !configuration.showsInput, textField.isFirstResponder {
             pendingFocusTrigger = nil
