@@ -70,16 +70,17 @@ private struct AIPromptEditorContentView: View {
         GeometryReader { geometry in
             VStack(spacing: Spacing.none) {
                 fieldSelector
+                    .padding(.horizontal, Spacing.contentEdge)
                     .padding(.bottom, Spacing.base)
                 editorSurface
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .layoutPriority(1)
                 if showsValidationArea {
                     validationArea
+                        .padding(.horizontal, Spacing.contentEdge)
                         .padding(.top, Spacing.base)
                 }
             }
-            .padding(.horizontal, Spacing.contentEdge)
             .padding(.top, Spacing.base)
             .frame(
                 width: min(geometry.size.width, Layout.maximumEditorWidth),
@@ -144,6 +145,7 @@ private struct AIPromptEditorContentView: View {
         .overlay(alignment: .bottom) {
             if showsFloatingEditingBar {
                 editingBar
+                    .padding(.horizontal, Spacing.contentEdge)
                     .padding(.bottom, Spacing.half)
             }
         }

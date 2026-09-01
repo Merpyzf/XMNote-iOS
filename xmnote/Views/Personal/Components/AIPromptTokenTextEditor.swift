@@ -132,7 +132,12 @@ struct AIPromptTokenTextEditor: UIViewRepresentable {
         textView.alwaysBounceVertical = true
         textView.keyboardDismissMode = .interactive
         textView.contentInsetAdjustmentBehavior = .never
-        textView.textContainerInset = .zero
+        textView.textContainerInset = UIEdgeInsets(
+            top: 0,
+            left: Spacing.contentEdge,
+            bottom: 0,
+            right: Spacing.contentEdge
+        )
         textView.textContainer.lineFragmentPadding = 0
         textView.adjustsFontForContentSizeCategory = false
         textView.allowsEditingTextAttributes = false
