@@ -143,6 +143,7 @@ struct RelatedCategoryListView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
+        .scrollDismissesKeyboard(.immediately)
         .background(Color.surfacePage)
         .animation(
             reduceMotion ? nil : .smooth(duration: 0.28),

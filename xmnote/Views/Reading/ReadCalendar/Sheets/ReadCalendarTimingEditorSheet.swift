@@ -9,6 +9,11 @@ import SwiftUI
 
 /// 已完成计时记录编辑页；超过八小时会二次确认，保存期间禁止重复提交与交互关闭。
 struct ReadCalendarTimingEditorSheet: View {
+    private enum Field: Hashable {
+        case position
+        case insight
+    }
+
     let recordID: Int64
     let initialBook: ReadCalendarDayBook
     let event: TimelineReadTimingEvent
@@ -28,6 +33,7 @@ struct ReadCalendarTimingEditorSheet: View {
     @State private var isBookPickerPresented = false
     @State private var errorMessage: String?
     @State private var showLongDurationConfirmation = false
+    @FocusState private var focusedField: Field?
 
     /// 从时间线原始记录恢复编辑现场，跨日精确记录不会被当日切片值覆盖。
     init(
@@ -74,6 +80,7 @@ struct ReadCalendarTimingEditorSheet: View {
             title: "编辑阅读时间",
             onClose: {
                 guard !isSaving else { return }
+                focusedField = nil
                 dismiss()
             },
             isConfirming: isSaving,
@@ -83,6 +90,7 @@ struct ReadCalendarTimingEditorSheet: View {
                 XMSettingsSection("书籍") {
                     XMSettingsGroup(presentation: .singleItem) {
                     Button {
+                        focusedField = nil
                         isBookPickerPresented = true
                     } label: {
                         HStack(spacing: Spacing.base) {
@@ -143,6 +151,9 @@ struct ReadCalendarTimingEditorSheet: View {
                         TextField("可选", text: $positionText)
                             .font(AppTypography.body)
                             .keyboardType(.decimalPad)
+                            .focused($focusedField, equals: .position)
+                            .submitLabel(.next)
+                            .onSubmit { focusedField = .insight }
                             .frame(minHeight: XMSettingsPageLayout.inputMinHeight)
                     }
                 }
@@ -150,6 +161,7 @@ struct ReadCalendarTimingEditorSheet: View {
                 XMSettingsSection("阅读感想") {
                     XMSettingsGroup {
                         TextEditor(text: $insight)
+                            .focused($focusedField, equals: .insight)
                             .font(AppTypography.body)
                             .scrollContentBackground(.hidden)
                             .frame(minHeight: 96)
@@ -174,6 +186,7 @@ struct ReadCalendarTimingEditorSheet: View {
             .padding(.bottom, Spacing.contentEdge)
             .disabled(isSaving)
         }
+        .scrollDismissesKeyboard(.interactively)
         .interactiveDismissDisabled(isSaving)
         .sheet(isPresented: $isBookPickerPresented) {
             BookPickerView(
@@ -214,6 +227,7 @@ struct ReadCalendarTimingEditorSheet: View {
             errorMessage = "阅读开始时间必须早于结束时间，且阅读时长不能为零"
             return
         }
+        focusedField = nil
         if seconds > 8 * 3_600 {
             showLongDurationConfirmation = true
         } else {
@@ -223,6 +237,7 @@ struct ReadCalendarTimingEditorSheet: View {
 
     /// 组装完整草稿并执行异步写入；失败保留编辑现场。
     private func performSave() {
+        focusedField = nil
         let elapsed = kind == .accurate
             ? Int64(endDate.timeIntervalSince(startDate).rounded(.down))
             : Int64(fuzzyMinutes * 60)

@@ -15,12 +15,13 @@ struct ApiIntegrationEditSheet: View {
     @Bindable var viewModel: ApiIntegrationViewModel
 
     @Environment(\.dismiss) private var dismiss
+    @FocusState private var isInputFocused: Bool
 
     var body: some View {
         XMSheetScaffold(
             title: "\(destination.presentationTitle) 配置",
             subtitle: destination.sheetSubtitle,
-            onClose: { dismiss() },
+            onClose: close,
             isConfirmationDisabled: !viewModel.canSave(destination),
             confirmationAction: save
         ) {
@@ -36,7 +37,8 @@ struct ApiIntegrationEditSheet: View {
 
                         ApiIntegrationInputField(
                             destination: destination,
-                            value: binding(for: destination)
+                            value: binding(for: destination),
+                            isFocused: $isInputFocused
                         )
 
                         Text(destination.configurationHint)
@@ -59,6 +61,7 @@ struct ApiIntegrationEditSheet: View {
             .padding(.horizontal, Spacing.screenEdge)
             .padding(.bottom, Spacing.contentEdge)
         }
+        .scrollDismissesKeyboard(.interactively)
         .onAppear {
             viewModel.resetDraft(for: destination)
         }
@@ -69,6 +72,7 @@ struct ApiIntegrationEditSheet: View {
 
     private var clearAction: some View {
         Button(role: .destructive) {
+            isInputFocused = false
             if viewModel.clear(destination) {
                 dismiss()
             }
@@ -83,9 +87,15 @@ struct ApiIntegrationEditSheet: View {
     }
 
     private func save() {
+        isInputFocused = false
         if viewModel.save(destination) {
             dismiss()
         }
+    }
+
+    private func close() {
+        isInputFocused = false
+        dismiss()
     }
 
     private func binding(for destination: ExternalAppDestination) -> Binding<String> {
@@ -124,6 +134,7 @@ private struct ApiIntegrationStatusLine: View {
 private struct ApiIntegrationInputField: View {
     let destination: ExternalAppDestination
     @Binding var value: String
+    @FocusState.Binding var isFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.half) {
@@ -137,6 +148,8 @@ private struct ApiIntegrationInputField: View {
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .submitLabel(.done)
+                .focused($isFocused)
+                .onSubmit { isFocused = false }
                 .padding(.horizontal, Spacing.base)
                 .frame(
                     maxWidth: .infinity,

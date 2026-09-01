@@ -1503,6 +1503,7 @@ private final class BookshelfAggregateSearchCell: UICollectionViewCell {
             showsInput: configuration.showsExpandedSearchSurface,
             showsClearAction: configuration.hasSearchText || configuration.hasSearchKeyword,
             usesAccessibilityLayout: configuration.searchDrawerHeight > 56,
+            isFocused: configuration.isSearchFocused,
             focusTrigger: configuration.searchFocusTrigger,
             accessibilityLabel: "搜索当前维度",
             onActivate: configuration.onActivateSearch,

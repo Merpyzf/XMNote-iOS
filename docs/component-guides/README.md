@@ -6,6 +6,7 @@
 | ReadingDurationRankingChart | `xmnote/UIComponents/Charts/ReadingDurationRankingChart.swift` | `docs/component-guides/ReadingDurationRankingChart使用说明.md` | 已完成 |
 | XMRemoteImage | `xmnote/UIComponents/Media/Images/XMRemoteImage.swift` | `docs/component-guides/XMRemoteImage使用说明.md` | 已完成 |
 | XMGIFImageView | `xmnote/UIComponents/Media/Images/XMGIFImageView.swift` | `docs/component-guides/XMGIFImageView使用说明.md` | 已完成 |
+| AIMarkdownResultView | `xmnote/UIComponents/Media/Markdown/AIMarkdownResultView.swift` | `docs/component-guides/AIMarkdownResultView使用说明.md` | 已完成 |
 | XMBookCover | `xmnote/UIComponents/Foundation/XMBookCover.swift` | `docs/component-guides/XMBookCover使用说明.md` | 已完成 |
 | XMBookGroupCover | `xmnote/Views/Personal/Components/XMBookGroupCover.swift` | `docs/component-guides/XMBookGroupCover使用说明.md` | 页面私有 |
 | XMActivityShareSheet | `xmnote/UIComponents/System/Sharing/XMActivityShareSheet.swift` | `docs/component-guides/XMActivityShareSheet使用说明.md` | 已完成 |
@@ -16,6 +17,7 @@
 | XMSearchHistorySection | `xmnote/UIComponents/Controls/Search/XMSearchHistorySection.swift` | `docs/component-guides/XMSearchHistorySection使用说明.md` | 已完成 |
 | XMScrollEdgeChrome | `xmnote/UIComponents/Navigation/ScrollEdge/XMScrollEdgeChrome.swift` | `docs/component-guides/XMScrollEdgeChrome使用说明.md` | 已完成 |
 | XMScrollEdgeWash | `xmnote/UIComponents/Navigation/ScrollEdge/XMScrollEdgeWash.swift` | `docs/component-guides/XMScrollEdgeChrome使用说明.md` | 已完成 |
+| navigationPopGuard | `xmnote/UIComponents/Navigation/NavigationPopGuard.swift` | `docs/component-guides/NavigationPopGuard使用说明.md` | 已完成 |
 | BookCoverProgressBar | `xmnote/Views/Reading/Components/BookCoverProgressBar.swift` | `docs/component-guides/BookCoverProgressBar使用说明.md` | 页面私有 |
 | ExpandableRichText | `xmnote/UIComponents/Media/RichText/ExpandableRichText.swift` | `docs/component-guides/ExpandableRichText使用说明.md` | 已完成 |
 | RichText | `xmnote/UIComponents/Media/RichText/RichText.swift` | `docs/component-guides/ExpandableRichText使用说明.md` | 已完成 |
@@ -70,6 +72,7 @@
 | ReadCalendarView | `xmnote/Views/Reading/ReadCalendar/ReadCalendarView.swift` | `docs/component-guides/ReadCalendar使用说明.md` | 已完成 |
 | ReadingTimelineView | `xmnote/Views/Reading/Timeline/ReadingTimelineView.swift` | `docs/component-guides/ReadingTimelineView使用说明.md` | 已完成 |
 | PersonalView | `xmnote/Views/Personal/PersonalView.swift` | `docs/component-guides/PersonalView使用说明.md` | 已完成 |
+| AIPromptEditorView | `xmnote/Views/Personal/AIPromptEditorView.swift` | `docs/component-guides/AIPromptEditorView使用说明.md` | 已完成 |
 | BookGroupManagementView | `xmnote/Views/Personal/BookGroupManagementView.swift` | `docs/component-guides/BookGroupManagementView使用说明.md` | 已完成 |
 | SourceManagementView | `xmnote/Views/Personal/SourceManagementView.swift` | `docs/component-guides/SourceManagementView使用说明.md` | 已完成 |
 

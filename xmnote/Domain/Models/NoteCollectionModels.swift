@@ -154,10 +154,17 @@ nonisolated struct NoteExcerptListItem: Identifiable, Hashable, Sendable {
     }
 }
 
+/// 书摘搜索字段范围；默认列表维持正文/想法语义，需要按来源选择时才扩展到书籍元数据。
+nonisolated enum NoteExcerptSearchScope: String, Hashable, Sendable, Codable {
+    case contentAndIdea
+    case contentIdeaAndBookMetadata
+}
+
 /// 书摘分页读取请求；搜索条件始终与 scope 做 AND 组合。
 nonisolated struct NoteExcerptPageRequest: Hashable, Sendable, Codable {
     let scope: NoteExcerptScope
     let query: String
+    let searchScope: NoteExcerptSearchScope
     let sort: NoteExcerptSortRule
     let randomSeed: Int64
     let offset: Int
@@ -167,6 +174,7 @@ nonisolated struct NoteExcerptPageRequest: Hashable, Sendable, Codable {
     init(
         scope: NoteExcerptScope,
         query: String = "",
+        searchScope: NoteExcerptSearchScope = .contentAndIdea,
         sort: NoteExcerptSortRule = .createdDescending,
         randomSeed: Int64 = 0,
         offset: Int = 0,
@@ -174,10 +182,37 @@ nonisolated struct NoteExcerptPageRequest: Hashable, Sendable, Codable {
     ) {
         self.scope = scope
         self.query = query
+        self.searchScope = searchScope
         self.sort = sort
         self.randomSeed = randomSeed
         self.offset = max(0, offset)
         self.limit = max(1, limit)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case scope
+        case query
+        case searchScope
+        case sort
+        case randomSeed
+        case offset
+        case limit
+    }
+
+    /// 兼容缺少搜索字段范围的旧编码值；旧请求继续只搜索正文与想法。
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            scope: try container.decode(NoteExcerptScope.self, forKey: .scope),
+            query: try container.decodeIfPresent(String.self, forKey: .query) ?? "",
+            searchScope: try container.decodeIfPresent(NoteExcerptSearchScope.self, forKey: .searchScope)
+                ?? .contentAndIdea,
+            sort: try container.decodeIfPresent(NoteExcerptSortRule.self, forKey: .sort)
+                ?? .createdDescending,
+            randomSeed: try container.decodeIfPresent(Int64.self, forKey: .randomSeed) ?? 0,
+            offset: try container.decodeIfPresent(Int.self, forKey: .offset) ?? 0,
+            limit: try container.decodeIfPresent(Int.self, forKey: .limit) ?? 30
+        )
     }
 }
 

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Foundation
- * [OUTPUT]: 对外提供 PersonalRoute 枚举，定义个人模块导航目的地
+ * [OUTPUT]: 对外提供 PersonalRoute 枚举，定义个人模块导航目的地及单任务提示词编辑参数
  * [POS]: Navigation 模块的个人路由，被 PersonalView 的 NavigationStack 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -20,6 +20,7 @@ enum PersonalRoute: Hashable, Codable {
     case desktopWeb
     case apiIntegration
     case aiConfiguration
+    case aiPromptEditor(AIPromptKind)
     case tagManagement
     case groupManagement
     case bookSource

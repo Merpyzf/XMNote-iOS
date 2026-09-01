@@ -7,6 +7,13 @@
 
 import SwiftUI
 
+/// 相关内容编辑页的局部焦点顺序，覆盖标题、链接与 UIKit 富文本正文。
+private enum RelevantEditorFocus: Hashable {
+    case title
+    case url
+    case content
+}
+
 /// 相关内容编辑页，以统一模式兼容新建与既有主键编辑入口。
 struct RelevantEditorView: View {
     let mode: RelevantEditorMode
@@ -109,6 +116,7 @@ private struct RelevantEditorLoadedView: View {
 
     @State private var activeAlert: RelevantEditorAlert?
     @State private var readLoadingGate = LoadingGate()
+    @FocusState private var focusedField: RelevantEditorFocus?
 
     var body: some View {
         ZStack {
@@ -170,6 +178,7 @@ private struct RelevantEditorLoadedView: View {
                 viewModel: viewModel,
                 draft: draft,
                 ocrRepository: repositories.ocrRepository,
+                focusedField: $focusedField,
                 onTransferError: { activeAlert = .imageMessage($0) }
             )
             .transition(editorTransition)
@@ -206,6 +215,7 @@ private struct RelevantEditorLoadedView: View {
 
     /// 启动一次保存任务；ViewModel 负责竞态门闩，成功后把真实主键交还上层并退出。
     private func save() {
+        focusedField = nil
         Task {
             guard let contentID = await viewModel.save() else { return }
             onSaved(contentID)
@@ -215,6 +225,7 @@ private struct RelevantEditorLoadedView: View {
     /// 根据保存中与脏状态决定直接返回或请求用户确认。
     private func handleDismissAttempt() {
         guard !viewModel.isSaving else { return }
+        focusedField = nil
         if viewModel.hasUnsavedChanges {
             activeAlert = .discard
         } else {
@@ -296,6 +307,7 @@ private struct RelevantEditorForm: View {
     @Bindable var viewModel: RelevantEditorViewModel
     let draft: RelevantEditorDraft
     let ocrRepository: any OCRRepositoryProtocol
+    @FocusState.Binding var focusedField: RelevantEditorFocus?
     let onTransferError: (String) -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -339,6 +351,9 @@ private struct RelevantEditorForm: View {
                             .font(AppTypography.body)
                             .textFieldStyle(.roundedBorder)
                             .lineLimit(1...3)
+                            .focused($focusedField, equals: .title)
+                            .submitLabel(.next)
+                            .onSubmit { focusedField = .url }
                     }
                     .padding(Spacing.contentEdge)
                 }
@@ -356,6 +371,9 @@ private struct RelevantEditorForm: View {
                             .textContentType(.URL)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
+                            .focused($focusedField, equals: .url)
+                            .submitLabel(.next)
+                            .onSubmit { focusedField = .content }
                     }
                     .padding(Spacing.contentEdge)
                 }
@@ -370,7 +388,8 @@ private struct RelevantEditorForm: View {
                             attributedText: $viewModel.contentText,
                             activeFormats: $viewModel.activeFormats,
                             placeholder: "记录与这本书相关的内容…",
-                            baseFont: ContentEditorTypography.richTextBodyUIFont
+                            baseFont: ContentEditorTypography.richTextBodyUIFont,
+                            focusBinding: contentFocusBinding
                         )
                         .frame(minHeight: 280)
                         .compositingGroup()
@@ -403,6 +422,19 @@ private struct RelevantEditorForm: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .scrollIndicators(.hidden)
+    }
+
+    private var contentFocusBinding: Binding<Bool> {
+        Binding(
+            get: { focusedField == .content },
+            set: { hasFocus in
+                if hasFocus {
+                    focusedField = .content
+                } else if focusedField == .content {
+                    focusedField = nil
+                }
+            }
+        )
     }
 }
 

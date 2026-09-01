@@ -260,7 +260,7 @@ private struct SourceManagementContentView: View {
         .contentMargins(.top, Spacing.compact, for: .scrollContent)
         .contentMargins(.bottom, Spacing.double, for: .scrollContent)
         .scrollBounceBehavior(.always)
-        .scrollDismissesKeyboard(.interactively)
+        .scrollDismissesKeyboard(.immediately)
         .scrollEdgeEffectStyle(.automatic, for: .top)
         .scrollEdgeEffectStyle(.soft, for: .bottom)
         .environment(\.editMode, .constant(isReordering ? EditMode.active : EditMode.inactive))

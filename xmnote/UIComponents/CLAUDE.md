@@ -12,7 +12,7 @@
 - `Controls/`: Button、Menu、Rating、Search、Selection 原子交互；`XMMinimumHitTarget` 提供非视觉侵入 44pt 命中区。
 - `Feedback/`: 系统 Alert 桥接、空态、加载门闩/加载视图、StatePresentation 组件族与全局 Toast。
 - `Foundation/`: `CardContainer`、`XMBookCover` 与文本高亮等低业务视觉基础。
-- `Media/`: 附件、图库、静态/GIF 图片和只读富文本；UIKit 只保留在明确桥接 owner 内。
+- `Media/`: 附件、图库、静态/GIF 图片、AI 流式 Markdown 和只读富文本；UIKit 只保留在明确桥接 owner 内。
 - `Navigation/`: 返回保护、ScrollEdge、Tabs 与 TopBar；不得持有 Feature 路由状态。
 - `Settings/`: 配置页 Page、Section、Group、Divider 与两类已验证稳定行型；禁止万能设置行。
 - `Sheet/`: `XMSheetScaffold` 与跨功能年月选择器；不负责业务保存或 Repository 访问。
@@ -28,7 +28,7 @@
 
 ## 发现与验收
 
-- 机器目录：`scripts/design-system/component-catalog.json` schema v3；当前登记 canonical 55 项、support 9 项。
+- 机器目录：`scripts/design-system/component-catalog.json` schema v3；当前登记 canonical 56 项、support 9 项。
 - 查询：`python3 scripts/design-system/ds.py catalog [--symbol <名称>]`。
 - 修改前上下文：`python3 scripts/design-system/ds.py context --paths <Swift 路径>`。
 - 所有非 Vendor Swift 文件必须登记分类、层级、复用范围、状态、依赖边界与 Preview 策略。

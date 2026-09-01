@@ -205,6 +205,7 @@ struct BookSearchView: View {
                 .padding(.bottom, Spacing.double)
             }
             .scrollIndicators(.hidden)
+            .scrollDismissesKeyboard(.immediately)
 
             if isPreparingSeed || isCompletingCreatedBook {
                 Color.overlay.ignoresSafeArea()
@@ -847,7 +848,6 @@ struct BookSearchView: View {
 
     private func dismissSearchKeyboard() {
         isSearchFieldFocused = false
-        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 
     private var rowDividerLeadingInset: CGFloat {

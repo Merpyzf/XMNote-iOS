@@ -7,6 +7,12 @@
 
 import SwiftUI
 
+/// 书评编辑页的局部焦点顺序，避免标题与 UIKit 富文本编辑器形成两个焦点 owner。
+private enum ReviewEditorFocus: Hashable {
+    case title
+    case content
+}
+
 /// 书评编辑页，以统一模式兼容新建与既有主键编辑入口。
 struct ReviewEditorView: View {
     let mode: ReviewEditorMode
@@ -108,6 +114,7 @@ private struct ReviewEditorLoadedView: View {
 
     @State private var activeAlert: ReviewEditorAlert?
     @State private var readLoadingGate = LoadingGate()
+    @FocusState private var focusedField: ReviewEditorFocus?
 
     var body: some View {
         ZStack {
@@ -169,6 +176,7 @@ private struct ReviewEditorLoadedView: View {
                 viewModel: viewModel,
                 draft: draft,
                 ocrRepository: repositories.ocrRepository,
+                focusedField: $focusedField,
                 onTransferError: { activeAlert = .imageMessage($0) }
             )
             .transition(editorTransition)
@@ -205,6 +213,7 @@ private struct ReviewEditorLoadedView: View {
 
     /// 启动一次保存任务；ViewModel 负责竞态门闩，成功后把真实主键交还上层并退出。
     private func save() {
+        focusedField = nil
         Task {
             guard let reviewID = await viewModel.save() else { return }
             onSaved(reviewID)
@@ -214,6 +223,7 @@ private struct ReviewEditorLoadedView: View {
     /// 根据保存中与脏状态决定直接返回或请求用户确认。
     private func handleDismissAttempt() {
         guard !viewModel.isSaving else { return }
+        focusedField = nil
         if viewModel.hasUnsavedChanges {
             activeAlert = .discard
         } else {
@@ -295,6 +305,7 @@ private struct ReviewEditorForm: View {
     @Bindable var viewModel: ReviewEditorViewModel
     let draft: ReviewEditorDraft
     let ocrRepository: any OCRRepositoryProtocol
+    @FocusState.Binding var focusedField: ReviewEditorFocus?
     let onTransferError: (String) -> Void
 
     var body: some View {
@@ -311,6 +322,9 @@ private struct ReviewEditorForm: View {
                             .font(AppTypography.title3)
                             .textFieldStyle(.plain)
                             .lineLimit(1...3)
+                            .focused($focusedField, equals: .title)
+                            .submitLabel(.next)
+                            .onSubmit { focusedField = .content }
                             .padding(Spacing.contentEdge)
 
                         Divider()
@@ -321,7 +335,8 @@ private struct ReviewEditorForm: View {
                             attributedText: $viewModel.contentText,
                             activeFormats: $viewModel.activeFormats,
                             placeholder: "写下你的书评…",
-                            baseFont: ContentEditorTypography.richTextBodyUIFont
+                            baseFont: ContentEditorTypography.richTextBodyUIFont,
+                            focusBinding: contentFocusBinding
                         )
                         .frame(minHeight: 280)
                         .padding(.horizontal, Spacing.half)
@@ -349,6 +364,19 @@ private struct ReviewEditorForm: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .scrollIndicators(.hidden)
+    }
+
+    private var contentFocusBinding: Binding<Bool> {
+        Binding(
+            get: { focusedField == .content },
+            set: { hasFocus in
+                if hasFocus {
+                    focusedField = .content
+                } else if focusedField == .content {
+                    focusedField = nil
+                }
+            }
+        )
     }
 }
 

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "sourceRoots": [
     "xmnote"
   ],
@@ -80,6 +80,7 @@
         "xmnote/UIComponents/Controls/Search/XMSearchHistorySection.swift",
         "xmnote/UIComponents/Business/Tag/XMTagLabel.swift",
         "xmnote/UIComponents/Feedback/Toast/XMToast.swift",
+        "xmnote/Views/Personal/Components/AIPromptEditorAppearance.swift",
         "xmnote/Views/Book/Components/BookCollectionVisualComponents.swift",
         "xmnote/Views/Book/Components/BookshelfDimensionComponents.swift",
         "xmnote/Views/Content/ContentViewerView.swift",
@@ -108,6 +109,7 @@
         "xmnote/UIComponents/Controls/Rating/XMRatingBar.swift",
         "xmnote/UIComponents/Controls/Search/XMSearchHistorySection.swift",
         "xmnote/UIComponents/Business/Tag/XMTagLabel.swift",
+        "xmnote/Views/Personal/Components/AIPromptEditorAppearance.swift",
         "xmnote/Views/Book/Components/BookCollectionVisualComponents.swift",
         "xmnote/Views/Note/NoteMergeView.swift",
         "xmnote/Views/Reading/Components/ReadingDashboardCards.swift",
@@ -126,7 +128,8 @@
         "xmnote/Utilities/DesignSystem/ColorConstruction.swift",
         "xmnote/Utilities/DesignSystem/SemanticColors.swift",
         "xmnote/RichTextEditor/HighlightColorPicker.swift",
-        "xmnote/Views/Note/Components/NoteReviewPalette+UI.swift"
+        "xmnote/Views/Note/Components/NoteReviewPalette+UI.swift",
+        "xmnote/Views/Personal/Components/AIPromptEditorAppearance.swift"
       ],
       "replacement": "已存在的语义色；UIKit/SwiftUI 桥接只留在登记 owner"
     },
@@ -167,6 +170,8 @@
         "xmnote/Views/Note/Components/NoteHomeCategoryViews.swift",
         "xmnote/Views/Note/Components/NotePhotoOCRFlowView.swift",
         "xmnote/Views/Note/Components/NoteReviewPalette+UI.swift",
+        "xmnote/Views/Personal/Components/AIPromptEditorAppearance.swift",
+        "xmnote/Views/Personal/Components/AIPromptTokenTextEditor.swift",
         "xmnote/Views/Reading/ReadCalendar/Components/DailyReadingRecordRow.swift",
         "xmnote/Views/Reading/Sheets/ReadingTimerAccessoryZoomPresenter.swift",
         "xmnote/Views/Reading/Timeline/Components/TimelineNoteCard.swift"
@@ -181,7 +186,8 @@
       ],
       "matchInferred": true,
       "allowedPaths": [
-        "xmnote/Utilities/DesignSystem/ColorConstruction.swift"
+        "xmnote/Utilities/DesignSystem/ColorConstruction.swift",
+        "xmnote/Views/Personal/Components/AIPromptEditorAppearance.swift"
       ],
       "replacement": "Color 语义成员或登记后的局部 Appearance"
     },
@@ -194,7 +200,8 @@
       "matchInferred": true,
       "allowedPaths": [
         "xmnote/Utilities/DesignSystem/ColorConstruction.swift",
-        "xmnote/Views/Note/Components/NoteReviewPalette+UI.swift"
+        "xmnote/Views/Note/Components/NoteReviewPalette+UI.swift",
+        "xmnote/Views/Personal/Components/AIPromptEditorAppearance.swift"
       ],
       "replacement": "已存在的浅深色语义；动态 UIKit 构色只留在登记 owner"
     },
@@ -250,6 +257,7 @@
         "xmnote/Views/Book/Components/BookWorkspaceNoteItem.swift",
         "xmnote/Views/Book/Components/BookshelfEditingComponents.swift",
         "xmnote/Views/Note/NoteEditorView.swift",
+        "xmnote/Views/Personal/Components/AIPromptEditorAppearance.swift",
         "xmnote/Views/Reading/Components/ReadingDashboardCards.swift",
         "xmnote/Views/Reading/ReadCalendar/ReadCalendarTypography.swift",
         "xmnote/Views/Reading/ReadingTimelineAppearance.swift"
@@ -268,7 +276,7 @@
         "xmnote/Views/Book/BookshelfTypography.swift",
         "xmnote/Views/Book/Components/BookWorkspaceCollectionView.swift",
         "xmnote/Views/Book/Components/BookWorkspaceNoteItem.swift",
-        "xmnote/Views/Content/Components/AIMarkdownResultView.swift",
+        "xmnote/UIComponents/Media/Markdown/AIMarkdownResultView.swift",
         "xmnote/Views/Content/ContentEditorTypography.swift",
         "xmnote/Views/Content/ContentViewerDetailBodies.swift",
         "xmnote/Views/Note/Components/NoteHomeCategoryViews.swift",
@@ -294,7 +302,8 @@
         "xmnote/Views/Book/BookshelfTypography.swift",
         "xmnote/Views/Book/Components/BookReadingDetailContent.swift",
         "xmnote/Views/Note/Components/NotePhotoOCRFlowView.swift",
-        "xmnote/Views/Note/Components/NoteReviewCardView.swift"
+        "xmnote/Views/Note/Components/NoteReviewCardView.swift",
+        "xmnote/Views/Personal/Components/AIPromptEditorAppearance.swift"
       ],
       "replacement": "AppTypography 的同源 UIKit 测量角色或当前 feature/component Typography"
     },
@@ -624,6 +633,39 @@
       }
     ]
   },
+  "buttonColorPolicy": {
+    "ruleID": "DSR004",
+    "borderedStyleNames": [
+      "bordered"
+    ],
+    "prominentStyleNames": [
+      "borderedProminent"
+    ],
+    "brandDerivedColorSymbols": [
+      "appTint",
+      "primaryActionFill",
+      "stateActionForeground",
+      "linkForeground",
+      "selectionAccent",
+      "selectionForeground",
+      "feedbackSuccess"
+    ],
+    "neutralColorSymbols": [
+      "textPrimary",
+      "textSecondary",
+      "iconPrimary",
+      "iconSecondary",
+      "menuActionForeground",
+      "menuSelectedForeground"
+    ],
+    "feedbackColorSymbols": [
+      "feedbackError",
+      "feedbackWarning"
+    ],
+    "normalTextMinimumContrast": 4.5,
+    "largeTextMinimumContrast": 3.0,
+    "essentialGlyphMinimumContrast": 3.0
+  },
   "componentCatalogPolicy": {
     "ruleID": "DS011",
     "root": "xmnote/UIComponents",
@@ -768,6 +810,13 @@
       "enforcement": "report",
       "reason": "读取主态受 LoadingGate 约束，局部进度或写入反馈可能仍合理。",
       "correctPath": "根据读取、写入或局部进度语义选择 LoadingGate、LoadingStateView 或保留局部 ProgressView"
+    },
+    {
+      "id": "DSR004",
+      "title": "操作按钮前景—背景配对审查",
+      "enforcement": "report",
+      "reason": "原生按钮样式会消费环境 tint；品牌前景与品牌弱填充可能同时出现，突出按钮也需要实际对比度证据。",
+      "correctPath": "按按钮角色显式选择品牌填充与中性前景、中性次级配对或反馈语义，并验证浅色、深色和高对比度"
     }
   ]
 }

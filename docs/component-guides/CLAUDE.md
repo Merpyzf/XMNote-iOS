@@ -9,6 +9,7 @@
 - `ReadingDurationRankingChart使用说明.md`: ReadingDurationRankingChart 阅读时长排行组件接入指南与参数说明。
 - `XMRemoteImage使用说明.md`: XMRemoteImage 统一远程图片组件接入指南与参数说明。
 - `XMGIFImageView使用说明.md`: XMGIFImageView GIF 动画承载组件接入指南与参数说明。
+- `AIMarkdownResultView使用说明.md`: AI 流式 Markdown 标准结果组件的累计快照、交互控制器与多结果隔离接入指南。
 - `XMBookCover使用说明.md`: XMBookCover 统一书籍封面组件接入指南与参数说明。
 - `XMBookGroupCover使用说明.md`: Personal 页面私有 XMBookGroupCover 书籍分组组合封面接入指南。
 - `XMActivityShareSheet使用说明.md`: XMActivityShareSheet 稳定系统分享宿主接入指南与参数说明。
@@ -17,6 +18,7 @@
 - `XMScopeSelector使用说明.md`: XMScopeSelector 范围选择控件接入指南与参数说明。
 - `XMSearchHistorySection使用说明.md`: XMSearchHistorySection 搜索历史区块接入指南与参数说明。
 - `XMScrollEdgeChrome使用说明.md`: XMScrollEdgeChrome / XMScrollEdgeWash 滚动边缘容器与柔化层接入指南与参数说明。
+- `NavigationPopGuard使用说明.md`: navigationPopGuard 系统交互式返回保护、生命周期回调与脏状态接入指南。
 - `BookCoverProgressBar使用说明.md`: Reading 页面私有 BookCoverProgressBar 封面进度条接入指南。
 - `ExpandableRichText使用说明.md`: ExpandableRichText / RichText 富文本展示组件接入指南与参数说明。
 - `ImmersiveBottomChrome使用说明.md`: Content 页面私有 ImmersiveBottomChrome 底部沉浸遮罩接入指南。
@@ -60,6 +62,7 @@
 - `ReadCalendar使用说明.md`: ReadCalendarView 页面组件接入指南与参数说明。
 - `ReadingTimelineView使用说明.md`: ReadingTimelineView 页面组件接入指南与参数说明。
 - `PersonalView使用说明.md`: PersonalView 页面组件接入指南与参数说明。
+- `AIPromptEditorView使用说明.md`: AIPromptEditorView 单任务提示词编辑页的数据边界、路由接入与退出保护说明。
 - `BookGroupManagementView使用说明.md`: BookGroupManagementView 分组管理页面接入指南与参数说明。
 - `SourceManagementView使用说明.md`: SourceManagementView 来源管理页面接入指南与参数说明。
 

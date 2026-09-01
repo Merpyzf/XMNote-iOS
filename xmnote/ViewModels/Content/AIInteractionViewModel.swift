@@ -34,7 +34,6 @@ nonisolated struct AIExplanationIdeaEditRequest: Equatable, Sendable {
 nonisolated struct AIAutoTagPresentation: Identifiable, Equatable, Sendable {
     let id = UUID()
     let noteID: Int64
-    let bookTitle: String
 }
 
 @MainActor
@@ -294,7 +293,6 @@ final class AIAutoTagViewModel {
     }
 
     let noteID: Int64
-    let bookTitle: String
 
     var phase: Phase = .idle
     var isApplying = false
@@ -305,9 +303,8 @@ final class AIAutoTagViewModel {
     private var generationRevision = 0
 
     /// 注入书摘主键与 AI 仓储；建议在 Sheet 呈现后加载，避免未展示页面占用请求。
-    init(noteID: Int64, bookTitle: String, repository: any AIRepositoryProtocol) {
+    init(noteID: Int64, repository: any AIRepositoryProtocol) {
         self.noteID = noteID
-        self.bookTitle = bookTitle
         self.repository = repository
     }
 

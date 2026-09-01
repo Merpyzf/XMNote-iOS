@@ -259,7 +259,10 @@ private struct BusinessStateScenarioCatalogView: View {
     private var aiFixturePreview: some View {
         switch selectedAIFixture {
         case .waiting:
-            AIAutoTagWaitingView()
+            AIGenerationWaitingView(
+                "分析中…",
+                accessibilityLabel: "正在分析书摘"
+            )
         case .streaming:
             AIMarkdownResultView(
                 markdown: "## 建议标签\n\n- 阅读方法\n- 产品设计",

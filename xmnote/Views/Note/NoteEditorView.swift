@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer、AppState、NoteEditorViewModel、AppTaskNavigationContext、NoteTextComposerView、XMStarredAppearance 与 BookPickerView
- * [OUTPUT]: 对外提供 NoteEditorView，承载书摘新建/编辑、中性草稿恢复提示、图片额度、附图、层级章节、无冗余上下文的标签草稿操作、语义化编辑设置入口与保存动作
+ * [INPUT]: 依赖 RepositoryContainer、AppState、NoteEditorViewModel、AppTaskNavigationContext、NoteTextComposerView、XMStarredAppearance、BookPickerView 与当前 UIWindow 键盘坐标转换
+ * [OUTPUT]: 对外提供 NoteEditorView，承载书摘新建/编辑、局部焦点释放、窗口级键盘状态、中性草稿恢复提示、图片额度、附图、层级章节、无冗余上下文的标签草稿操作、语义化编辑设置入口与保存动作
  * [POS]: Note 模块书摘编辑页壳层，对齐 Android 编辑流程并采用 iOS 原生页面组织
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -63,6 +63,7 @@ struct NoteEditorView: View {
     @State private var layoutFreezeContext: NoteEditorLayoutFreezeContext?
     @State private var pendingCollapseAfterKeyboardHide = false
     @State private var keyboardHeight: CGFloat = 0
+    @State private var editorWindow: UIWindow?
     @State private var isKeyboardAnimatingOut = false
     @State private var lastClosedComposerTarget: NoteEditorComposerTarget?
     @State private var baselineIdleTimerDisabled: Bool?
@@ -101,6 +102,7 @@ struct NoteEditorView: View {
                 }
             }
         }
+        .background(NoteEditorWindowReader(window: $editorWindow))
         .task {
             guard viewModel == nil else { return }
             bootstrapLoadingGate.update(intent: .read)
@@ -326,6 +328,7 @@ private extension NoteEditorView {
                         .padding(.bottom, scrollBottomPadding)
                     }
                     .scrollIndicators(.hidden)
+                    .scrollDismissesKeyboard(.interactively)
 #if DEBUG
                     .overlay {
                         heightDiagnosticsProbe(
@@ -388,6 +391,7 @@ private extension NoteEditorView {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
+                    releaseInputFocus()
                     activeSheet = .settings
                     registerEditorInteraction(force: true)
                 } label: {
@@ -606,13 +610,13 @@ private extension NoteEditorView {
             performIdeaCollapse(reason: "keyboard_did_hide")
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { notification in
-            guard let endFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else {
+            guard let editorWindow,
+                  let endFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else {
                 return
             }
-            let screenHeight = UIApplication.shared.connectedScenes
-                .compactMap { ($0 as? UIWindowScene)?.screen.bounds.height }
-                .max() ?? endFrame.maxY
-            let keyboardVisibleHeight = max(0, screenHeight - endFrame.minY)
+            let frameInWindow = editorWindow.convert(endFrame, from: editorWindow.screen.coordinateSpace)
+            let intersection = editorWindow.bounds.intersection(frameInWindow)
+            let keyboardVisibleHeight = intersection.isNull ? 0 : max(0, intersection.height)
             let previousHeight = keyboardHeight
             keyboardHeight = keyboardVisibleHeight
             if keyboardVisibleHeight > measuredHeightEpsilon {
@@ -694,6 +698,7 @@ private extension NoteEditorView {
                     baseFont: NoteEditorViewModel.editorBaseUIFont,
                     allowsCameraTextCapture: true,
                     toolbarPresentation: .ornament(controller),
+                    focusBinding: target == .content ? $isContentFocused : $isIdeaFocused,
                     onTextChange: onTextChange,
                     onFocusChange: { hasFocus in
                         handleEditorFocusChange(target: target, hasFocus: hasFocus)
@@ -740,6 +745,7 @@ private extension NoteEditorView {
                     baseFont: NoteEditorViewModel.editorBaseUIFont,
                     allowsCameraTextCapture: true,
                     toolbarPresentation: .ornament(ideaOrnamentController),
+                    focusBinding: $isIdeaFocused,
                     onTextChange: onTextChange,
                     onFocusChange: { hasFocus in
                         handleEditorFocusChange(target: .idea, hasFocus: hasFocus)
@@ -1093,7 +1099,7 @@ private extension NoteEditorView {
     func openMetadataSheet(_ sheet: NoteEditorSheet) {
         registerEditorInteraction(force: true)
         toolbarPromptMessage = nil
-        isPositionFocused = false
+        releaseInputFocus()
         if reduceMotion {
             activeSheet = sheet
         } else {
@@ -1152,6 +1158,7 @@ private extension NoteEditorView {
                     return
                 }
                 lastClosedComposerTarget = target
+                releaseInputFocus()
                 activeComposer = target
             },
             onChooseImage: {
@@ -1161,11 +1168,13 @@ private extension NoteEditorView {
                     viewModel.showImageQuotaBlockedMessage()
                     return
                 }
+                releaseInputFocus()
                 showsAttachmentPicker = true
             },
             onSave: {
                 registerEditorInteraction(force: true)
                 toolbarPromptMessage = nil
+                releaseInputFocus()
                 Task { _ = await viewModel.save() }
             }
         )
@@ -1185,9 +1194,11 @@ private extension NoteEditorView {
         guard closeFlowState == .idle else { return }
         guard !viewModel.isSaving else { return }
 
+        let wasKeyboardVisible = isKeyboardVisible
+        releaseInputFocus()
         if viewModel.hasUnsavedChanges {
             transitionCloseFlow(
-                to: .confirmingDiscard(keyboardVisibleSnapshot: isKeyboardVisible),
+                to: .confirmingDiscard(keyboardVisibleSnapshot: wasKeyboardVisible),
                 reason: "request_\(source.rawValue)"
             )
         } else {
@@ -1196,6 +1207,7 @@ private extension NoteEditorView {
     }
 
     func beginSaveAndClose(using viewModel: NoteEditorViewModel) {
+        releaseInputFocus()
         transitionCloseFlow(
             to: .savingAndClosing(keyboardVisibleSnapshot: closeFlowKeyboardVisibleSnapshot),
             reason: "save_and_close"
@@ -1210,6 +1222,7 @@ private extension NoteEditorView {
     }
 
     func beginDiscardAndClose(using viewModel: NoteEditorViewModel) {
+        releaseInputFocus()
         transitionCloseFlow(
             to: .discardingAndClosing(keyboardVisibleSnapshot: closeFlowKeyboardVisibleSnapshot),
             reason: "discard_and_close"
@@ -1224,6 +1237,13 @@ private extension NoteEditorView {
 
     var closeFlowKeyboardVisibleSnapshot: Bool {
         closeFlowState.keyboardVisibleSnapshot ?? isKeyboardVisible
+    }
+
+    /// 只释放本页拥有的三个输入焦点，避免影响 presentation hierarchy 中的其它响应者。
+    func releaseInputFocus() {
+        isPositionFocused = false
+        isContentFocused = false
+        isIdeaFocused = false
     }
 
     func transitionCloseFlow(to nextState: NoteEditorCloseFlowState, reason: String) {
@@ -2403,6 +2423,41 @@ private struct NoteEditorHeightComputation {
     let usedSeededMeasurements: Bool
     let contentHeight: CGFloat
     let ideaHeight: CGFloat
+}
+
+/// 把 SwiftUI 编辑页实际所在窗口回传给键盘 frame 观察逻辑，避免跨 scene 使用错误屏幕高度。
+private struct NoteEditorWindowReader: UIViewRepresentable {
+    @Binding var window: UIWindow?
+
+    /// 创建不参与命中测试的窗口探针；回调始终在主线程更新页面状态。
+    func makeUIView(context: Context) -> WindowProbeView {
+        let view = WindowProbeView()
+        view.isUserInteractionEnabled = false
+        view.onWindowChange = updateWindow
+        return view
+    }
+
+    /// SwiftUI 重算时刷新回调，确保写入当前一轮 Binding。
+    func updateUIView(_ uiView: WindowProbeView, context: Context) {
+        uiView.onWindowChange = updateWindow
+        updateWindow(uiView.window)
+    }
+
+    /// 将探针所在 UIWindow 回写给页面；相同对象不触发额外状态更新。
+    private func updateWindow(_ newWindow: UIWindow?) {
+        guard window !== newWindow else { return }
+        window = newWindow
+    }
+
+    /// 仅负责报告自身窗口变化，不持有通知或全局状态。
+    final class WindowProbeView: UIView {
+        var onWindowChange: ((UIWindow?) -> Void)?
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            onWindowChange?(window)
+        }
+    }
 }
 
 private struct NoteEditorMeasuredHeightsPreferenceKey: PreferenceKey {

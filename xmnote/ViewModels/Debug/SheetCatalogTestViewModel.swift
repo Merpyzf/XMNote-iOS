@@ -1002,8 +1002,8 @@ private enum SheetCatalogManifest {
     ]
 
     private static let personal: [SheetCatalogCallSite] = [
-        site("personal.ai-config.prompt", .production, "个人", "AIConfigurationView", "xmnote/Views/Personal/AIConfigurationView.swift", 80, .item, .scaffoldBottomAction, purpose: "在 AI 配置页编辑某个任务使用的系统提示词", targets: [
-            target("AIConfigurationPromptEditSheet", "编辑、恢复或保存 AI 提示词模板", "Android AIConfigurationActivity 中维护提示词配置", SheetCatalogAndroidEvidence.aiConfiguration)
+        site("personal.ai-config.prompt-trial", .production, "个人", "AIPromptEditorView", "xmnote/Views/Personal/AIPromptEditorView.swift", 105, .item, .scaffoldBottomAction, purpose: "在 AI 提示词编辑页运行当前草稿并对比原始提示词", targets: [
+            target("AIPromptTrialSheet", "编辑测试书摘、对比双结果并查看完整请求", "Android AIConfigurationActivity 中验证提示词效果", SheetCatalogAndroidEvidence.aiConfiguration)
         ]),
         site("personal.api-integration.edit", .production, "个人", "ApiIntegrationView", "xmnote/Views/Personal/ApiIntegrationView.swift", 75, .item, .scaffoldBottomAction, purpose: "新增或编辑第三方 API 集成配置", targets: [
             target("ApiIntegrationEditSheet", "填写服务名称、地址和凭证并保存", "Android ApiIntegrationActivity 中维护 API 集成", SheetCatalogAndroidEvidence.apiIntegration)
@@ -1209,7 +1209,7 @@ private enum SheetProductionPreviewRegistry {
         module: String
     ) -> SheetProductionPreviewDataRequirement {
         let externalOwners = [
-            "AITextResultSheet", "AIAutoTagSheet", "AIConfigurationPromptEditSheet",
+            "AITextResultSheet", "AIAutoTagSheet", "AIPromptTrialSheet",
             "BookCollectionCoverSearchSheet", "BookCollectionWereadImportSheet",
             "BookCollectionWereadImportPreviewSheet", "ChapterRemoteSyncSheet",
             "BackupHistorySheetView", "BackupRestoreConfirmSheet", "LocalBackup",

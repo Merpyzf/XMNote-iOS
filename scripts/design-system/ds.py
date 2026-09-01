@@ -557,14 +557,19 @@ def audit_policy(policy: dict[str, Any] | None = None) -> list[str]:
     errors: list[str] = []
     policy = policy if policy is not None else load_json(POLICY_PATH)
 
-    if policy.get("schemaVersion") != 3:
-        errors.append("设计系统 policy schemaVersion 必须为 3")
+    if policy.get("schemaVersion") != 4:
+        errors.append("设计系统 policy schemaVersion 必须为 4")
 
     rules = policy.get("rules")
     if not isinstance(rules, list):
         return errors + ["设计系统 policy 缺少 rules 数组"]
     registered_rule_ids = {
         rule.get("id")
+        for rule in rules
+        if isinstance(rule, dict) and isinstance(rule.get("id"), str)
+    }
+    registered_rule_enforcements = {
+        rule.get("id"): rule.get("enforcement")
         for rule in rules
         if isinstance(rule, dict) and isinstance(rule.get("id"), str)
     }
@@ -763,6 +768,80 @@ def audit_policy(policy: dict[str, Any] | None = None) -> list[str]:
                     errors.append(
                         f"gesture exception 声明锚点失效：{exception_path} -> {declaration}"
                     )
+
+    button_color_policy = policy.get("buttonColorPolicy")
+    if not isinstance(button_color_policy, dict):
+        errors.append("设计系统 policy 缺少 buttonColorPolicy 对象")
+    else:
+        button_rule_id = button_color_policy.get("ruleID")
+        if button_rule_id not in registered_rule_ids:
+            errors.append(
+                f"buttonColorPolicy 使用未知规则：{button_rule_id}"
+            )
+        elif registered_rule_enforcements.get(button_rule_id) != "report":
+            errors.append("buttonColorPolicy 必须使用 report 规则")
+
+        list_keys = (
+            "borderedStyleNames",
+            "prominentStyleNames",
+            "brandDerivedColorSymbols",
+            "neutralColorSymbols",
+            "feedbackColorSymbols",
+        )
+        validated_lists: dict[str, list[str]] = {}
+        for key in list_keys:
+            values = button_color_policy.get(key)
+            if not isinstance(values, list) or not values or not all(
+                isinstance(item, str) and item.strip() for item in values
+            ):
+                errors.append(f"buttonColorPolicy 缺少有效 {key}")
+                continue
+            if len(values) != len(set(values)):
+                errors.append(f"buttonColorPolicy {key} 包含重复项")
+            validated_lists[key] = values
+
+        bordered_styles = set(validated_lists.get("borderedStyleNames", []))
+        prominent_styles = set(validated_lists.get("prominentStyleNames", []))
+        if "bordered" not in bordered_styles:
+            errors.append("buttonColorPolicy borderedStyleNames 必须包含 bordered")
+        if "borderedProminent" not in prominent_styles:
+            errors.append(
+                "buttonColorPolicy prominentStyleNames 必须包含 borderedProminent"
+            )
+        if bordered_styles & prominent_styles:
+            errors.append("buttonColorPolicy 的普通与突出样式分类不得重叠")
+
+        color_categories = {
+            key: set(validated_lists.get(key, []))
+            for key in (
+                "brandDerivedColorSymbols",
+                "neutralColorSymbols",
+                "feedbackColorSymbols",
+            )
+        }
+        color_owners: dict[str, str] = {}
+        for category, symbols in color_categories.items():
+            for symbol in symbols:
+                previous_category = color_owners.get(symbol)
+                if previous_category is not None:
+                    errors.append(
+                        "buttonColorPolicy 颜色分类重复："
+                        f"{symbol} -> {previous_category}, {category}"
+                    )
+                else:
+                    color_owners[symbol] = category
+
+        expected_contrast = {
+            "normalTextMinimumContrast": 4.5,
+            "largeTextMinimumContrast": 3.0,
+            "essentialGlyphMinimumContrast": 3.0,
+        }
+        for key, expected in expected_contrast.items():
+            value = button_color_policy.get(key)
+            if not isinstance(value, (int, float)) or value != expected:
+                errors.append(
+                    f"buttonColorPolicy {key} 必须为 {expected:g}"
+                )
 
     catalog_policy = policy.get("componentCatalogPolicy")
     if not isinstance(catalog_policy, dict):

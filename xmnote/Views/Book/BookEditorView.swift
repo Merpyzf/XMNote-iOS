@@ -17,6 +17,28 @@ private enum BookEditorTypography {
     static let headerTitle = AppTypography.brandDisplay(size: 24, relativeTo: .title3)
 }
 
+/// 书籍长表单的页面私有焦点 owner；同名字段只会出现在互斥的编辑模式中。
+private enum BookEditorField: Hashable {
+    case title
+    case rawTitle
+    case author
+    case translator
+    case press
+    case isbn
+    case pubDate
+    case authorIntro
+    case summary
+    case catalog
+    case coverURL
+    case currentProgress
+    case totalPosition
+    case totalPages
+    case source
+    case group
+    case tag
+    case price
+}
+
 /// 书籍完整录入页入口，支持搜索结果预填、手动创建、既有书籍编辑与不恢复占位书的资料编辑。
 struct BookEditorView: View {
     let mode: BookEditorMode
@@ -28,6 +50,7 @@ struct BookEditorView: View {
     @State private var viewModel: BookEditorViewModel?
     @State private var showsDiscardDialog = false
     @State private var bootstrapLoadingGate = LoadingGate()
+    @FocusState private var focusedField: BookEditorField?
 
     init(
         seed: BookEditorSeed?,
@@ -69,6 +92,7 @@ struct BookEditorView: View {
             await newViewModel.loadIfNeeded()
         }
         .onDisappear {
+            focusedField = nil
             bootstrapLoadingGate.hideImmediately()
         }
     }
@@ -96,6 +120,7 @@ struct BookEditorView: View {
                     .padding(.bottom, BookEditorLayout.formBottomPadding)
                 }
                 .scrollIndicators(.hidden)
+                .scrollDismissesKeyboard(.interactively)
             } else if viewModel.isLoading {
                 if readLoadingGate.isVisible {
                     LoadingStateView("正在准备录入表单…")
@@ -116,6 +141,7 @@ struct BookEditorView: View {
             canPop: !viewModel.hasUnsavedChanges && !viewModel.isSaving,
             onBlockedAttempt: {
                 if !viewModel.isSaving {
+                    focusedField = nil
                     showsDiscardDialog = true
                 }
             }
@@ -217,6 +243,7 @@ struct BookEditorView: View {
 
     private func handleDismissAttempt(using viewModel: BookEditorViewModel) {
         guard !viewModel.isSaving else { return }
+        focusedField = nil
         if viewModel.hasUnsavedChanges {
             showsDiscardDialog = true
         } else {
@@ -226,16 +253,16 @@ struct BookEditorView: View {
 
     private func baseInfoSection(_ viewModel: BookEditorViewModel, draft: BookEditorDraft) -> some View {
         editorSection(title: "基础信息") {
-            editorTextField("书名", text: binding(viewModel, \.title))
-            editorTextField("原书名", text: binding(viewModel, \.rawTitle))
-            editorTextField("作者", text: binding(viewModel, \.author))
-            editorTextField("译者", text: binding(viewModel, \.translator))
-            editorTextField("出版社", text: binding(viewModel, \.press))
-            editorTextField("ISBN", text: binding(viewModel, \.isbn), keyboardType: .asciiCapable)
-            editorTextField("出版日期", text: binding(viewModel, \.pubDate))
-            editorTextEditor("作者简介", text: binding(viewModel, \.authorIntro), minHeight: 96)
-            editorTextEditor("摘要", text: binding(viewModel, \.summary), minHeight: BookEditorLayout.longTextMinimumHeight)
-            editorTextEditor("目录", text: binding(viewModel, \.catalog), minHeight: BookEditorLayout.longTextMinimumHeight)
+            editorTextField("书名", text: binding(viewModel, \.title), field: .title)
+            editorTextField("原书名", text: binding(viewModel, \.rawTitle), field: .rawTitle)
+            editorTextField("作者", text: binding(viewModel, \.author), field: .author)
+            editorTextField("译者", text: binding(viewModel, \.translator), field: .translator)
+            editorTextField("出版社", text: binding(viewModel, \.press), field: .press)
+            editorTextField("ISBN", text: binding(viewModel, \.isbn), field: .isbn, keyboardType: .asciiCapable)
+            editorTextField("出版日期", text: binding(viewModel, \.pubDate), field: .pubDate)
+            editorTextEditor("作者简介", text: binding(viewModel, \.authorIntro), field: .authorIntro, minHeight: 96)
+            editorTextEditor("摘要", text: binding(viewModel, \.summary), field: .summary, minHeight: BookEditorLayout.longTextMinimumHeight)
+            editorTextEditor("目录", text: binding(viewModel, \.catalog), field: .catalog, minHeight: BookEditorLayout.longTextMinimumHeight)
         }
     }
 
@@ -249,16 +276,16 @@ struct BookEditorView: View {
                 .font(AppTypography.caption)
                 .foregroundStyle(Color.textSecondary)
 
-            editorTextField("书名", text: binding(viewModel, \.title))
-            editorTextField("作者", text: binding(viewModel, \.author))
-            editorTextField("译者", text: binding(viewModel, \.translator))
-            editorTextField("出版社", text: binding(viewModel, \.press))
-            editorTextField("ISBN", text: binding(viewModel, \.isbn), keyboardType: .asciiCapable)
-            editorTextField("出版日期", text: binding(viewModel, \.pubDate))
-            editorTextField("封面链接", text: binding(viewModel, \.coverURL))
-            editorTextEditor("作者简介", text: binding(viewModel, \.authorIntro), minHeight: 96)
-            editorTextEditor("摘要", text: binding(viewModel, \.summary), minHeight: BookEditorLayout.longTextMinimumHeight)
-            editorTextEditor("目录", text: binding(viewModel, \.catalog), minHeight: BookEditorLayout.longTextMinimumHeight)
+            editorTextField("书名", text: binding(viewModel, \.title), field: .title)
+            editorTextField("作者", text: binding(viewModel, \.author), field: .author)
+            editorTextField("译者", text: binding(viewModel, \.translator), field: .translator)
+            editorTextField("出版社", text: binding(viewModel, \.press), field: .press)
+            editorTextField("ISBN", text: binding(viewModel, \.isbn), field: .isbn, keyboardType: .asciiCapable)
+            editorTextField("出版日期", text: binding(viewModel, \.pubDate), field: .pubDate)
+            editorTextField("封面链接", text: binding(viewModel, \.coverURL), field: .coverURL)
+            editorTextEditor("作者简介", text: binding(viewModel, \.authorIntro), field: .authorIntro, minHeight: 96)
+            editorTextEditor("摘要", text: binding(viewModel, \.summary), field: .summary, minHeight: BookEditorLayout.longTextMinimumHeight)
+            editorTextEditor("目录", text: binding(viewModel, \.catalog), field: .catalog, minHeight: BookEditorLayout.longTextMinimumHeight)
         }
     }
 
@@ -307,27 +334,27 @@ struct BookEditorView: View {
         editorSection(title: "进度信息") {
             switch draft.progressUnit {
             case .progress:
-                editorTextField("当前进度（0-100）", text: binding(viewModel, \.currentProgressText), keyboardType: .decimalPad)
+                editorTextField("当前进度（0-100）", text: binding(viewModel, \.currentProgressText), field: .currentProgress, keyboardType: .decimalPad)
             case .position:
-                editorTextField("当前位置", text: binding(viewModel, \.currentProgressText), keyboardType: .numberPad)
-                editorTextField("总位置", text: binding(viewModel, \.totalPositionText), keyboardType: .numberPad)
+                editorTextField("当前位置", text: binding(viewModel, \.currentProgressText), field: .currentProgress, keyboardType: .numberPad)
+                editorTextField("总位置", text: binding(viewModel, \.totalPositionText), field: .totalPosition, keyboardType: .numberPad)
             case .pagination:
-                editorTextField("当前页数", text: binding(viewModel, \.currentProgressText), keyboardType: .numberPad)
-                editorTextField("总页数", text: binding(viewModel, \.totalPagesText), keyboardType: .numberPad)
+                editorTextField("当前页数", text: binding(viewModel, \.currentProgressText), field: .currentProgress, keyboardType: .numberPad)
+                editorTextField("总页数", text: binding(viewModel, \.totalPagesText), field: .totalPages, keyboardType: .numberPad)
             }
         }
     }
 
     private func relationSection(_ viewModel: BookEditorViewModel, draft: BookEditorDraft) -> some View {
         editorSection(title: "分组与标签") {
-            editorTextField("来源", text: binding(viewModel, \.sourceName))
+            editorTextField("来源", text: binding(viewModel, \.sourceName), field: .source)
             suggestionStrip(
                 options: viewModel.options?.sources ?? [],
                 selectedTitle: draft.sourceName,
                 onTap: viewModel.selectSource(_:)
             )
 
-            editorTextField("分组", text: binding(viewModel, \.groupName))
+            editorTextField("分组", text: binding(viewModel, \.groupName), field: .group)
             suggestionStrip(
                 options: viewModel.options?.groups ?? [],
                 selectedTitle: draft.groupName,
@@ -342,7 +369,7 @@ struct BookEditorView: View {
                 editorTextField("输入后回车添加", text: Binding(
                     get: { viewModel.tagInput },
                     set: { viewModel.updateTagInput($0) }
-                ))
+                ), field: .tag)
                 .onSubmit {
                     viewModel.commitTagInput()
                 }
@@ -368,8 +395,8 @@ struct BookEditorView: View {
 
     private func extraInfoSection(_ viewModel: BookEditorViewModel, draft: BookEditorDraft) -> some View {
         editorSection(title: "其它信息") {
-            editorTextField("封面链接", text: binding(viewModel, \.coverURL))
-            editorTextField("价格", text: binding(viewModel, \.priceText), keyboardType: .decimalPad)
+            editorTextField("封面链接", text: binding(viewModel, \.coverURL), field: .coverURL)
+            editorTextField("价格", text: binding(viewModel, \.priceText), field: .price, keyboardType: .decimalPad)
 
             DatePicker(
                 "购买日期",
@@ -395,6 +422,7 @@ struct BookEditorView: View {
             }
 
             Button {
+                focusedField = nil
                 Task {
                     let result = await viewModel.save()
                     if let result {
@@ -453,6 +481,7 @@ struct BookEditorView: View {
     private func editorTextField(
         _ title: String,
         text: Binding<String>,
+        field: BookEditorField,
         keyboardType: UIKeyboardType = .default
     ) -> some View {
         VStack(alignment: .leading, spacing: Spacing.half) {
@@ -461,6 +490,13 @@ struct BookEditorView: View {
                 .foregroundStyle(Color.textPrimary)
 
             TextField(title, text: text)
+                .focused($focusedField, equals: field)
+                .submitLabel(field == .tag ? .return : .done)
+                .onSubmit {
+                    if field != .tag {
+                        focusedField = nil
+                    }
+                }
                 .keyboardType(keyboardType)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
@@ -473,6 +509,7 @@ struct BookEditorView: View {
     private func editorTextEditor(
         _ title: String,
         text: Binding<String>,
+        field: BookEditorField,
         minHeight: CGFloat
     ) -> some View {
         VStack(alignment: .leading, spacing: Spacing.half) {
@@ -481,6 +518,7 @@ struct BookEditorView: View {
                 .foregroundStyle(Color.textPrimary)
 
             TextEditor(text: text)
+                .focused($focusedField, equals: field)
                 .scrollContentBackground(.hidden)
                 .padding(Spacing.cozy)
                 .frame(minHeight: minHeight)

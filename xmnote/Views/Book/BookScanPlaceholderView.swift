@@ -15,6 +15,7 @@ struct BookScanPlaceholderView: View {
 
     @State private var manualISBN = ""
     @State private var feedback: String?
+    @FocusState private var isManualISBNFocused: Bool
 
     init(onISBNScanned: @escaping (String) -> Void = { _ in }) {
         self.onISBNScanned = onISBNScanned
@@ -31,6 +32,7 @@ struct BookScanPlaceholderView: View {
             .padding(.bottom, Spacing.screenEdge)
         }
         .scrollIndicators(.hidden)
+        .scrollDismissesKeyboard(.interactively)
         .background(Color.surfacePage)
         .navigationTitle("扫码录入")
         .navigationBarTitleDisplayMode(.inline)
@@ -84,6 +86,9 @@ struct BookScanPlaceholderView: View {
                     .textInputAutocapitalization(.characters)
                     .autocorrectionDisabled()
                     .keyboardType(.asciiCapable)
+                    .focused($isManualISBNFocused)
+                    .submitLabel(.search)
+                    .onSubmit { submitISBNCandidate(manualISBN) }
                     .padding(.horizontal, Spacing.base)
                     .frame(minHeight: InteractionMetrics.minimumTouchTarget)
                     .background(Color.surfaceNested, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
@@ -140,6 +145,7 @@ struct BookScanPlaceholderView: View {
             feedback = "请扫描或输入 10 位/13 位 ISBN"
             return
         }
+        isManualISBNFocused = false
         feedback = "已识别 ISBN：\(isbn)"
         onISBNScanned(isbn)
     }

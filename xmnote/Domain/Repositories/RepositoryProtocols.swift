@@ -463,12 +463,34 @@ protocol ExternalAppIntegrationRepositoryProtocol {
     func send(noteID: Int64, to destination: ExternalAppDestination) async throws -> ExternalAppIntegrationSendResult
 }
 
-/// AI 仓储契约，统一封装完整本机配置快照、OpenAI-compatible 请求与自动标签写回。
+/// AI 仓储契约，统一封装完整本机配置快照、单任务提示词、OpenAI-compatible 请求与自动标签写回。
 nonisolated protocol AIRepositoryProtocol: Sendable {
     /// 读取配置与各供应商密钥存在状态；明文密钥不会离开 Repository/Service 边界。
     func fetchConfiguration() async throws -> AIConfigurationSnapshot
     /// 保存非敏感配置，并可选更新当前供应商密钥；`apiKey=nil` 表示保留已有密钥。
     func saveConfiguration(_ configuration: AIConfiguration, apiKey: String?) async throws
+    /// 原子更新一个任务的 System/User 组合，不提交设置页尚未保存的模型、开关或密钥草稿。
+    func savePromptTemplate(_ template: AIPromptTemplate, for kind: AIPromptKind) async throws
+    /// 使用正式请求构建器生成离线预览，不读取凭据或发起网络请求。
+    func makePromptPreview(
+        kind: AIPromptKind,
+        template: AIPromptTemplate,
+        sample: AIPromptSampleContext
+    ) throws -> AIPromptRequestPreview
+    /// 用相同模型、参数和上下文流式试运行当前草稿；对照时并发输出当前与应用原始提示词事件。
+    func streamPromptTrial(
+        kind: AIPromptKind,
+        template: AIPromptTemplate,
+        sample: AIPromptSampleContext,
+        comparesDefault: Bool
+    ) -> AsyncThrowingStream<AIPromptTrialEvent, Error>
+    /// 根据自然语言期望优化当前字段；不读取或上传任何书摘正文。
+    func optimizePrompt(
+        kind: AIPromptKind,
+        field: AIPromptEditorField,
+        currentText: String,
+        instruction: String
+    ) async throws -> String
     /// 删除指定供应商密钥，不改变另一供应商配置。
     func deleteAPIKey(for provider: AIProvider) async throws
     /// 对单条书摘执行 SSE 流式解读，元素为截至当前的完整累积文本；取消消费流会取消网络请求。

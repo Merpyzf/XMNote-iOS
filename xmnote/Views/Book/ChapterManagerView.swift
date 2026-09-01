@@ -228,7 +228,7 @@ private struct ChapterManagerContentView: View {
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
             .background(Color.surfacePage)
-            .scrollDismissesKeyboard(.interactively)
+            .scrollDismissesKeyboard(.immediately)
             .onChange(of: viewModel.pendingScrollTargetID, initial: true) { _, targetID in
                 guard let targetID else { return }
                 Task { @MainActor in

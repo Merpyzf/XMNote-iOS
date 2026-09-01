@@ -9,6 +9,11 @@ import SwiftUI
 
 /// 进度编辑 Sheet；写入开始后即时禁用入口，错误留在当前任务上下文中展示。
 struct BookReadingProgressSheet: View {
+    private enum Field: Hashable {
+        case current
+        case total
+    }
+
     let isSaving: Bool
     let onSave: (Double, Int64?) async throws -> Void
 
@@ -16,6 +21,7 @@ struct BookReadingProgressSheet: View {
     @State private var currentText: String
     @State private var totalText: String
     @State private var errorMessage: String?
+    @FocusState private var focusedField: Field?
     private let unit: Int64
 
     /// 纸书始终使用页码；电子书再依据 position_unit 选择百分比、位置或页码。
@@ -47,6 +53,9 @@ struct BookReadingProgressSheet: View {
                     TextField(currentPlaceholder, text: $currentText)
                         .keyboardType(unit == 0 ? .decimalPad : .numberPad)
                         .textInputAutocapitalization(.never)
+                        .focused($focusedField, equals: .current)
+                        .submitLabel(unit == 0 ? .done : .next)
+                        .onSubmit { focusedField = unit == 0 ? nil : .total }
                 }
 
                 if unit != 0 {
@@ -54,6 +63,9 @@ struct BookReadingProgressSheet: View {
                         TextField(totalPlaceholder, text: $totalText)
                             .keyboardType(.numberPad)
                             .textInputAutocapitalization(.never)
+                            .focused($focusedField, equals: .total)
+                            .submitLabel(.done)
+                            .onSubmit { focusedField = nil }
                     }
                 }
 
@@ -65,12 +77,14 @@ struct BookReadingProgressSheet: View {
                     }
                 }
             }
+            .scrollDismissesKeyboard(.interactively)
             .disabled(isSaving)
             .navigationTitle("更新阅读进度")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button {
+                        focusedField = nil
                         dismiss()
                     } label: {
                         Image(systemName: "xmark")
@@ -114,6 +128,7 @@ struct BookReadingProgressSheet: View {
     private func save() async {
         do {
             let values = try validatedValues()
+            focusedField = nil
             errorMessage = nil
             try await onSave(values.current, values.total)
             dismiss()

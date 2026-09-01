@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Foundation/UserDefaults 原子保存完整 AI 配置，依赖 Security 迁移并清理旧 Keychain 凭据
- * [OUTPUT]: 对外提供 AIConfigurationStore，异步读取 iOS 产品投影、更新、备份和整组恢复 ai.configuration.v2
+ * [OUTPUT]: 对外提供 AIConfigurationStore，异步读取 iOS 产品投影、完整更新、单任务 Prompt 原子更新、备份和整组恢复 ai.configuration.v2
  * [POS]: Services 层 AI 配置存储边界，被 AIRepository 与 iOS 偏好备份协调器使用，禁止 ViewModel 直接访问持久化容器
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -89,7 +89,8 @@ actor AIConfigurationStore {
 
     /// 保存完整 v2 快照；`apiKey=nil` 保留当前供应商密钥，Actor 串行化避免配置与凭据交叉覆盖。
     func save(_ configuration: AIConfiguration, apiKey: String?) async throws {
-        var stored = try await loadOrMigrate()
+        _ = try await loadOrMigrate()
+        var stored = try currentStoredConfiguration()
         stored.configuration = configuration.normalized
         if let apiKey {
             let trimmed = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -97,6 +98,14 @@ actor AIConfigurationStore {
                 stored.setAPIKey(trimmed, for: stored.configuration.provider)
             }
         }
+        try persist(stored)
+    }
+
+    /// 在 Actor 内读取最新快照并只替换一个任务 Prompt，避免覆盖设置页尚未保存的其他配置草稿。
+    func savePromptTemplate(_ template: AIPromptTemplate, for kind: AIPromptKind) async throws {
+        _ = try await loadOrMigrate()
+        var stored = try currentStoredConfiguration()
+        stored.configuration.prompts.setTemplate(template, for: kind)
         try persist(stored)
     }
 
@@ -108,7 +117,8 @@ actor AIConfigurationStore {
 
     /// 删除指定供应商密钥并提交新的完整 v2 快照，不影响另一供应商凭据。
     func deleteCredential(for provider: AIProvider) async throws {
-        var stored = try await loadOrMigrate()
+        _ = try await loadOrMigrate()
+        var stored = try currentStoredConfiguration()
         stored.setAPIKey("", for: provider)
         try persist(stored)
     }
@@ -161,6 +171,16 @@ actor AIConfigurationStore {
             return .androidAlignedDefault
         }
         return configuration
+    }
+
+    /// 在所有潜在挂起点结束后同步重读 v2，确保部分更新基于 Actor 当前最新落盘值。
+    private func currentStoredConfiguration() throws -> StoredAIConfigurationV2 {
+        guard let data = defaults.data(forKey: Keys.configuration),
+              let stored = try? decoder.decode(StoredAIConfigurationV2.self, from: data),
+              stored.formatVersion == StoredAIConfigurationV2.currentFormatVersion else {
+            throw AIRepositoryError.credentialStore("AI 配置格式无法读取")
+        }
+        return StoredAIConfigurationV2(snapshot: stored.preferenceSnapshot.normalized)
     }
 
     private func persist(_ stored: StoredAIConfigurationV2) throws {

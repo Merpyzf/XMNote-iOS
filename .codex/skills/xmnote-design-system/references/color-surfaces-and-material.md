@@ -30,7 +30,7 @@
 | 普通菜单及选中标记 | `menuActionForeground` / `menuSelectedForeground` | 隔离根级品牌 tint，不替代 destructive 语义 |
 | 主容器/普通/弱边界 | `surfaceBorderStrong/Default/Subtle` | 按实际表层层级选择，不按“越深越重要”机械套用 |
 | 内容分隔 | `surfaceDividerDefault/Subtle` | 分节或卡片内部弱分组；不与卡片边框竞争 |
-| 页面唯一主提交 | `primaryActionFill` + `primaryActionForeground` | 明确提交/确认动作，不用于普通可点击项 |
+| 页面唯一主提交 | `primaryActionFill` + `primaryActionForeground` | 仅表达主操作语义归属；使用前仍须验证实际前景—背景对比度，不用于普通可点击项 |
 | 禁用主操作 | `buttonDisabled` + `buttonDisabledForeground` | 视觉必须同时体现不可用且保留可读性 |
 | 选择 | `selectionAccent/Foreground/Inactive` | 选中状态，不替代链接、成功或普通品牌装饰 |
 | 删除/错误、警告、成功 | `feedbackError/Warning/Success` | 必须同时有文案、图标或控件语义，不能只靠颜色 |
@@ -63,6 +63,30 @@ token 存在不等于每个层级都必须使用。`surfaceBorderStrong`、`surf
 - 阅读状态、热力图、日历主题、评分、封面装饰等业务颜色由各自 catalog/Appearance owner 管理；页面不得把其颜色提升为全局 token。
 - Domain 只保留状态、等级或数值，颜色与图标映射留在 UIComponents 或具体页面 presentation owner。
 
+## 操作按钮前景—背景配对
+
+本节只约束执行动作的 `Button`，不把规则扩展到 Toggle、Picker、选择器、标签、状态徽记或纯展示内容；这些控件继续使用各自的选择、状态或内容语义。
+
+按钮颜色必须按“前景 + 表层 + 状态”成对判断，不能只看到某个 token 名称就认定合规：
+
+| 按钮角色 | 前景 | 表层 | 约束 |
+| --- | --- | --- | --- |
+| 页面唯一主操作 | 经验证的中性前景，语义入口为 `primaryActionForeground` | 品牌主操作填充，语义入口为 `primaryActionFill` | 只用于提交、创建或确认；token 成对命名不代表已经通过对比度验证 |
+| 普通次级操作 | `textPrimary/textSecondary`、对应中性图标或系统默认前景 | 透明表层或 `controlFillSecondary` 等中性弱表层 | 必须隔离根级品牌 tint，不因可点击而产生品牌弱填充 |
+| 品牌文字型操作 | 经过测量的品牌派生前景；优先使用已有正文动作语义而不是 `appTint` | 透明或中性表层 | 仅在确有稀缺主语义时使用；不得同时放到品牌派生表层上 |
+| 删除/警告 | `feedbackError` / `feedbackWarning` 或系统对应 role | 中性/透明表层，或经验证的反馈语义填充与中性前景 | 不得被 `appTint` 覆盖；状态必须同时由文案、图标或 role 表达 |
+| 禁用 | `buttonDisabledForeground` | `buttonDisabled` | 前景与表层同时进入禁用态，不能只降低单侧透明度 |
+
+以下组合直接禁止：
+
+- 品牌派生文字或图标叠加在品牌派生实心、描边弱填充或透明度派生表层上；这里的“品牌派生”按真实颜色来源判断，包括 `appTint`、`primaryActionFill`、`selectionAccent`、`feedbackSuccess` 及从品牌色派生的文字语义，不能靠改名规避。
+- 原生 `.buttonStyle(.bordered)` 未显式隔离 tint。它会消费环境 tint，根层 `.tint(Color.appTint)` 可能同时生成品牌前景与品牌弱填充；`role: .destructive` 也不能代替实际渲染检查。
+- 用 `.opacity(...)`、自定义 overlay 或相近品牌色阶制造“看起来更淡”的同品牌配对；降低饱和度或透明度不会自动建立层级与可读性。
+
+品牌实心表层配合中性前景并非默认违规，但仅允许给页面唯一主操作，且必须提供实际测量结果。当前 `primaryActionFill + primaryActionForeground` 只证明语义配对，不证明浅色、深色和高对比度下均已达标；在完成测量前不得以 token 名称为依据复制新的突出按钮。
+
+对比度验证必须记录前景、背景、控件状态和外观模式：普通按钮文字至少 `4.5:1`，大字号按钮文字至少 `3:1`，关键图标与控件可辨边界至少 `3:1`。动态 `Color` 无法仅凭静态源码得出比例；机器报告只标记结构和 token 风险，最终结论必须来自实际解析颜色或运行态截图测量。
+
 ## 图标与 tint
 
 - 先确认图标的业务语义和 owner，再选 SF Symbol。相同图形不等于相同业务角色。
@@ -89,6 +113,6 @@ Liquid Glass 是导航层和功能层的交互材质，不是内容背景主题�
 
 - 至少验证浅色、深色；涉及语义色调整时验证系统高对比度。
 - 对比度结论写清前景、背景、状态、外观模式和测量结果。正文目标至少 4.5:1，大字号或强调标题至少 3:1；代码 token 名称不能替代测量。
-- 检查根级 tint 是否意外传播到 toolbar、Menu、Picker、Toggle 和 SF Symbol。
+- 检查根级 tint 是否意外传播到 Button、toolbar、Menu、Picker、Toggle 和 SF Symbol；操作按钮按本文件的前景—背景配对规则单独判断。
 - 状态不得只靠颜色区分；同时检查文案、图标、形状或控件状态。
 - 没有截图或实际渲染时，只能报告 token/结构风险；“太灰、太绿、太脏、层级弱”等结论标记为“视觉风险，需截图验证”。

@@ -53,9 +53,10 @@ description: 为 XMNote 的 iOS/SwiftUI/UIKit 界面提供项目级设计系统�
 
 - 整体信息层级、品牌表达、文案、适配或可访问性：读取 [设计语言](references/design-language.md)。
 - 字体角色、字号层级、行距、间距、圆角、描边或布局密度：读取 [排版、间距与布局](references/typography-and-layout.md)。
-- 颜色、表层、卡片、图标、品牌 tint、阴影或 Liquid Glass：读取 [颜色、表层、图标与材质](references/color-surfaces-and-material.md)。
+- 颜色、表层、卡片、图标、品牌 tint、操作按钮前景—背景配对、阴影或 Liquid Glass：读取 [颜色、表层、图标与材质](references/color-surfaces-and-material.md)。
 - 页面或局部空态、搜索/筛选无结果、加载、失败、内容失效、保留内容错误、状态组件治理或状态视觉评审：读取 [页面状态与反馈](references/state-presentation.md)。
 - 业务 Sheet 的骨架、标题操作、内容边距、卡片、圆角、Detent、退出保护或专项例外：读取 [业务 Sheet](references/sheets.md)。
+- 文本输入焦点、软键盘收起、滚动手势、键盘避让、Sheet 手势冲突或 UIKit 输入桥接：读取 [软键盘与输入焦点](references/keyboard-and-focus.md)。
 - 组件归位、Settings、导航、Toast/Alert、点击热区或滚动：读取 [组件与交互](references/components-and-interaction.md)。
 - 评审、规范缺口、疑似丑陋设计或公共抽象提议：读取 [证据与评审](references/evidence-and-review.md)。
 
@@ -67,6 +68,7 @@ description: 为 XMNote 的 iOS/SwiftUI/UIKit 界面提供项目级设计系统�
 - 重复实现已有 canonical 组件，或绕过集中字体、颜色与组件入口。
 - 仅凭一个场景新增全局 token、公共样式、公共组件或基础设施。
 - 用品牌色泛化“可点击”，在内容层滥用玻璃，或用卡片嵌套、渐变、重阴影和装饰动效掩盖层级问题。
+- 在操作按钮中把品牌派生文字或图标叠加到品牌派生实心/弱填充表层，或让 `.bordered` 无审查地继承根级 `appTint`；按钮必须按语义成对选择前景与背景，并验证实际对比度。
 - 没有运行态证据却把主观观感写成已确认缺陷。
 - 通过扩大排除范围、降低规则级别或新增 baseline 消除设计系统失败。
 

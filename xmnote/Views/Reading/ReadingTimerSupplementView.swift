@@ -10,6 +10,13 @@ import UIKit
 
 /// 阅读补录页面，默认使用“日期 + 时长”的轻量补录路径，并保留精确开始/结束时间模式。
 struct ReadingTimerSupplementView: View {
+    private enum Field: Hashable {
+        case hours
+        case minutes
+        case position
+        case insight
+    }
+
     let bookId: Int64
 
     @Environment(RepositoryContainer.self) private var repositories
@@ -17,6 +24,7 @@ struct ReadingTimerSupplementView: View {
     @State private var viewModel: ReadingTimerSupplementViewModel?
     @State private var bootstrapLoadingGate = LoadingGate()
     @State private var shouldPresentLongDurationConfirmation = false
+    @FocusState private var focusedField: Field?
 
     var body: some View {
         ZStack {
@@ -43,6 +51,7 @@ struct ReadingTimerSupplementView: View {
             dismiss()
         }
         .onDisappear {
+            focusedField = nil
             bootstrapLoadingGate.hideImmediately()
         }
         .xmSystemAlert(
@@ -107,11 +116,17 @@ struct ReadingTimerSupplementView: View {
                     HStack(spacing: Spacing.base) {
                         TextField("小时", text: Binding(get: { viewModel.hoursText }, set: { viewModel.hoursText = $0 }))
                             .keyboardType(.numberPad)
+                            .focused($focusedField, equals: .hours)
+                            .submitLabel(.next)
+                            .onSubmit { focusedField = .minutes }
                         Text("小时")
                             .font(AppTypography.body)
                             .foregroundStyle(Color.textSecondary)
                         TextField("分钟", text: Binding(get: { viewModel.minutesText }, set: { viewModel.minutesText = $0 }))
                             .keyboardType(.numberPad)
+                            .focused($focusedField, equals: .minutes)
+                            .submitLabel(.next)
+                            .onSubmit { focusedField = .position }
                         Text("分钟")
                             .font(AppTypography.body)
                             .foregroundStyle(Color.textSecondary)
@@ -138,6 +153,9 @@ struct ReadingTimerSupplementView: View {
                     set: { viewModel.positionText = $0 }
                 ))
                 .keyboardType(positionKeyboardType(for: viewModel.bookContext))
+                .focused($focusedField, equals: .position)
+                .submitLabel(.next)
+                .onSubmit { focusedField = .insight }
             }
 
             Section("本次感悟") {
@@ -159,6 +177,8 @@ struct ReadingTimerSupplementView: View {
                 }
             }
         }
+        .scrollDismissesKeyboard(.interactively)
+        .onChange(of: viewModel.mode) { _, _ in focusedField = nil }
         .safeAreaInset(edge: .bottom) {
             supplementSaveBar(viewModel)
         }
@@ -200,6 +220,7 @@ struct ReadingTimerSupplementView: View {
             Divider()
 
             Button {
+                focusedField = nil
                 if viewModel.needsLongDurationConfirmation {
                     shouldPresentLongDurationConfirmation = true
                 } else {
@@ -246,6 +267,7 @@ struct ReadingTimerSupplementView: View {
                 get: { viewModel.insight },
                 set: { viewModel.insight = $0 }
             ))
+            .focused($focusedField, equals: .insight)
             .font(AppTypography.body)
             .frame(minHeight: 96)
             .scrollContentBackground(.hidden)

@@ -742,8 +742,7 @@ private struct ContentViewerLoadedView: View {
     private func presentAutoTag() {
         guard case .note(let noteID)? = viewModel.selectedItemID else { return }
         autoTagPresentation = AIAutoTagPresentation(
-            noteID: noteID,
-            bookTitle: selectedNoteDetail?.bookTitle ?? viewModel.selectedBookTitle
+            noteID: noteID
         )
     }
 

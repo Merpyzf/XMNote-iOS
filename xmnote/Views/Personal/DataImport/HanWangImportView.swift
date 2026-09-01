@@ -10,6 +10,12 @@ import Vision
 import VisionKit
 
 struct HanWangImportView: View {
+    private enum Field: Hashable {
+        case link
+        case title
+        case content
+    }
+
     let repository: any NoteImportRepositoryProtocol
     @State private var scannedURL = ""
     @State private var bookTitle = ""
@@ -20,6 +26,7 @@ struct HanWangImportView: View {
     @State private var errorMessage: String?
     @State private var task: Task<Void, Never>?
     @State private var readLoadingGate = LoadingGate()
+    @FocusState private var focusedField: Field?
 
     var body: some View {
         Form {
@@ -28,11 +35,29 @@ struct HanWangImportView: View {
                     if DataScannerViewController.isSupported && DataScannerViewController.isAvailable {
                         HanWangQRScanner { value in guard scannedURL != value else { return }; scannedURL = value; load(value) } onError: { errorMessage = $0 }
                             .frame(height: 320).clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockLarge))
-                    } else { TextField("也可以粘贴二维码中的链接", text: $scannedURL); Button("读取链接") { load(scannedURL) } }
+                    } else {
+                        TextField("也可以粘贴二维码中的链接", text: $scannedURL)
+                            .keyboardType(.URL)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .focused($focusedField, equals: .link)
+                            .submitLabel(.go)
+                            .onSubmit { load(scannedURL) }
+                        Button("读取链接") { load(scannedURL) }
+                    }
                 }
             } else {
-                Section("书籍信息") { TextField("书名", text: $bookTitle) }
-                Section("书摘内容") { TextEditor(text: $noteContent).frame(minHeight: 260) }
+                Section("书籍信息") {
+                    TextField("书名", text: $bookTitle)
+                        .focused($focusedField, equals: .title)
+                        .submitLabel(.next)
+                        .onSubmit { focusedField = .content }
+                }
+                Section("书摘内容") {
+                    TextEditor(text: $noteContent)
+                        .focused($focusedField, equals: .content)
+                        .frame(minHeight: 260)
+                }
                 Section { Button("开始导入") { parse() }.disabled(bookTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || noteContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
             }
             if readLoadingGate.isVisible {
@@ -42,11 +67,13 @@ struct HanWangImportView: View {
                 }
             }
         }
+        .scrollDismissesKeyboard(.interactively)
         .navigationTitle("汉王阅读器")
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(isPresented: $opensPreview) { UnifiedNoteImportPreviewView(books: books, repository: repository) }
         .onChange(of: isLoading) { _, _ in syncReadLoadingVisibility() }
         .onDisappear {
+            focusedField = nil
             task?.cancel()
             readLoadingGate.hideImmediately()
         }
@@ -67,6 +94,7 @@ struct HanWangImportView: View {
 
     private func load(_ value: String) {
         guard !value.isEmpty else { errorMessage = "未识别到二维码链接"; return }
+        focusedField = nil
         isLoading = true
         syncReadLoadingVisibility()
         task = Task {
@@ -79,6 +107,7 @@ struct HanWangImportView: View {
     }
 
     private func parse() {
+        focusedField = nil
         task = Task {
             do {
                 books = try await HanWangNoteImportParser(bookTitle: bookTitle).parse(data: Data(noteContent.utf8), fileExtension: "txt").map { source in var value = source; value.source = 19; return value }

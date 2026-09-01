@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 AITextResultViewModel/AIAutoTagViewModel、AIRepositoryProtocol、AIMarkdownResultView、XMPopupButton、系统 NavigationStack/Toolbar/safeAreaBar、iOS 26 Liquid Glass、LoadingGate、xmMinimumHitTarget 与现有反馈组件
+ * [INPUT]: 依赖 AITextResultViewModel/AIAutoTagViewModel、AIRepositoryProtocol、AIMarkdownResultView、AIGenerationWaitingView、XMPopupButton、系统 NavigationStack/Toolbar/scrollEdgeEffectStyle、iOS 26 Liquid Glass、LoadingGate、xmMinimumHitTarget 与现有反馈组件
  * [OUTPUT]: 对外提供 AITextResultSheet、AIAutoTagSheet 及可复现等待/空结果/失败状态的业务展示单元；AI 释义承接模型切换、流式结果和编辑器请求，AI 标签承接系统确认与写回生命周期
  * [POS]: Views/Content/Sheets 的 AI 业务 Sheet，被通用 viewer 及单页详情入口复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -278,7 +278,10 @@ struct AITextResultSheet: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .transition(.opacity)
         } else if loadingGate.isVisible {
-            AIGenerationWaitingView(reduceMotion: reduceMotion)
+            AIGenerationWaitingView(
+                "正在生成…",
+                accessibilityLabel: "正在生成 AI 释义"
+            )
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .transition(.opacity)
         } else {
@@ -327,33 +330,6 @@ struct AITextResultSheet: View {
     }
 }
 
-/// 首个可见 token 返回前，以低干扰文字呼吸表达生成中的页面私有等待态。
-private struct AIGenerationWaitingView: View {
-    let reduceMotion: Bool
-
-    var body: some View {
-        if reduceMotion {
-            waitingText
-                .opacity(0.82)
-        } else {
-            PhaseAnimator([0.90, 0.55]) { opacity in
-                waitingText
-                    .opacity(opacity)
-            } animation: { _ in
-                .easeInOut(duration: 0.7)
-            }
-        }
-    }
-
-    private var waitingText: some View {
-        Text("正在生成…")
-            .font(AppTypography.footnote)
-            .foregroundStyle(Color.textSecondary)
-            .fixedSize(horizontal: false, vertical: true)
-            .accessibilityLabel("正在生成 AI 释义")
-    }
-}
-
 /// AI 标签 Sheet，先展示实时 Markdown 输出，完成解析后再交给用户选择并确认写回。
 struct AIAutoTagSheet: View {
     @Environment(\.dismiss) private var dismiss
@@ -380,7 +356,6 @@ struct AIAutoTagSheet: View {
         _viewModel = State(
             initialValue: AIAutoTagViewModel(
                 noteID: presentation.noteID,
-                bookTitle: presentation.bookTitle,
                 repository: repository
             )
         )
@@ -396,28 +371,17 @@ struct AIAutoTagSheet: View {
                     .padding(.horizontal, Spacing.screenEdge)
                     .padding(.top, Spacing.cozy)
                     .padding(.bottom, Spacing.double)
+                    .animation(
+                        reduceMotion ? nil : .smooth(duration: 0.2),
+                        value: viewModel.phaseKind
+                    )
             }
             .disabled(viewModel.isApplying)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .scrollIndicators(.hidden)
             .scrollBounceBehavior(.always)
-            .scrollEdgeEffectStyle(.soft, for: [.top, .bottom])
+            .scrollEdgeEffectStyle(.soft, for: .top)
             .scrollPosition($markdownInteractionController.scrollPosition)
-            .safeAreaBar(edge: .top, spacing: Spacing.none) {
-                Text(normalizedBookTitle)
-                    .font(AppTypography.caption)
-                    .foregroundStyle(Color.textSecondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, Spacing.screenEdge)
-                    .padding(.vertical, Spacing.cozy)
-            }
-            .safeAreaBar(edge: .bottom, spacing: Spacing.none) {
-                Color.surfaceSheet
-                    .frame(height: Spacing.half)
-                    .allowsHitTesting(false)
-            }
             .onScrollGeometryChange(for: Bool.self) { geometry in
                 let distanceFromBottom = geometry.contentSize.height
                     - geometry.contentOffset.y
@@ -494,10 +458,6 @@ struct AIAutoTagSheet: View {
                 }
         }
         .animation(
-            reduceMotion ? nil : .smooth(duration: 0.2),
-            value: viewModel.phaseKind
-        )
-        .animation(
             reduceMotion ? nil : .smooth(duration: 0.18),
             value: viewModel.applyErrorMessage
         )
@@ -508,7 +468,10 @@ struct AIAutoTagSheet: View {
         switch viewModel.phase {
         case .idle, .connecting:
             if loadingGate.isVisible {
-                AIAutoTagWaitingView()
+                AIGenerationWaitingView(
+                    "分析中…",
+                    accessibilityLabel: "正在分析书摘"
+                )
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .transition(.opacity)
             } else {
@@ -572,11 +535,6 @@ struct AIAutoTagSheet: View {
             .font(AppTypography.footnote)
             .foregroundStyle(Color.feedbackError)
             .fixedSize(horizontal: false, vertical: true)
-    }
-
-    private var normalizedBookTitle: String {
-        let title = viewModel.bookTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        return title.isEmpty ? "当前书摘" : title
     }
 
     /// 写入成功后强刷来源详情，标签 rail 与列表观察流会同步获得数据库真实结果。
@@ -728,16 +686,5 @@ private struct AIAutoTagSuggestionRow: View {
     private var reasonText: String? {
         let reason = suggestion.reason.trimmingCharacters(in: .whitespacesAndNewlines)
         return reason.isEmpty ? nil : reason
-    }
-}
-
-/// 首段 AI 标签内容返回前的静态等待态，只说明当前任务，不使用品牌色或循环动效。
-struct AIAutoTagWaitingView: View {
-    var body: some View {
-        Text("分析中…")
-            .font(AppTypography.footnote)
-            .foregroundStyle(Color.textSecondary)
-            .fixedSize(horizontal: false, vertical: true)
-            .accessibilityLabel("正在分析书摘")
     }
 }

@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 RichTextEditor 模块格式定义、RichTextTypography 与 UIKit/TextKit/UIScrollEdgeEffect 能力，承接富文本解析/渲染/编辑链路及调用方注入的编辑表层
- * [OUTPUT]: 对外提供 RichTextEditor 能力，用于富文本编辑器的序列化、交互、样式、背景连续性与系统滚动边缘支持
+ * [INPUT]: 依赖 RichTextEditor 模块格式定义、RichTextTypography 与 UIKit/TextKit/UIScrollEdgeEffect 能力，承接富文本解析/渲染/编辑链路、可选焦点绑定及调用方注入的编辑表层
+ * [OUTPUT]: 对外提供 RichTextEditor 能力，用于富文本编辑器的序列化、交互、可控焦点、样式、背景连续性与系统滚动边缘支持
  * [POS]: RichTextEditor 功能模块内部构件，服务 Note 编辑场景的 Android 业务意图对齐
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -29,6 +29,7 @@ struct RichTextEditor: UIViewRepresentable {
     var toolbarPresentation: RichTextToolbarPresentation = .inputAccessory
     var isBackgroundTransparent: Bool = false
     var usesSoftScrollEdgeEffects: Bool = false
+    var focusBinding: Binding<Bool>? = nil
     var onTextChange: (() -> Void)?
     var onFocusChange: ((Bool) -> Void)?
 
@@ -47,6 +48,7 @@ struct RichTextEditor: UIViewRepresentable {
 
         context.coordinator.currentHighlightARGB = highlightARGB
         applyToolbarPresentation(to: editorView, context: context)
+        reconcileFocus(for: editorView)
 
         // 初始内容
         if attributedText.length > 0 {
@@ -69,6 +71,7 @@ struct RichTextEditor: UIViewRepresentable {
         editorView.updateBaseFont(baseFont)
         context.coordinator.currentHighlightARGB = highlightARGB
         applyToolbarPresentation(to: editorView, context: context)
+        reconcileFocus(for: editorView)
 
         // 格式操作触发的同步不需要回写，避免用旧 binding 覆盖新格式
         guard !context.coordinator.isSyncingToBinding else {
@@ -95,6 +98,24 @@ struct RichTextEditor: UIViewRepresentable {
     /// 创建协调器用于处理编辑事件回调。
     func makeCoordinator() -> RichTextCoordinator {
         RichTextCoordinator(self)
+    }
+
+    /// 仅在调用方显式提供焦点绑定时协调 first responder；既有调用方继续由 UIKit 自主管理焦点。
+    private func reconcileFocus(for editorView: RichTextEditorView) {
+        guard let focusBinding else { return }
+        if focusBinding.wrappedValue, isEditable, !editorView.isFirstResponder {
+            editorView.becomeFirstResponder()
+        } else if (!focusBinding.wrappedValue || !isEditable), editorView.isFirstResponder {
+            editorView.resignFirstResponder()
+        }
+    }
+
+    /// 视图离开层级时只释放自身 first responder，不向全局 responder 链广播。
+    static func dismantleUIView(_ editorView: RichTextEditorView, coordinator: RichTextCoordinator) {
+        if editorView.isFirstResponder {
+            editorView.resignFirstResponder()
+        }
+        editorView.delegate = nil
     }
 
     var ornamentController: RichTextOrnamentController? {

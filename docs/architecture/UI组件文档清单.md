@@ -11,6 +11,7 @@
 | ReadingDurationRankingChart | UI-复用关键 | xmnote/UIComponents/Charts/ReadingDurationRankingChart.swift | docs/component-guides/ReadingDurationRankingChart使用说明.md | 新增/重大重构 |
 | XMRemoteImage | UI-复用关键 | xmnote/UIComponents/Media/Images/XMRemoteImage.swift | docs/component-guides/XMRemoteImage使用说明.md | 新增/重大重构 |
 | XMGIFImageView | UI-复用关键 | xmnote/UIComponents/Media/Images/XMGIFImageView.swift | docs/component-guides/XMGIFImageView使用说明.md | 新增/重大重构 |
+| AIMarkdownResultView | UI-复用关键 | xmnote/UIComponents/Media/Markdown/AIMarkdownResultView.swift | docs/component-guides/AIMarkdownResultView使用说明.md | 新增/重大重构 |
 | XMBookCover | UI-复用关键 | xmnote/UIComponents/Foundation/XMBookCover.swift | docs/component-guides/XMBookCover使用说明.md | 新增/重大重构 |
 | XMActivityShareSheet | UI-复用关键 | xmnote/UIComponents/System/Sharing/XMActivityShareSheet.swift | docs/component-guides/XMActivityShareSheet使用说明.md | 新增/重大重构 |
 | XMYearMonthPickerSheet | UI-复用关键 | xmnote/UIComponents/Sheet/XMYearMonthPickerSheet.swift | docs/component-guides/XMYearMonthPickerSheet使用说明.md | 新增/重大重构 |
@@ -20,6 +21,7 @@
 | XMSearchHistorySection | UI-复用关键 | xmnote/UIComponents/Controls/Search/XMSearchHistorySection.swift | docs/component-guides/XMSearchHistorySection使用说明.md | 新增/重大重构 |
 | XMScrollEdgeChrome | UI-复用关键 | xmnote/UIComponents/Navigation/ScrollEdge/XMScrollEdgeChrome.swift | docs/component-guides/XMScrollEdgeChrome使用说明.md | 新增/重大重构 |
 | XMScrollEdgeWash | UI-复用关键 | xmnote/UIComponents/Navigation/ScrollEdge/XMScrollEdgeWash.swift | docs/component-guides/XMScrollEdgeChrome使用说明.md | 新增/重大重构 |
+| navigationPopGuard | UI-基础设施关键 | xmnote/UIComponents/Navigation/NavigationPopGuard.swift | docs/component-guides/NavigationPopGuard使用说明.md | 新增/重大重构 |
 | ExpandableRichText | UI-复用关键 | xmnote/UIComponents/Media/RichText/ExpandableRichText.swift | docs/component-guides/ExpandableRichText使用说明.md | 新增/重大重构 |
 | RichText | UI-复用关键 | xmnote/UIComponents/Media/RichText/RichText.swift | docs/component-guides/ExpandableRichText使用说明.md | 新增/重大重构 |
 | CollapsedRichTextPreview | UI-复用关键 | xmnote/UIComponents/Media/RichText/CollapsedRichTextPreview.swift | docs/component-guides/ExpandableRichText使用说明.md | 新增/重大重构 |
@@ -68,6 +70,7 @@
 | ReadCalendarView | UI-核心页面关键 | xmnote/Views/Reading/ReadCalendar/ReadCalendarView.swift | docs/component-guides/ReadCalendar使用说明.md | 新增/重大重构 |
 | ReadingTimelineView | UI-核心页面关键 | xmnote/Views/Reading/Timeline/ReadingTimelineView.swift | docs/component-guides/ReadingTimelineView使用说明.md | 新增/重大重构 |
 | PersonalView | UI-核心页面关键 | xmnote/Views/Personal/PersonalView.swift | docs/component-guides/PersonalView使用说明.md | 新增/重大重构 |
+| AIPromptEditorView | UI-核心页面关键 | xmnote/Views/Personal/AIPromptEditorView.swift | docs/component-guides/AIPromptEditorView使用说明.md | 新增/重大重构 |
 | BookGroupManagementView | UI-核心页面关键 | xmnote/Views/Personal/BookGroupManagementView.swift | docs/component-guides/BookGroupManagementView使用说明.md | 新增/重大重构 |
 | SourceManagementView | UI-核心页面关键 | xmnote/Views/Personal/SourceManagementView.swift | docs/component-guides/SourceManagementView使用说明.md | 新增/重大重构 |
 

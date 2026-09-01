@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RichTextEditor 浮动挂饰与 UIKit soft edge 模式以及 SwiftUI safeAreaBar/glassEffect，承接书摘正文/想法的辅助编辑与 OCR 请求回流
- * [OUTPUT]: 对外提供带系统 soft 滚动边缘和底部液态玻璃挂饰的 NoteTextComposerView，服务 NoteEditorView 的正文与想法全屏编辑入口
+ * [OUTPUT]: 对外提供带可控焦点、系统 soft 滚动边缘和底部液态玻璃挂饰的 NoteTextComposerView，服务 NoteEditorView 的正文与想法全屏编辑入口
  * [POS]: Views/Note/Components 的页面私有子视图，负责液态玻璃挂饰工具栏、系统 OCR 选择与键盘联动
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -19,6 +19,7 @@ struct NoteTextComposerView: View {
     @State private var ornamentController = RichTextOrnamentController()
     @State private var showsOCRChooser = false
     @State private var errorMessage: String?
+    @State private var isEditorFocused = false
 
     var body: some View {
         editor
@@ -28,6 +29,7 @@ struct NoteTextComposerView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button {
+                        isEditorFocused = false
                         dismiss()
                     } label: {
                         Image(systemName: "xmark")
@@ -47,6 +49,7 @@ struct NoteTextComposerView: View {
                 }
                 if supportsPhotoOCR {
                     Button("拍照 OCR") {
+                        isEditorFocused = false
                         onRequestPhotoOCR()
                     }
                 }
@@ -75,7 +78,8 @@ private extension NoteTextComposerView {
             allowsCameraTextCapture: true,
             toolbarPresentation: .ornament(ornamentController),
             isBackgroundTransparent: true,
-            usesSoftScrollEdgeEffects: true
+            usesSoftScrollEdgeEffects: true,
+            focusBinding: $isEditorFocused
         )
     }
 

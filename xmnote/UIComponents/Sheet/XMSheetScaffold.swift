@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 DesignSystem 与 XMScrollEdgeChrome，接收标题、副标题、交互锁定、关闭动作及类型安全的顶部/底部/标题栏内容槽位
- * [OUTPUT]: 对外提供基于 iOS 26 系统导航标题与副标题的统一 Sheet 根骨架、标准内容顶部间距、xmSheetContentPanel 同心圆角语义，并组合滚动回弹、安全区边缘及可选固定栏
+ * [OUTPUT]: 对外提供基于 iOS 26 系统导航标题与副标题的统一 Sheet 根骨架、标准内容顶部间距、Sheet 主复合面板的 xmSheetContentPanel 同心圆角语义，并组合滚动回弹、安全区边缘及可选固定栏
  * [POS]: UIComponents/Sheet 的通用业务 Sheet 根骨架；Settings、Book、Tag 等模块共享，禁止 AnyView 类型擦除
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -14,7 +14,8 @@ enum XMSheetScaffoldLayout {
 }
 
 extension Shape where Self == ConcentricRectangle {
-    /// Sheet 内部复合内容面板的统一轮廓；跟随系统容器逐角同心计算，并保持中型容器曲率下限。
+    /// Sheet 主要任务表层的统一轮廓；调用方组合两个以上协同区域且与外缘平行时显式使用。
+    /// 普通独立内容卡继续使用 `CardContainer` 的 12pt 默认 Shape。
     static var xmSheetContentPanel: ConcentricRectangle {
         ConcentricRectangle(
             corners: .concentric(
@@ -508,7 +509,7 @@ struct XMSheetScaffold<
         subtitle: "标准标题与滚动区域",
         onClose: { }
     ) {
-        LazyVStack(spacing: Spacing.base) {
+        LazyVStack(alignment: .leading, spacing: Spacing.base) {
             CardContainer(
                 shape: ConcentricRectangle.xmSheetContentPanel,
                 showsBorder: true,
@@ -517,19 +518,41 @@ struct XMSheetScaffold<
                 VStack(alignment: .leading, spacing: Spacing.half) {
                     Text("Sheet 内容面板")
                         .font(AppTypography.headlineSemibold)
-                    Text("普通内容在系统标题安全区后自动增加 12pt 标准间距；面板圆角继续跟随 Sheet 容器逐角同心计算。")
+                    Text("主任务与协同操作共用这一表层，圆角跟随 Sheet 外缘逐角同心计算。")
                         .font(AppTypography.footnote)
                         .foregroundStyle(Color.textSecondary)
                 }
                 .padding(Spacing.contentEdge)
             }
 
-            ForEach(1...8, id: \.self) { index in
-                CardContainer {
-                    Text("内容项 \(index)")
+            CardContainer {
+                VStack(alignment: .leading, spacing: Spacing.half) {
+                    Text("普通独立内容卡")
+                        .font(AppTypography.subheadlineMedium)
+                    Text("默认 12pt 圆角，只表达一个独立 block，不追随 Sheet 外轮廓。")
+                        .font(AppTypography.footnote)
+                        .foregroundStyle(Color.textSecondary)
+                }
+                .padding(Spacing.contentEdge)
+            }
+
+            VStack(alignment: .leading, spacing: Spacing.none) {
+                Text("普通列表行不需要卡片")
+                    .font(AppTypography.captionMedium)
+                    .foregroundStyle(Color.textSecondary)
+                    .padding(.bottom, Spacing.half)
+
+                ForEach(1...3, id: \.self) { index in
+                    Text("列表内容 \(index)")
                         .font(AppTypography.body)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(Spacing.contentEdge)
+                        .padding(.vertical, Spacing.base)
+
+                    if index < 3 {
+                        Rectangle()
+                            .fill(Color.surfaceDividerSubtle)
+                            .frame(height: StrokeWidth.hairline)
+                    }
                 }
             }
         }

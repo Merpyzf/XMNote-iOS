@@ -167,7 +167,7 @@ struct XMTagSelectionSheet: View {
                     }
             }
         }
-        .scrollDismissesKeyboard(.interactively)
+        .scrollDismissesKeyboard(.immediately)
         .interactiveDismissDisabled(isSaving || deletingItemID != nil)
         .sheet(item: $nameSheetPresentation, onDismiss: revealCreatedItemAfterDismissal) { presentation in
             tagNameSheet(for: presentation)

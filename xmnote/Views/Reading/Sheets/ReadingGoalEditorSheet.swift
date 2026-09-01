@@ -41,15 +41,13 @@ struct ReadingGoalEditorSheet: View {
         case .daily:
             XMSheetScaffold(
                 title: item.mode.title,
-                onClose: {
-                    guard !isSaving else { return }
-                    onCancel()
-                },
+                onClose: cancelDailyGoal,
                 isConfirming: isSaving,
-                confirmationAction: onConfirm
+                confirmationAction: confirmDailyGoal
             ) {
                 dailyGoalForm
             }
+            .scrollDismissesKeyboard(.interactively)
             .presentationDetents(presentationDetents)
             .presentationDragIndicator(.visible)
             .interactiveDismissDisabled(isSaving)
@@ -76,6 +74,17 @@ struct ReadingGoalEditorSheet: View {
         }
         .padding(.horizontal, Spacing.screenEdge)
         .padding(.bottom, Spacing.contentEdge)
+    }
+
+    private func cancelDailyGoal() {
+        guard !isSaving else { return }
+        isFocused = false
+        onCancel()
+    }
+
+    private func confirmDailyGoal() {
+        isFocused = false
+        onConfirm()
     }
 
     private var yearlySystemPickerSheet: some View {

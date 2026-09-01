@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 SwiftStreamingMarkdown、AI Markdown 累积快照/生成状态、项目排版/颜色令牌（含 surfaceDividerDefault）与统一 Toast/分享组件
  * [OUTPUT]: 对外提供 AIMarkdownResultView、AIMarkdownInteractionController 与表格导出会话，完成按词流式渲染和交互路由
- * [POS]: Views/Content/Components 的页面私有 AI 结果组件，被 AITextResultSheet 与 AIAutoTagSheet 作为统一 Markdown 展示入口
+ * [POS]: UIComponents/Media/Markdown 的跨功能 AI 结果组件，被内容 AI Sheet 与提示词试运行共同复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -433,4 +433,27 @@ struct AIMarkdownResultView: View {
             imageConfig: .disabled
         )
     }
+}
+
+#Preview("流式 Markdown 结果") {
+    @Previewable @State var interactionController = AIMarkdownInteractionController()
+
+    ScrollView {
+        AIMarkdownResultView(
+            markdown: """
+            ## 核心观点
+
+            这段文字把**记忆**与命运连接在同一个瞬间。
+
+            ## 解析
+
+            - 冰块代表童年第一次遇见未知事物
+            - 行刑队让这段记忆获得了命运回望的意味
+            """,
+            isStreaming: true,
+            interactionController: interactionController
+        )
+        .padding(Spacing.screenEdge)
+    }
+    .background(Color.surfacePage)
 }

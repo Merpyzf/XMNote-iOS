@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer 注入 AIRepositoryProtocol，依赖 AIConfigurationViewModel、设置分组卡片与统一反馈组件
- * [OUTPUT]: 对外提供 AIConfigurationView，以统一设置页文本层级承载 iOS 当前仅开放的 DeepSeek 模型、API 凭证管理和三类 Prompt 配置入口
+ * [OUTPUT]: 对外提供 AIConfigurationView，以统一设置页层级承载 DeepSeek 模型/API 凭证与三类独立 push Prompt 编辑入口
  * [POS]: Views/Personal 的 AI 配置页面壳层，被 PersonalRoute.aiConfiguration 导航消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -22,7 +22,7 @@ struct AIConfigurationView: View {
             if let viewModel {
                 AIConfigurationContentView(viewModel: viewModel)
             } else if bootstrapLoadingGate.isVisible {
-                LoadingStateView("正在读取 AI 配置…", style: .card)
+                LoadingStateView("正在载入…", style: .card)
             }
         }
         .navigationTitle("AI 配置")
@@ -51,14 +51,14 @@ struct AIConfigurationView: View {
     }
 }
 
-/// 配置加载后的页面内容，集中承接单一 Prompt Sheet 与密钥删除确认。
+/// 配置加载后的页面内容，承接独立 Prompt push 入口与密钥删除确认。
 private struct AIConfigurationContentView: View {
     @Bindable var viewModel: AIConfigurationViewModel
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var activePromptKind: AIPromptKind?
     @State private var showsDeleteKeyAlert = false
     @State private var isEditingAPIKey = false
+    @State private var hasCompletedInitialAppearance = false
     @FocusState private var isAPIKeyFocused: Bool
 
     var body: some View {
@@ -77,20 +77,28 @@ private struct AIConfigurationContentView: View {
                 .disabled(!viewModel.canSave)
             }
         }
-        .sheet(item: $activePromptKind) { kind in
-            AIConfigurationPromptEditSheet(kind: kind, viewModel: viewModel)
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
-        }
         .xmSystemAlert(
             isPresented: $showsDeleteKeyAlert,
             descriptor: deleteKeyAlertDescriptor
         )
         .overlay {
-            if viewModel.isSaving {
-                Color.overlay.ignoresSafeArea()
-                LoadingStateView("正在保存 AI 配置…", style: .card)
-                    .transition(.opacity)
+            Group {
+                if viewModel.isSaving {
+                    Color.overlay.ignoresSafeArea()
+                    LoadingStateView("正在保存…", style: .card)
+                        .transition(.opacity)
+                }
+            }
+            .animation(
+                reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.18),
+                value: viewModel.isSaving
+            )
+        }
+        .onAppear {
+            if hasCompletedInitialAppearance {
+                Task { await viewModel.refreshPrompts() }
+            } else {
+                hasCompletedInitialAppearance = true
             }
         }
     }
@@ -108,7 +116,7 @@ private struct AIConfigurationContentView: View {
                                 .font(SettingsTypography.rowTitle)
                                 .foregroundStyle(Color.textPrimary)
 
-                            Text("用于书摘释义、选词解释与标签推荐")
+                            Text("用于书摘释义、查词和标签推荐")
                                 .font(SettingsTypography.rowDescription)
                                 .foregroundStyle(Color.textSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -153,9 +161,10 @@ private struct AIConfigurationContentView: View {
                         apiKeyInput
                             .padding(.top, Spacing.cozy)
                             .padding(.bottom, Spacing.base)
-                            .transition(.opacity)
-                    }
-                }
+                .transition(.opacity)
+            }
+        }
+        .animation(credentialAnimation, value: viewModel.validationMessage != nil)
                 .animation(credentialAnimation, value: shouldShowAPIKeyInput)
             }
 
@@ -178,9 +187,7 @@ private struct AIConfigurationContentView: View {
             ) {
                 VStack(spacing: Spacing.none) {
                     ForEach(AIPromptKind.allCases) { kind in
-                        Button {
-                            activePromptKind = kind
-                        } label: {
+                        NavigationLink(value: AppRoute.personal(.aiPromptEditor(kind))) {
                             HStack(spacing: Spacing.base) {
                                 Image(systemName: kind.systemImage)
                                     .font(AppTypography.bodyMedium)
@@ -200,6 +207,10 @@ private struct AIConfigurationContentView: View {
 
                                 Spacer(minLength: Spacing.base)
 
+                                Text(viewModel.isPromptCustomized(kind) ? "自定义" : "默认")
+                                    .font(AppTypography.caption)
+                                    .foregroundStyle(Color.textSecondary)
+
                                 Image(systemName: "chevron.right")
                                     .font(AppTypography.captionSemibold)
                                     .foregroundStyle(Color.textHint)
@@ -209,7 +220,7 @@ private struct AIConfigurationContentView: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .accessibilityHint("编辑 System Prompt 与 User Prompt")
+                        .accessibilityHint("编辑用户提示词和系统提示词")
 
                         if kind != AIPromptKind.allCases.last {
                             settingsDivider
@@ -244,6 +255,7 @@ private struct AIConfigurationContentView: View {
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .submitLabel(.done)
+                .onSubmit { isAPIKeyFocused = false }
                 .padding(.horizontal, Spacing.base)
                 .frame(minHeight: XMSettingsPageLayout.inputMinHeight)
                 .background(
@@ -256,7 +268,7 @@ private struct AIConfigurationContentView: View {
                 }
 
             if viewModel.selectedProviderHasStoredKey {
-                Text("保存后将替换当前 API Key")
+                Text("保存后替换现有 API Key")
                     .font(AppTypography.caption)
                     .foregroundStyle(Color.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -279,13 +291,14 @@ private struct AIConfigurationContentView: View {
                 Button {
                     beginAPIKeyEditing()
                 } label: {
-                    XMMenuLabel("更换密钥", systemImage: "key")
+                    XMMenuLabel("更换 API Key", systemImage: "key")
                 }
 
                 Button(role: .destructive) {
+                    isAPIKeyFocused = false
                     showsDeleteKeyAlert = true
                 } label: {
-                    Label("移除", systemImage: "trash")
+                    Label("移除 API Key", systemImage: "trash")
                 }
                 .tint(Color.feedbackError)
             } label: {
@@ -315,8 +328,10 @@ private struct AIConfigurationContentView: View {
             : .singleItem
     }
 
-    private var credentialAnimation: Animation? {
-        reduceMotion ? nil : .smooth(duration: 0.18)
+    private var credentialAnimation: Animation {
+        reduceMotion
+            ? .easeOut(duration: 0.12)
+            : .smooth(duration: 0.18)
     }
 
     private var settingsDivider: some View {
@@ -343,6 +358,7 @@ private struct AIConfigurationContentView: View {
 
     /// 在主 Actor 上启动现有保存流程；非结构化任务不随页面消失自动取消，并由 ViewModel 防止重复写入。
     private func saveConfiguration() {
+        isAPIKeyFocused = false
         Task { @MainActor in
             guard await viewModel.save() else { return }
             resetAPIKeyEditing(animated: true)
@@ -360,7 +376,7 @@ private struct AIConfigurationContentView: View {
     private var deleteKeyAlertDescriptor: XMSystemAlertDescriptor {
         XMSystemAlertDescriptor(
             title: "移除 \(viewModel.selectedProvider.displayName) API Key？",
-            message: "移除后，当前服务商将无法继续使用，AI 功能会同时关闭。",
+            message: "移除后，AI 功能将关闭。",
             actions: [
                 XMSystemAlertAction(title: "取消", role: .cancel) { },
                 XMSystemAlertAction(title: "移除", role: .destructive) {

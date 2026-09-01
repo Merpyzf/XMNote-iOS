@@ -23,6 +23,7 @@ struct NoteChapterSelectionSheet: View {
     @State private var errorMessage: String?
     @State private var searchText = ""
     @State private var isSearchActive = false
+    @FocusState private var isChapterNameFocused: Bool
 
     init(
         title: String = "移动到章节",
@@ -44,6 +45,7 @@ struct NoteChapterSelectionSheet: View {
                 Section("已有章节") {
                     if allowsRootSelection {
                         Button {
+                            releaseFocus()
                             onSelect(0)
                             dismiss()
                         } label: {
@@ -76,6 +78,7 @@ struct NoteChapterSelectionSheet: View {
                     } else {
                         ForEach(visibleOptions) { option in
                             Button {
+                                releaseFocus()
                                 onSelect(option.id)
                                 dismiss()
                             } label: {
@@ -102,6 +105,9 @@ struct NoteChapterSelectionSheet: View {
                     }
                     TextField("章节名称", text: $chapterName)
                         .textInputAutocapitalization(.sentences)
+                        .focused($isChapterNameFocused)
+                        .submitLabel(.done)
+                        .onSubmit(createChapter)
                     Button(isCreating ? "创建中…" : "创建并移动") {
                         createChapter()
                     }
@@ -120,6 +126,7 @@ struct NoteChapterSelectionSheet: View {
                 }
             }
             .listStyle(.plain)
+            .scrollDismissesKeyboard(.immediately)
             .disabled(isCreating)
             .safeAreaBar(edge: .top, spacing: Spacing.none) {
                 XMSystemSearchBar(
@@ -143,6 +150,7 @@ struct NoteChapterSelectionSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button {
+                        releaseFocus()
                         dismiss()
                     } label: {
                         Image(systemName: "xmark")
@@ -170,6 +178,7 @@ struct NoteChapterSelectionSheet: View {
     private func createChapter() {
         let name = chapterName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty, !isCreating else { return }
+        releaseFocus()
         isCreating = true
         errorMessage = nil
         Task {
@@ -187,6 +196,11 @@ struct NoteChapterSelectionSheet: View {
                 isCreating = false
             }
         }
+    }
+
+    private func releaseFocus() {
+        isChapterNameFocused = false
+        isSearchActive = false
     }
 }
 
