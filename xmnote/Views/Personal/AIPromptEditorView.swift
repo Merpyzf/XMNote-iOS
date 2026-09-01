@@ -24,7 +24,7 @@ struct AIPromptEditorView: View {
                 AIPromptEditorContentView(viewModel: viewModel)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if loadingGate.isVisible {
-                LoadingStateView("正在读取提示词…", style: .inline)
+                LoadingStateView("正在载入…", style: .inline)
             }
         }
         .navigationTitle("")
@@ -55,6 +55,7 @@ private struct AIPromptEditorContentView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(RepositoryContainer.self) private var repositories
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var editorRawSelection = NSRange(location: 0, length: 0)
     @State private var isEditorFocused = false
@@ -143,11 +144,7 @@ private struct AIPromptEditorContentView: View {
         .id(viewModel.activeField)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .bottom) {
-            if showsFloatingEditingBar {
-                editingBar
-                    .padding(.horizontal, Spacing.contentEdge)
-                    .padding(.bottom, Spacing.half)
-            }
+            editingBarHost
         }
     }
 
@@ -217,14 +214,14 @@ private struct AIPromptEditorContentView: View {
                     guard viewModel.preview != nil else { return }
                     presentSheet(.preview)
                 } label: {
-                    XMMenuLabel("预览实际发送内容", systemImage: "doc.text.magnifyingglass")
+                    XMMenuLabel("预览发送内容", systemImage: "doc.text.magnifyingglass")
                 }
                 .disabled(viewModel.hasBlockingIssues)
 
                 Button {
                     presentSheet(.optimize)
                 } label: {
-                    XMMenuLabel("优化当前提示词", systemImage: "wand.and.sparkles")
+                    XMMenuLabel("优化提示词", systemImage: "wand.and.sparkles")
                 }
 
                 Button {
@@ -235,12 +232,10 @@ private struct AIPromptEditorContentView: View {
 
                 Divider()
 
-                Button("恢复当前字段", systemImage: "arrow.counterclockwise") {
+                Button {
                     viewModel.resetCurrentField()
-                }
-
-                Button("全部恢复默认", systemImage: "arrow.trianglehead.2.counterclockwise") {
-                    resetAllFieldsWithUndo()
+                } label: {
+                    XMMenuLabel("恢复默认", systemImage: "arrow.counterclockwise")
                 }
             } label: {
                 Label("更多", systemImage: "ellipsis")
@@ -295,6 +290,27 @@ private struct AIPromptEditorContentView: View {
             insertedNames: insertedVariableNames,
             onInsert: insertVariable
         )
+    }
+
+    /// 编辑工具条与焦点建立空间连续性；减少动态效果时仅保留短淡入淡出。
+    @ViewBuilder
+    private var editingBarHost: some View {
+        Group {
+            if showsFloatingEditingBar {
+                editingBar
+                    .padding(.horizontal, Spacing.contentEdge)
+                    .padding(.bottom, Spacing.half)
+                    .glassEffectTransition(reduceMotion ? .identity : .materialize)
+                    .transition(reduceMotion ? .opacity : .identity)
+            }
+        }
+        .animation(editingBarAppearanceAnimation, value: showsFloatingEditingBar)
+    }
+
+    private var editingBarAppearanceAnimation: Animation {
+        reduceMotion
+            ? .easeOut(duration: 0.12)
+            : .smooth(duration: 0.2)
     }
 
     private var showsFloatingEditingBar: Bool {
@@ -482,7 +498,6 @@ private struct AIPromptEditorContentView: View {
         case .preview:
             if let preview = viewModel.preview {
                 AIPromptPreviewSheet(
-                    editableRoleRules: viewModel.template.system,
                     preview: preview
                 )
             }
@@ -606,7 +621,6 @@ private struct AIPromptVariableBar: View {
     let onInsert: (AIPromptVariableDefinition) -> Void
 
     @ScaledMetric(relativeTo: .caption) private var chipVisualHeight = AIPromptEditorAppearance.Metrics.chipHeight
-    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -655,8 +669,7 @@ private struct AIPromptVariableBar: View {
             }
             .buttonStyle(
                 AIPromptVariableChipButtonStyle(
-                    presentation: presentation,
-                    usesEmphasizedBase: colorSchemeContrast == .increased
+                    presentation: presentation
                 )
             )
             .frame(height: AIPromptEditorAppearance.Metrics.barHeight)
@@ -672,15 +685,14 @@ private struct AIPromptVariableBar: View {
     }
 }
 
-/// Chip 只在按压时切换同色系强调阶，不改变透明度、尺寸或相邻布局。
+/// Chip 只在按压时将同色系背景 Tint 从 12% 提升至 18%，不改变尺寸或相邻布局。
 private struct AIPromptVariableChipButtonStyle: ButtonStyle {
     let presentation: AIPromptVariablePresentation
-    let usesEmphasizedBase: Bool
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .background(
-                configuration.isPressed || usesEmphasizedBase
+                configuration.isPressed
                     ? presentation.emphasizedBackgroundColor
                     : presentation.backgroundColor,
                 in: Capsule()

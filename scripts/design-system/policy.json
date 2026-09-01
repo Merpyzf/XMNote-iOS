@@ -128,7 +128,8 @@
         "xmnote/Utilities/DesignSystem/ColorConstruction.swift",
         "xmnote/Utilities/DesignSystem/SemanticColors.swift",
         "xmnote/RichTextEditor/HighlightColorPicker.swift",
-        "xmnote/Views/Note/Components/NoteReviewPalette+UI.swift"
+        "xmnote/Views/Note/Components/NoteReviewPalette+UI.swift",
+        "xmnote/Views/Personal/Components/AIPromptEditorAppearance.swift"
       ],
       "replacement": "已存在的语义色；UIKit/SwiftUI 桥接只留在登记 owner"
     },

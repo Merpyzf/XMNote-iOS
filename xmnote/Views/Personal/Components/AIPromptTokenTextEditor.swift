@@ -1881,9 +1881,8 @@ private final class AIPromptTokenAttachmentView: UIView {
             format: format
         ).image { _ in
             let bounds = CGRect(origin: .zero, size: metrics.size)
-            let backgroundColor = traits.accessibilityContrast == .high
-                ? presentation.uiEmphasizedBackgroundColor
-                : presentation.uiBackgroundColor
+            let backgroundColor = presentation.uiBackgroundColor.resolvedColor(with: traits)
+            let foregroundColor = presentation.uiForegroundColor.resolvedColor(with: traits)
             backgroundColor.setFill()
             UIBezierPath(
                 roundedRect: bounds,
@@ -1900,7 +1899,7 @@ private final class AIPromptTokenAttachmentView: UIView {
                     height: metrics.iconSize
                 )
                 icon.withTintColor(
-                    presentation.uiForegroundColor,
+                    foregroundColor,
                     renderingMode: .alwaysOriginal
                 ).draw(in: iconRect)
                 cursorX += metrics.iconSize
@@ -1922,7 +1921,7 @@ private final class AIPromptTokenAttachmentView: UIView {
                 in: textRect,
                 withAttributes: [
                     .font: metrics.font,
-                    .foregroundColor: presentation.uiForegroundColor,
+                    .foregroundColor: foregroundColor,
                 ]
             )
         }
@@ -1979,9 +1978,7 @@ private final class AIPromptTokenAttachmentView: UIView {
         let presentation = AIPromptEditorAppearance.presentation(for: variable)
         let traits = effectiveTraits
         let metrics = Self.resolvedMetrics(for: variable, traits: traits)
-        backgroundColor = traits.accessibilityContrast == .high
-            ? presentation.uiEmphasizedBackgroundColor
-            : presentation.uiBackgroundColor
+        backgroundColor = presentation.uiBackgroundColor
         layer.cornerRadius = metrics.size.height / 2
         layer.cornerCurve = .continuous
         clipsToBounds = true

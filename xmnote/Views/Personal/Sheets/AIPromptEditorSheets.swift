@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 AIPromptEditorViewModel、AIPromptTrialSessionViewModel、NoteRepositoryProtocol、XMBookCover、AI 生成等待反馈、标准 Sheet/搜索/状态组件、提示词变量只读渲染器与流式 Markdown 渲染器
- * [OUTPUT]: 对外提供提示词请求预览、可编辑书摘流式试运行、本地书摘选择，以及输入/结果分层的字段优化业务 Sheet
+ * [OUTPUT]: 对外提供提示词请求预览、可编辑书摘流式试运行、AI 标签 JSON/格式化双层结果与可中断展开反馈、本地书摘选择，以及单一 Sheet 内推进的字段优化流程
  * [POS]: Views/Personal/Sheets 的提示词编辑次级任务集合，由 AIPromptEditorView 的 item-driven Sheet 路由消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -8,57 +8,89 @@
 import SwiftUI
 import UIKit
 
-/// 离线真实请求预览；固定规则只在用户展开完整请求时出现。
+/// 展示本次即将发送的最终提示词，并按需补充应用规则与响应格式。
 struct AIPromptPreviewSheet: View {
-    let editableRoleRules: String
     let preview: AIPromptRequestPreview
 
     @Environment(\.dismiss) private var dismiss
-    @State private var showsFullRequest = false
+    @State private var showsApplicationRules = false
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section("系统提示词") {
-                    Text(editableRoleRules)
-                        .textSelection(.enabled)
-                }
+        XMSheetScaffold(
+            title: "发送内容预览",
+            onClose: { dismiss() }
+        ) {
+            VStack(alignment: .leading, spacing: Spacing.double) {
+                promptSection(
+                    title: "系统提示词",
+                    content: preview.systemPrompt
+                )
 
-                Section("用户提示词（变量已替换）") {
-                    Text(preview.userPrompt)
-                        .textSelection(.enabled)
-                }
+                promptSection(
+                    title: "用户提示词（变量已替换）",
+                    content: preview.userPrompt
+                )
 
-                DisclosureGroup("完整请求", isExpanded: $showsFullRequest) {
-                    LabeledContent("System") {
-                        Text(editableRoleRules)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                DisclosureGroup("查看应用规则", isExpanded: $showsApplicationRules) {
+                    VStack(alignment: .leading, spacing: Spacing.base) {
+                        detailSection(
+                            title: "应用规则",
+                            content: preview.applicationRules
+                        )
+
+                        if preview.expectsJSON {
+                            detailSection(
+                                title: "响应格式",
+                                content: "JSON"
+                            )
+                        }
                     }
-                    LabeledContent("User") {
-                        Text(preview.userPrompt)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    VStack(alignment: .leading, spacing: Spacing.half) {
-                        Text("应用自动附加内容")
-                            .font(AppTypography.captionSemibold)
-                            .foregroundStyle(Color.textSecondary)
-                        Text(preview.applicationRules)
-                            .textSelection(.enabled)
-                    }
-                    if preview.expectsJSON {
-                        LabeledContent("响应格式", value: "JSON")
-                    }
+                    .padding(.top, Spacing.half)
                 }
+                .font(AppTypography.body)
+                .foregroundStyle(Color.textPrimary)
             }
-            .navigationTitle("实际发送内容")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") { dismiss() }
-                }
-            }
+            .padding(.horizontal, Spacing.screenEdge)
+            .padding(.bottom, Spacing.contentEdge)
+        }
+    }
+
+    /// 以统一标题和正文层级展示一次最终发送的提示词，保留复制能力。
+    private func promptSection(
+        title: LocalizedStringResource,
+        content: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.half) {
+            Text(title)
+                .font(AppTypography.headline)
+                .foregroundStyle(Color.textPrimary)
+                .accessibilityAddTraits(.isHeader)
+
+            Text(content)
+                .font(AppTypography.body)
+                .foregroundStyle(Color.textPrimary)
+                .lineSpacing(Spacing.compact)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    /// 以次级标题区分附加规则，避免把提示词主体再次复制到展开区域。
+    private func detailSection(
+        title: LocalizedStringResource,
+        content: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.half) {
+            Text(title)
+                .font(AppTypography.subheadlineSemibold)
+                .foregroundStyle(Color.textSecondary)
+
+            Text(content)
+                .font(AppTypography.body)
+                .foregroundStyle(Color.textPrimary)
+                .lineSpacing(Spacing.compact)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
@@ -224,15 +256,18 @@ struct AIPromptTrialSheet: View {
     }
 
     private var preparationActionTitle: String {
-        if session.isRunning { return "查看进度" }
-        return session.hasStarted ? "查看结果" : "开始测试"
+        if session.isRunning { return String(localized: "查看生成进度") }
+        return session.hasStarted
+            ? String(localized: "查看结果")
+            : String(localized: "生成结果")
     }
 
     private var preparationActionHint: String {
         if session.hasStarted {
             return session.isRunning ? "打开正在生成的测试结果" : "打开已生成的测试结果"
         }
-        return session.startDisabledReason ?? "使用当前书摘运行提示词"
+        return session.startDisabledReason
+            ?? String(localized: "使用当前书摘生成测试结果")
     }
 
     /// 已有任务只恢复结果页；首次运行在 Push 前建立 connecting 状态，避免目的页出现空白帧。
@@ -468,48 +503,60 @@ private struct AIPromptTrialResultView: View {
     @Binding var pageHeights: [AIPromptTrialTarget: CGFloat]
     let onRetry: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
-        Group {
-            if session.comparesDefault {
-                if session.isRunning {
-                    XMScrollEdgeChrome(
-                        presentation: .overlaySoft,
-                        edges: .top,
-                        topBar: { resultPicker },
-                        content: { resultScrollView }
-                    )
-                } else {
-                    XMScrollEdgeChrome(
-                        presentation: .overlaySoft,
-                        edges: [.top, .bottom],
-                        topBar: { resultPicker },
-                        bottomBar: { resultActionBar },
-                        content: { resultScrollView }
-                    )
+        XMScrollEdgeChrome(
+            presentation: .overlaySoft,
+            edges: chromeEdges,
+            topBar: {
+                if session.comparesDefault {
+                    resultPicker
                 }
-            } else if session.isRunning {
-                XMScrollEdgeChrome(
-                    presentation: .overlaySoft,
-                    content: { resultScrollView }
-                )
-            } else {
-                XMScrollEdgeChrome(
-                    presentation: .overlaySoft,
-                    edges: .bottom,
-                    bottomBar: { resultActionBar },
-                    content: { resultScrollView }
-                )
-            }
-        }
+            },
+            bottomBar: {
+                if !session.isRunning {
+                    resultActionBar
+                        .transition(resultActionTransition)
+                }
+            },
+            content: { resultScrollView }
+        )
+        .animation(
+            reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.28),
+            value: session.isRunning
+        )
+        .animation(
+            reduceMotion ? nil : .smooth(duration: 0.2),
+            value: session.errorMessage != nil
+        )
         .background(Color.surfaceSheet.ignoresSafeArea())
         .navigationTitle("测试结果")
         .navigationBarTitleDisplayMode(.inline)
     }
 
+    private var chromeEdges: Edge.Set {
+        var edges = Edge.Set()
+        if session.comparesDefault {
+            edges.insert(.top)
+        }
+        if !session.isRunning {
+            edges.insert(.bottom)
+        }
+        return edges
+    }
+
+    private var resultActionTransition: AnyTransition {
+        if reduceMotion {
+            return .opacity
+        }
+        return .move(edge: .bottom).combined(with: .opacity)
+    }
+
     private var resultPicker: some View {
         Picker("结果来源", selection: $session.selectedResultTarget) {
             Text("当前提示词").tag(AIPromptTrialTarget.current)
-            Text("默认提示词").tag(AIPromptTrialTarget.appDefault)
+            Text("原始提示词").tag(AIPromptTrialTarget.appDefault)
         }
         .pickerStyle(SegmentedPickerStyle())
         .accessibilityLabel("结果来源")
@@ -552,7 +599,7 @@ private struct AIPromptTrialResultView: View {
         if let errorMessage = session.errorMessage {
             XMContentStateView(
                 role: .failure,
-                title: "暂时无法生成结果",
+                title: "无法生成结果",
                 message: errorMessage
             )
             .frame(minHeight: 320)
@@ -574,7 +621,7 @@ private struct AIPromptTrialResultView: View {
 
     private var resultActionBar: some View {
         Button(action: onRetry) {
-            Text("重新测试")
+            Text("重新生成")
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(.glassProminent)
@@ -592,7 +639,7 @@ private struct AIPromptTrialResultView: View {
     private var resultSourceAccessibilityValue: String {
         session.selectedResultTarget == .current
             ? "当前提示词生成结果"
-            : "应用内置默认提示词生成结果"
+            : "应用原始提示词生成结果"
     }
 }
 
@@ -603,6 +650,7 @@ private struct AIPromptTrialResultPager: View {
     let defaultController: AIMarkdownInteractionController
     @Binding var pageHeights: [AIPromptTrialTarget: CGFloat]
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var scrollTarget: AIPromptTrialTarget? = .current
 
     var body: some View {
@@ -617,6 +665,10 @@ private struct AIPromptTrialResultPager: View {
         .scrollTargetBehavior(.paging)
         .scrollPosition(id: $scrollTarget, anchor: .topLeading)
         .frame(height: resolvedPageHeight)
+        .animation(
+            reduceMotion ? nil : .smooth(duration: 0.28),
+            value: session.selectedResultTarget
+        )
         .onAppear {
             var transaction = Transaction()
             transaction.animation = nil
@@ -626,7 +678,13 @@ private struct AIPromptTrialResultPager: View {
         }
         .onChange(of: session.selectedResultTarget) { _, newValue in
             guard scrollTarget != newValue else { return }
-            scrollTarget = newValue
+            var transaction = Transaction()
+            transaction.animation = reduceMotion
+                ? nil
+                : HorizontalPagingMotion.programmaticScroll
+            withTransaction(transaction) {
+                scrollTarget = newValue
+            }
         }
         .onChange(of: scrollTarget) { _, newValue in
             guard let newValue, session.selectedResultTarget != newValue else { return }
@@ -675,16 +733,27 @@ private struct AIPromptTrialResultPager: View {
     }
 }
 
-/// 单个目标的流式结果展示；失败时只在确有部分内容的情况下使用保留内容 Banner。
+/// 不携带流式正文的稳定展示阶段，避免每个 token 重启结构动画。
+private enum AIPromptTrialPresentationStage: Equatable {
+    case idle
+    case waiting
+    case markdown
+    case autoTags
+    case failure
+}
+
+/// 单个目标的流式结果展示；同类内容保持视图身份，只对结构阶段做局部过渡。
 private struct AIPromptTrialResultPage: View {
     let target: AIPromptTrialTarget
     let phase: AIPromptTrialPhase
     let interactionController: AIMarkdownInteractionController
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var loadingGate = LoadingGate()
 
     var body: some View {
         resultContent
+            .animation(structuralAnimation, value: presentationStage)
             .onAppear(perform: syncLoadingGate)
             .onChange(of: isConnecting) { _, newValue in
                 loadingGate.update(intent: newValue ? .read : .none)
@@ -696,9 +765,9 @@ private struct AIPromptTrialResultPage: View {
 
     @ViewBuilder
     private var resultContent: some View {
-        switch phase {
+        switch presentationStage {
         case .idle:
-            Text("尚未开始测试")
+            Text("尚未生成")
                 .font(AppTypography.footnote)
                 .foregroundStyle(Color.textSecondary)
                 .frame(
@@ -706,7 +775,8 @@ private struct AIPromptTrialResultPage: View {
                     minHeight: InteractionMetrics.minimumTouchTarget,
                     alignment: .leading
                 )
-        case .connecting:
+                .transition(.opacity)
+        case .waiting:
             if loadingGate.isVisible {
                 AIGenerationWaitingView(
                     "正在生成…",
@@ -717,6 +787,7 @@ private struct AIPromptTrialResultPage: View {
                     minHeight: InteractionMetrics.minimumTouchTarget,
                     alignment: .leading
                 )
+                .transition(.opacity)
             } else {
                 Color.clear
                     .frame(
@@ -724,31 +795,87 @@ private struct AIPromptTrialResultPage: View {
                         minHeight: InteractionMetrics.minimumTouchTarget
                     )
             }
-        case .streaming(let markdown):
-            markdownView(markdown, isStreaming: true)
-        case .completed(let markdown):
-            markdownView(markdown, isStreaming: false)
-        case .failed(let message, let partialContent):
-            if partialContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                XMCompactStateView(
-                    role: .failure,
-                    title: "\(targetTitle)暂时无法生成",
-                    message: message
-                )
-            } else {
-                VStack(alignment: .leading, spacing: Spacing.base) {
-                    markdownView(partialContent, isStreaming: false)
+        case .markdown:
+            VStack(alignment: .leading, spacing: Spacing.base) {
+                markdownView(phase.content, isStreaming: phase.isStreaming)
+
+                if let partialFailureMessage {
                     XMInlineStatusBanner(
-                        "结果未完整生成：\(message)",
+                        "生成中断：\(partialFailureMessage)",
                         tone: .error
                     )
+                    .transition(.opacity)
                 }
             }
+            .animation(structuralAnimation, value: partialFailureMessage)
+            .transition(.opacity)
+        case .autoTags:
+            switch phase {
+            case .completedAutoTags(let rawJSON, let suggestions):
+                AIPromptTrialAutoTagResultView(
+                    suggestions: suggestions,
+                    rawJSON: rawJSON,
+                    interactionController: interactionController
+                )
+                .transition(.opacity)
+            case .invalidAutoTags(let rawJSON):
+                AIPromptTrialAutoTagResultView(
+                    suggestions: nil,
+                    rawJSON: rawJSON,
+                    interactionController: interactionController
+                )
+                .transition(.opacity)
+            default:
+                EmptyView()
+            }
+        case .failure:
+            XMCompactStateView(
+                role: .failure,
+                title: "\(targetTitle)生成失败",
+                message: emptyFailureMessage
+            )
+            .transition(.opacity)
         }
     }
 
     private var targetTitle: String {
-        target == .current ? "当前提示词" : "默认提示词"
+        target == .current ? "当前提示词" : "原始提示词"
+    }
+
+    private var presentationStage: AIPromptTrialPresentationStage {
+        switch phase {
+        case .idle:
+            .idle
+        case .connecting:
+            .waiting
+        case .streaming, .completed:
+            .markdown
+        case .completedAutoTags, .invalidAutoTags:
+            .autoTags
+        case .failed(_, let partialContent):
+            partialContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? .failure
+                : .markdown
+        }
+    }
+
+    private var partialFailureMessage: String? {
+        guard case .failed(let message, let partialContent) = phase,
+              !partialContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+        return message
+    }
+
+    private var emptyFailureMessage: String? {
+        guard case .failed(let message, _) = phase else { return nil }
+        return message
+    }
+
+    private var structuralAnimation: Animation {
+        reduceMotion
+            ? .easeOut(duration: 0.12)
+            : .smooth(duration: 0.2)
     }
 
     private var isConnecting: Bool {
@@ -769,12 +896,182 @@ private struct AIPromptTrialResultPage: View {
     }
 }
 
+/// AI 标签完成态使用无卡只读列表，原始 JSON 作为可展开的次级事实来源。
+private struct AIPromptTrialAutoTagResultView: View {
+    let suggestions: [AIAutoTagSuggestion]?
+    let rawJSON: String
+    let interactionController: AIMarkdownInteractionController
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var showsRawJSON = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.none) {
+            formattedContent
+
+            Divider()
+
+            rawJSONDisclosure
+        }
+    }
+
+    private var rawJSONDisclosure: some View {
+        VStack(alignment: .leading, spacing: Spacing.none) {
+            Button(action: toggleRawJSON) {
+                HStack(spacing: Spacing.base) {
+                    Text("原始 JSON")
+                        .font(AppTypography.subheadline)
+                        .foregroundStyle(Color.textPrimary)
+
+                    Spacer(minLength: Spacing.base)
+
+                    Image(systemName: "chevron.right")
+                        .font(AppTypography.captionSemibold)
+                        .foregroundStyle(Color.iconSecondary)
+                        .rotationEffect(.degrees(showsRawJSON ? 90 : 0))
+                        .animation(reduceMotion ? nil : .snappy(duration: 0.18), value: showsRawJSON)
+                        .accessibilityHidden(true)
+                }
+                .frame(
+                    maxWidth: .infinity,
+                    minHeight: InteractionMetrics.minimumTouchTarget,
+                    alignment: .leading
+                )
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("原始 JSON")
+            .accessibilityValue(showsRawJSON ? "已展开" : "已收起")
+
+            if showsRawJSON {
+                AIMarkdownResultView(
+                    markdown: rawJSONMarkdown,
+                    isStreaming: false,
+                    interactionController: interactionController
+                )
+                .padding(.top, Spacing.compact)
+                .transition(rawJSONTransition)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var formattedContent: some View {
+        if let suggestions {
+            if suggestions.isEmpty {
+                Text("没有推荐标签")
+                    .font(AppTypography.subheadline)
+                    .foregroundStyle(Color.textSecondary)
+            } else {
+                VStack(spacing: Spacing.none) {
+                    ForEach(suggestions) { suggestion in
+                        AIPromptTrialAutoTagRow(suggestion: suggestion)
+
+                        if suggestion.id != suggestions.last?.id {
+                            Divider()
+                        }
+                    }
+                }
+            }
+        } else {
+            XMInlineStatusBanner(
+                "标签结果格式有误",
+                tone: .warning
+            )
+        }
+    }
+
+    /// 代码围栏只负责原样排版；会话中的 rawJSON 不被重新序列化或覆盖。
+    private var rawJSONMarkdown: String {
+        "```json\n\(rawJSON)\n```"
+    }
+
+    private var rawJSONTransition: AnyTransition {
+        reduceMotion
+            ? .opacity
+            : .opacity.combined(with: .offset(y: -Spacing.half))
+    }
+
+    /// 展开状态由本地按钮即时写入；结构与箭头均可从当前可见位置被反向打断。
+    private func toggleRawJSON() {
+        withAnimation(
+            reduceMotion
+                ? .easeOut(duration: 0.12)
+                : .smooth(duration: 0.26)
+        ) {
+            showsRawJSON.toggle()
+        }
+    }
+}
+
+/// AI 标签试运行的只读行；Sparkles 与正式页一致，只标记应用后新建的标签。
+private struct AIPromptTrialAutoTagRow: View {
+    let suggestion: AIAutoTagSuggestion
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.compact) {
+            HStack(alignment: .firstTextBaseline, spacing: Spacing.half) {
+                Text(verbatim: suggestion.name)
+                    .font(AppTypography.bodyMedium)
+                    .foregroundStyle(Color.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if !suggestion.isExisting {
+                    Image(systemName: "sparkles")
+                        .font(AppTypography.caption)
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(Color.yellow, Color.orange)
+                        .fixedSize()
+                        .accessibilityHidden(true)
+                }
+            }
+
+            if let reasonText {
+                Text(verbatim: reasonText)
+                    .font(AppTypography.caption)
+                    .foregroundStyle(Color.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(
+            maxWidth: .infinity,
+            minHeight: InteractionMetrics.minimumTouchTarget,
+            alignment: .leading
+        )
+        .padding(.vertical, Spacing.cozy)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(verbatim: suggestion.name))
+        .accessibilityValue(Text(verbatim: accessibilityValue))
+    }
+
+    private var reasonText: String? {
+        let reason = suggestion.reason.trimmingCharacters(in: .whitespacesAndNewlines)
+        return reason.isEmpty ? nil : reason
+    }
+
+    private var accessibilityValue: String {
+        let source = suggestion.isExisting ? "直接复用" : "应用后新建"
+        guard let reasonText else { return source }
+        return "\(source)，\(reasonText)"
+    }
+}
+
 /// 本地书摘单选 Sheet；搜索、分页和错误状态由页面专属 ViewModel 持有，选择后立即返回快照。
 private struct AIPromptExcerptPickerSheet: View {
+    /// 书摘列表的稳定结构阶段，搜索词与分页更新不参与阶段动画。
+    private enum PresentationKind: Equatable {
+        case loading
+        case failure
+        case empty
+        case noResults
+        case content
+    }
+
     let selectedNoteID: Int64?
     let onSelect: (NoteExcerptListItem) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var viewModel: AIPromptExcerptPickerViewModel
     @State private var isSearchActive = false
 
@@ -812,6 +1109,10 @@ private struct AIPromptExcerptPickerSheet: View {
             pickerContent
                 .padding(.horizontal, Spacing.screenEdge)
                 .padding(.bottom, Spacing.contentEdge)
+                .animation(
+                    reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.2),
+                    value: presentationKind
+                )
         }
         .scrollDismissesKeyboard(.immediately)
         .presentationDetents([.large])
@@ -824,6 +1125,7 @@ private struct AIPromptExcerptPickerSheet: View {
         if viewModel.items.isEmpty, viewModel.isLoading {
             LoadingStateView("正在读取书摘…", style: .inline)
                 .frame(maxWidth: .infinity, minHeight: 320)
+                .transition(.opacity)
         } else if viewModel.items.isEmpty, let error = viewModel.errorMessage {
             XMContentStateView(
                 role: .failure,
@@ -832,22 +1134,24 @@ private struct AIPromptExcerptPickerSheet: View {
                 action: XMStateAction("重试", perform: viewModel.retry)
             )
             .frame(minHeight: 320)
+            .transition(.opacity)
         } else if viewModel.items.isEmpty {
             XMContentStateView(
                 role: viewModel.isSearching ? .noResults : .empty,
-                title: viewModel.isSearching ? "没有匹配的书摘" : "暂无可选书摘",
-                message: viewModel.isSearching ? "请更换关键词" : nil
+                title: viewModel.isSearching ? "没有匹配的书摘" : "暂无可选书摘"
             )
             .frame(minHeight: 320)
+            .transition(.opacity)
         } else {
             LazyVStack(spacing: Spacing.none) {
-                if let retainedError = viewModel.retainedErrorMessage {
+                if viewModel.retainedErrorMessage != nil {
                     XMInlineStatusBanner(
-                        "部分书摘未能更新：\(retainedError)",
+                        "书摘列表未更新",
                         tone: .error,
                         action: XMStateAction("重试", perform: viewModel.retry)
                     )
                     .padding(.bottom, Spacing.base)
+                    .transition(.opacity)
                 }
 
                 ForEach(viewModel.items) { item in
@@ -874,19 +1178,37 @@ private struct AIPromptExcerptPickerSheet: View {
                 }
 
                 if viewModel.hasMore {
-                    HStack(spacing: Spacing.cozy) {
-                        if viewModel.isLoading {
+                    if viewModel.isLoading {
+                        HStack(spacing: Spacing.cozy) {
                             ProgressView()
                                 .controlSize(.small)
+                            Text("正在载入更多…")
+                                .font(AppTypography.footnote)
+                                .foregroundStyle(Color.textSecondary)
                         }
-                        Text(viewModel.isLoading ? "正在加载更多…" : "继续向下浏览")
-                            .font(AppTypography.footnote)
-                            .foregroundStyle(Color.textSecondary)
+                        .frame(maxWidth: .infinity, minHeight: InteractionMetrics.minimumTouchTarget)
                     }
-                    .frame(maxWidth: .infinity, minHeight: InteractionMetrics.minimumTouchTarget)
                 }
             }
+            .animation(
+                reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.18),
+                value: viewModel.retainedErrorMessage != nil
+            )
+            .transition(.opacity)
         }
+    }
+
+    private var presentationKind: PresentationKind {
+        if viewModel.items.isEmpty, viewModel.isLoading {
+            return .loading
+        }
+        if viewModel.items.isEmpty, viewModel.errorMessage != nil {
+            return .failure
+        }
+        if viewModel.items.isEmpty {
+            return viewModel.isSearching ? .noResults : .empty
+        }
+        return .content
     }
 }
 
@@ -934,12 +1256,12 @@ private struct AIPromptExcerptPickerRow: View {
         .disabled(!isSelectable)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityValue(isSelected ? "已选择" : "未选择")
-        .accessibilityHint(isSelectable ? "选择此书摘用于提示词测试" : "无正文，无法用于测试")
+        .accessibilityHint(isSelectable ? "选择此书摘用于提示词测试" : "没有正文，无法测试")
     }
 
     private var excerptContent: some View {
         XMKeywordHighlighting.text(
-            isSelectable ? excerptText : "无正文，无法用于测试",
+            isSelectable ? excerptText : "没有正文，无法测试",
             keyword: query,
             baseFont: ReadingContentTypography.body,
             highlightFont: ReadingContentTypography.body,
@@ -1050,7 +1372,7 @@ private struct AIPromptExcerptPickerRow: View {
     }
 
     private var accessibilityLabel: String {
-        var values = [isSelectable ? excerptText : "无正文，无法用于测试"]
+        var values = [isSelectable ? excerptText : "没有正文，无法测试"]
         if !chapterTitle.isEmpty { values.append("章节，\(chapterTitle)") }
         values.append("书籍，\(bookTitle)")
         if !bookAuthor.isEmpty { values.append("作者，\(bookAuthor)") }
@@ -1089,13 +1411,15 @@ private struct AIPromptExcerptPickerRow: View {
     }
 }
 
-/// 字段优化输入页；请求成功后以独立结果 Sheet 展示差异，只有用户应用才修改本地草稿。
+/// 字段优化输入页；请求成功后在同一 Sheet 内推进到差异页，只有用户应用才修改本地草稿。
 struct AIPromptOptimizationSheet: View {
     @Bindable var viewModel: AIPromptEditorViewModel
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var optimizationTask: Task<Void, Never>?
-    @State private var presentedResult: AIPromptOptimizationResultContext?
+    @State private var resultContext: AIPromptOptimizationResultContext?
+    @State private var showsResult = false
     @State private var isKeyboardPresented = false
     @State private var isInstructionFocused = false
 
@@ -1112,10 +1436,11 @@ struct AIPromptOptimizationSheet: View {
                         isFocused: $isInstructionFocused,
                         isKeyboardPresented: $isKeyboardPresented,
                         isEnabled: !viewModel.isOptimizing,
-                        placeholder: "描述你希望如何调整当前提示词，如精简表达、减少重复或补充要求"
+                        placeholder: optimizationPlaceholder
                     )
                     .padding(Spacing.contentEdge)
-                    .accessibilityLabel("调整期望")
+                    .accessibilityLabel("优化方向")
+                    .accessibilityHint(Text(verbatim: optimizationPlaceholder))
                 }
 
                 if let error = viewModel.optimizationErrorMessage {
@@ -1124,22 +1449,28 @@ struct AIPromptOptimizationSheet: View {
                         .foregroundStyle(Color.feedbackError)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal, Spacing.compact)
+                        .transition(.opacity)
                 }
             }
             .padding(.horizontal, Spacing.screenEdge)
             .padding(.bottom, Spacing.contentEdge)
+            .animation(
+                reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.18),
+                value: viewModel.optimizationErrorMessage != nil
+            )
+            .navigationDestination(isPresented: $showsResult) {
+                if let resultContext {
+                    AIPromptOptimizationResultPage(
+                        viewModel: viewModel,
+                        result: resultContext,
+                        onApplySucceeded: finishApplyingSuggestion
+                    )
+                }
+            }
         }
         .scrollDismissesKeyboard(.interactively)
         .presentationContentInteraction(isKeyboardPresented ? .scrolls : .automatic)
         .presentationDetents([.large])
-        .sheet(item: $presentedResult) { result in
-            AIPromptOptimizationResultSheet(
-                viewModel: viewModel,
-                result: result,
-                onApplySucceeded: finishApplyingSuggestion
-            )
-            .presentationDetents([.large])
-        }
         .onChange(of: viewModel.activeField) { _, _ in
             cancelOptimization()
         }
@@ -1148,11 +1479,11 @@ struct AIPromptOptimizationSheet: View {
 
     private var optimizationActionBar: some View {
         AIPromptSheetGlassActionButton(
-            title: "开始优化",
-            progressTitle: "优化中…",
+            title: String(localized: "优化"),
+            progressTitle: String(localized: "优化中…"),
             isEnabled: canStartOptimization,
             isProgressing: viewModel.isOptimizing,
-            accessibilityHint: "根据调整期望优化当前提示词",
+            accessibilityHint: String(localized: "根据输入的方向优化当前提示词"),
             action: startOptimization
         )
         .padding(.horizontal, Spacing.screenEdge)
@@ -1166,6 +1497,24 @@ struct AIPromptOptimizationSheet: View {
                 .isEmpty
     }
 
+    private var optimizationPlaceholder: String {
+        let resource: LocalizedStringResource = switch (viewModel.kind, viewModel.activeField) {
+        case (.noteExplanation, .taskTemplate):
+            "例如：减少延伸内容，重点解释书摘本身"
+        case (.noteExplanation, .roleRules):
+            "例如：用更通俗的中文回答，每段更短"
+        case (.wordLookup, .taskTemplate):
+            "例如：先解释选中的文字，再结合书摘上下文说明"
+        case (.wordLookup, .roleRules):
+            "例如：多义词分别说明，并给出简短例句"
+        case (.autoTag, .taskTemplate):
+            "例如：优先复用已有标签，只保留与书摘主题直接相关的标签"
+        case (.autoTag, .roleRules):
+            "例如：避免人物、书名和一次性细节，最多推荐 3 个标签"
+        }
+        return String(localized: resource)
+    }
+
     /// Sheet 持有优化 Task；字段变化、关闭按钮或交互式下滑都会取消网络并使 request ID 失效。
     private func startOptimization() {
         guard canStartOptimization else { return }
@@ -1175,12 +1524,13 @@ struct AIPromptOptimizationSheet: View {
             await viewModel.optimizeCurrentField()
             guard !Task.isCancelled,
                   let suggestion = viewModel.optimizationSuggestion else { return }
-            presentedResult = AIPromptOptimizationResultContext(
+            resultContext = AIPromptOptimizationResultContext(
                 kind: viewModel.kind,
                 field: viewModel.activeField,
                 current: viewModel.optimizationSourceText ?? viewModel.currentText,
                 suggestion: suggestion
             )
+            showsResult = true
         }
     }
 
@@ -1195,17 +1545,13 @@ struct AIPromptOptimizationSheet: View {
         viewModel.cancelOptimization()
     }
 
-    /// 先收起结果层，再在下一次主线程更新中关闭输入层，避免两层 Sheet 竞争同一次 dismiss。
+    /// 应用后一次关闭整个优化 Sheet，避免结果页与输入页重复退场。
     private func finishApplyingSuggestion() {
-        presentedResult = nil
-        Task { @MainActor in
-            await Task.yield()
-            dismiss()
-        }
+        dismiss()
     }
 }
 
-/// 优化要求的轻量输入；编辑器按内容自适应高度，键盘手势统一交由 Sheet 唯一滚动容器处理。
+/// 优化方向的轻量输入；编辑器按内容自适应高度，键盘手势统一交由 Sheet 唯一滚动容器处理。
 private struct AIPromptOptimizationInstructionEditor: UIViewRepresentable {
     @Binding var text: String
     @Binding var isFocused: Bool
@@ -1227,7 +1573,8 @@ private struct AIPromptOptimizationInstructionEditor: UIViewRepresentable {
         textView.adjustsFontForContentSizeCategory = true
         textView.font = UIFont.preferredFont(forTextStyle: .body)
         textView.textColor = .label
-        textView.accessibilityLabel = "调整期望"
+        textView.accessibilityLabel = String(localized: "优化方向")
+        textView.accessibilityHint = placeholder
         textView.updatePlaceholder(
             placeholder,
             color: .placeholderText,
@@ -1255,6 +1602,8 @@ private struct AIPromptOptimizationInstructionEditor: UIViewRepresentable {
             color: .placeholderText,
             font: UIFont.preferredFont(forTextStyle: .body)
         )
+        textView.accessibilityLabel = String(localized: "优化方向")
+        textView.accessibilityHint = placeholder
 
         if textView.markedTextRange == nil, textView.text != text {
             textView.text = text
@@ -1415,38 +1764,52 @@ private struct AIPromptOptimizationResultContext: Identifiable {
     let suggestion: String
 }
 
-/// 独立结果 Sheet 持有差异、应用错误与固定主操作；关闭只返回优化输入层。
-private struct AIPromptOptimizationResultSheet: View {
+/// 同一 Sheet 内的优化结果页；系统返回保留输入，应用成功才退出整个流程。
+private struct AIPromptOptimizationResultPage: View {
     @Bindable var viewModel: AIPromptEditorViewModel
     let result: AIPromptOptimizationResultContext
     let onApplySucceeded: () -> Void
 
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        XMSheetScaffold(
-            title: "优化结果",
-            onClose: { dismiss() },
+        XMScrollEdgeChrome(
+            presentation: .overlaySoft,
+            edges: .bottom,
             bottomBar: { resultActionBar }
         ) {
-            VStack(alignment: .leading, spacing: Spacing.base) {
-                if let error = viewModel.optimizationErrorMessage {
-                    XMInlineStatusBanner(error, tone: .error)
-                }
+            ScrollView {
+                VStack(alignment: .leading, spacing: Spacing.base) {
+                    if let error = viewModel.optimizationErrorMessage {
+                        XMInlineStatusBanner(error, tone: .error)
+                            .transition(.opacity)
+                    }
 
-                CardContainer(shape: ConcentricRectangle.xmSheetContentPanel) {
-                    AIPromptCompactDiffView(
-                        current: result.current,
-                        suggestion: result.suggestion,
-                        kind: result.kind,
-                        field: result.field
-                    )
-                    .padding(Spacing.contentEdge)
+                    CardContainer(shape: ConcentricRectangle.xmSheetContentPanel) {
+                        AIPromptCompactDiffView(
+                            current: result.current,
+                            suggestion: result.suggestion,
+                            kind: result.kind,
+                            field: result.field
+                        )
+                        .padding(Spacing.contentEdge)
+                    }
                 }
+                .padding(.horizontal, Spacing.screenEdge)
+                .padding(.top, Spacing.cozy)
+                .padding(.bottom, Spacing.double)
+                .animation(
+                    reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.18),
+                    value: viewModel.optimizationErrorMessage != nil
+                )
             }
-            .padding(.horizontal, Spacing.screenEdge)
-            .padding(.bottom, Spacing.contentEdge)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .scrollIndicators(.hidden)
+            .scrollBounceBehavior(.always)
         }
+        .background(Color.surfaceSheet.ignoresSafeArea())
+        .navigationTitle("优化结果")
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     private var resultActionBar: some View {
@@ -1462,7 +1825,7 @@ private struct AIPromptOptimizationResultSheet: View {
         .padding(.vertical, Spacing.cozy)
     }
 
-    /// 继续调用现有草稿应用入口；失败保留结果 Sheet，成功才由输入层统一关闭两层。
+    /// 继续调用现有草稿应用入口；失败保留结果页，成功才退出优化流程。
     private func applySuggestion() {
         guard viewModel.applyOptimizationSuggestion() else { return }
         onApplySucceeded()
@@ -1558,7 +1921,7 @@ private struct AIPromptCompactDiffView: View {
         let difference = compactDifference
         VStack(alignment: .leading, spacing: Spacing.base) {
             if difference.removed.isEmpty && difference.added.isEmpty {
-                Text("没有文字变化")
+                Text("没有可应用的修改")
                     .font(AppTypography.subheadline)
                     .foregroundStyle(Color.textSecondary)
             } else {

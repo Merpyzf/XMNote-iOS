@@ -91,11 +91,11 @@ nonisolated enum AIPromptKind: String, CaseIterable, Codable, Identifiable, Hash
     var subtitle: String {
         switch self {
         case .noteExplanation:
-            "让 AI 解释这段书摘的含义"
+            String(localized: "解释书摘内容与含义")
         case .wordLookup:
-            "解释正文中选中的字、词、短语或句子"
+            String(localized: "解释选中的字、词、短语或句子")
         case .autoTag:
-            "推荐适合长期知识管理的标签"
+            String(localized: "自动为书摘推荐合适的标签")
         }
     }
 }

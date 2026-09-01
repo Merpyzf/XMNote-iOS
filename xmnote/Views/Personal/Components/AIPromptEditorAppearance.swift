@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 SwiftUI/UIKit、AppTypography 与集中式颜色构造器，接收受控提示词变量定义和当前 trait
- * [OUTPUT]: 对内提供 AI Prompt 编辑器的自适应 Tonal 调色板、Reicon 资产映射、排版与局部几何
+ * [INPUT]: 依赖 SwiftUI/UIKit、AppTypography 与系统动态语义色，接收受控提示词变量定义和当前 trait
+ * [OUTPUT]: 对内提供 AI Prompt 编辑器的原生动态配色、Reicon 资产映射、排版与局部几何
  * [POS]: Views/Personal/Components 的 feature-private 外观 owner，被变量工具栏与 TextKit 原子令牌共同消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -8,46 +8,30 @@
 import SwiftUI
 import UIKit
 
-/// Prompt 编辑器内部的动态 Tonal 色，确保 SwiftUI 与 UIKit 在相同 trait 下得到同一色值。
-fileprivate struct AIPromptEditorTonalColor {
-    let lightHex: UInt
-    let darkHex: UInt
-    let highContrastLightHex: UInt
-    let highContrastDarkHex: UInt
+/// Prompt 编辑器内部的系统动态色桥接，确保 SwiftUI 与 UIKit 使用同一语义色和透明度。
+fileprivate struct AIPromptEditorSystemColor {
+    let color: Color
+    let uiColor: UIColor
 
-    /// 供 SwiftUI 组件使用、随外观与对比度变化的颜色。
-    var color: Color {
-        Color.xmAdaptive(
-            light: Color.xmHex(lightHex),
-            dark: Color.xmHex(darkHex),
-            highContrastLight: Color.xmHex(highContrastLightHex),
-            highContrastDark: Color.xmHex(highContrastDarkHex)
-        )
-    }
-
-    /// 供 TextKit 附件使用、随外观与对比度变化的 UIKit 颜色。
-    var uiColor: UIColor {
-        UIColor.xmAdaptive(
-            lightHex: lightHex,
-            darkHex: darkHex,
-            highContrastLightHex: highContrastLightHex,
-            highContrastDarkHex: highContrastDarkHex
-        )
+    init(_ uiColor: UIColor, opacity: Double = 1) {
+        let color = Color.xmResolved(uiColor).opacity(opacity)
+        self.color = color
+        self.uiColor = UIColor.xmResolved(color)
     }
 }
 
 /// 单个变量在 Prompt 编辑器中的视觉映射；业务模型不持有任何 UI 类型或资产名称。
 struct AIPromptVariablePresentation {
     let iconAssetName: String
-    private let background: AIPromptEditorTonalColor
-    private let emphasizedBackground: AIPromptEditorTonalColor
-    private let foreground: AIPromptEditorTonalColor
+    private let background: AIPromptEditorSystemColor
+    private let emphasizedBackground: AIPromptEditorSystemColor
+    private let foreground: AIPromptEditorSystemColor
 
     fileprivate init(
         iconAssetName: String,
-        background: AIPromptEditorTonalColor,
-        emphasizedBackground: AIPromptEditorTonalColor,
-        foreground: AIPromptEditorTonalColor
+        background: AIPromptEditorSystemColor,
+        emphasizedBackground: AIPromptEditorSystemColor,
+        foreground: AIPromptEditorSystemColor
     ) {
         self.iconAssetName = iconAssetName
         self.background = background
@@ -58,13 +42,15 @@ struct AIPromptVariablePresentation {
     var backgroundColor: Color { background.color }
     var emphasizedBackgroundColor: Color { emphasizedBackground.color }
     var uiBackgroundColor: UIColor { background.uiColor }
-    var uiEmphasizedBackgroundColor: UIColor { emphasizedBackground.uiColor }
     var foregroundColor: Color { foreground.color }
     var uiForegroundColor: UIColor { foreground.uiColor }
 }
 
 /// Prompt 编辑器的局部外观入口，确保 SwiftUI Chip 与 UIKit 附件使用同一组视觉参数。
 enum AIPromptEditorAppearance {
+    private static let defaultTintOpacity = 0.12
+    private static let pressedTintOpacity = 0.18
+
     enum Metrics {
         static let editorLineSpacing: CGFloat = 3
         static let editorParagraphSpacing: CGFloat = 5
@@ -165,11 +151,11 @@ enum AIPromptEditorAppearance {
     /// 系统重做图标，沿用平台编辑语义并由 SwiftUI 负责字重与禁用态。
     static let redoSystemImageName = "arrow.uturn.forward"
 
-    /// 按变量语义映射 Reicon Filled 资产与浅深模式均可读的 Tonal 色；颜色不承担必需或已插入状态。
+    /// 按变量语义映射 Reicon Filled 资产与系统动态色；颜色不承担必需或已插入状态。
     static func presentation(
         for variable: AIPromptVariableDefinition
     ) -> AIPromptVariablePresentation {
-        let palette = palette(for: variable.category)
+        let palette = palette(for: variable.name)
         return AIPromptVariablePresentation(
             iconAssetName: iconAssetName(for: variable.name),
             background: palette.background,
@@ -202,78 +188,51 @@ enum AIPromptEditorAppearance {
         }
     }
 
-    /// 返回类别在浅色、深色、按压和提高对比度环境下共用的三角色颜色。
+    /// 返回变量在默认与按压状态下共用的系统语义色，亮暗和高对比度均交由 UIKit 动态解析。
     private static func palette(
-        for category: AIPromptVariableCategory
+        for variableName: String
     ) -> (
-        background: AIPromptEditorTonalColor,
-        emphasizedBackground: AIPromptEditorTonalColor,
-        foreground: AIPromptEditorTonalColor
+        background: AIPromptEditorSystemColor,
+        emphasizedBackground: AIPromptEditorSystemColor,
+        foreground: AIPromptEditorSystemColor
     ) {
-        switch category {
-        case .content:
-            (
-                AIPromptEditorTonalColor(
-                    lightHex: 0xF3AE9A,
-                    darkHex: 0x9C4933,
-                    highContrastLightHex: 0xF3AE9A,
-                    highContrastDarkHex: 0x873D2B
-                ),
-                AIPromptEditorTonalColor(
-                    lightHex: 0xE9997F,
-                    darkHex: 0x873D2B,
-                    highContrastLightHex: 0xE9997F,
-                    highContrastDarkHex: 0x6E2F21
-                ),
-                AIPromptEditorTonalColor(
-                    lightHex: 0x6B2B18,
-                    darkHex: 0xFFF3EF,
-                    highContrastLightHex: 0x461608,
-                    highContrastDarkHex: 0xFFFFFF
-                )
-            )
-        case .context:
-            (
-                AIPromptEditorTonalColor(
-                    lightHex: 0x8AD4DF,
-                    darkHex: 0x167888,
-                    highContrastLightHex: 0x8AD4DF,
-                    highContrastDarkHex: 0x126A79
-                ),
-                AIPromptEditorTonalColor(
-                    lightHex: 0x72C6D2,
-                    darkHex: 0x126A79,
-                    highContrastLightHex: 0x72C6D2,
-                    highContrastDarkHex: 0x0B5260
-                ),
-                AIPromptEditorTonalColor(
-                    lightHex: 0x004B55,
-                    darkHex: 0xF2FCFF,
-                    highContrastLightHex: 0x00343C,
-                    highContrastDarkHex: 0xFFFFFF
-                )
-            )
-        case .metadata:
-            (
-                AIPromptEditorTonalColor(
-                    lightHex: 0x8BBEF0,
-                    darkHex: 0x286EA6,
-                    highContrastLightHex: 0x8BBEF0,
-                    highContrastDarkHex: 0x225F91
-                ),
-                AIPromptEditorTonalColor(
-                    lightHex: 0x72ACE0,
-                    darkHex: 0x225F91,
-                    highContrastLightHex: 0x72ACE0,
-                    highContrastDarkHex: 0x194B74
-                ),
-                AIPromptEditorTonalColor(
-                    lightHex: 0x0B3F75,
-                    darkHex: 0xF3F9FF,
-                    highContrastLightHex: 0x062953,
-                    highContrastDarkHex: 0xFFFFFF
-                )
-            )
+        switch variableName {
+        case "摘录", "书摘内容", "查询文本":
+            tintedPalette(baseColor: .systemOrange)
+        case "想法", "上下文":
+            tintedPalette(baseColor: .systemTeal)
+        case "书籍名", "作者名", "章节", "已有标签":
+            tintedPalette(baseColor: .systemBlue)
+        default:
+            neutralPalette()
         }
+    }
+
+    /// 以系统色本身作为前景，并用轻量透明度承载默认和按压状态。
+    private static func tintedPalette(
+        baseColor: UIColor
+    ) -> (
+        background: AIPromptEditorSystemColor,
+        emphasizedBackground: AIPromptEditorSystemColor,
+        foreground: AIPromptEditorSystemColor
+    ) {
+        (
+            AIPromptEditorSystemColor(baseColor, opacity: defaultTintOpacity),
+            AIPromptEditorSystemColor(baseColor, opacity: pressedTintOpacity),
+            AIPromptEditorSystemColor(baseColor)
+        )
+    }
+
+    /// 中性变量使用系统标签色与 Fill 层级，避免为未知语义派生额外业务色。
+    private static func neutralPalette() -> (
+        background: AIPromptEditorSystemColor,
+        emphasizedBackground: AIPromptEditorSystemColor,
+        foreground: AIPromptEditorSystemColor
+    ) {
+        (
+            AIPromptEditorSystemColor(.secondarySystemFill),
+            AIPromptEditorSystemColor(.systemFill),
+            AIPromptEditorSystemColor(.secondaryLabel)
+        )
     }
 }

@@ -222,10 +222,15 @@ nonisolated enum AIPromptTrialTarget: String, CaseIterable, Hashable, Identifiab
     var id: String { rawValue }
 }
 
-/// 试运行流式事件；单侧失败作为目标事件返回，使另一侧仍能继续生成并保留部分内容。
+/// 试运行流式事件；标签完成态额外携带 Repository 校准后的结构化结果。
 nonisolated enum AIPromptTrialEvent: Equatable, Sendable {
     case content(target: AIPromptTrialTarget, markdown: String)
     case completed(target: AIPromptTrialTarget)
+    case completedAutoTags(
+        target: AIPromptTrialTarget,
+        suggestions: [AIAutoTagSuggestion]
+    )
+    case invalidAutoTags(target: AIPromptTrialTarget)
     case failed(target: AIPromptTrialTarget, error: AIRepositoryError)
 }
 

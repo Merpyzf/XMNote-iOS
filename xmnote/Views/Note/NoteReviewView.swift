@@ -334,8 +334,7 @@ struct NoteReviewView: View {
                     )
                 case .autoTag:
                     autoTagPresentation = AIAutoTagPresentation(
-                        noteID: item.id,
-                        bookTitle: item.bookTitle
+                        noteID: item.id
                     )
                 }
             case .configurationRequired:

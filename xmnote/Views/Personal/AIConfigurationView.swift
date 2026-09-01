@@ -22,7 +22,7 @@ struct AIConfigurationView: View {
             if let viewModel {
                 AIConfigurationContentView(viewModel: viewModel)
             } else if bootstrapLoadingGate.isVisible {
-                LoadingStateView("正在读取 AI 配置…", style: .card)
+                LoadingStateView("正在载入…", style: .card)
             }
         }
         .navigationTitle("AI 配置")
@@ -82,11 +82,17 @@ private struct AIConfigurationContentView: View {
             descriptor: deleteKeyAlertDescriptor
         )
         .overlay {
-            if viewModel.isSaving {
-                Color.overlay.ignoresSafeArea()
-                LoadingStateView("正在保存 AI 配置…", style: .card)
-                    .transition(.opacity)
+            Group {
+                if viewModel.isSaving {
+                    Color.overlay.ignoresSafeArea()
+                    LoadingStateView("正在保存…", style: .card)
+                        .transition(.opacity)
+                }
             }
+            .animation(
+                reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.18),
+                value: viewModel.isSaving
+            )
         }
         .onAppear {
             if hasCompletedInitialAppearance {
@@ -110,7 +116,7 @@ private struct AIConfigurationContentView: View {
                                 .font(SettingsTypography.rowTitle)
                                 .foregroundStyle(Color.textPrimary)
 
-                            Text("用于书摘释义、选词解释与标签推荐")
+                            Text("用于书摘释义、查词和标签推荐")
                                 .font(SettingsTypography.rowDescription)
                                 .foregroundStyle(Color.textSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -155,9 +161,10 @@ private struct AIConfigurationContentView: View {
                         apiKeyInput
                             .padding(.top, Spacing.cozy)
                             .padding(.bottom, Spacing.base)
-                            .transition(.opacity)
-                    }
-                }
+                .transition(.opacity)
+            }
+        }
+        .animation(credentialAnimation, value: viewModel.validationMessage != nil)
                 .animation(credentialAnimation, value: shouldShowAPIKeyInput)
             }
 
@@ -200,7 +207,7 @@ private struct AIConfigurationContentView: View {
 
                                 Spacer(minLength: Spacing.base)
 
-                                Text(viewModel.isPromptCustomized(kind) ? "已自定义" : "默认")
+                                Text(viewModel.isPromptCustomized(kind) ? "自定义" : "默认")
                                     .font(AppTypography.caption)
                                     .foregroundStyle(Color.textSecondary)
 
@@ -261,7 +268,7 @@ private struct AIConfigurationContentView: View {
                 }
 
             if viewModel.selectedProviderHasStoredKey {
-                Text("保存后将替换当前 API Key")
+                Text("保存后替换现有 API Key")
                     .font(AppTypography.caption)
                     .foregroundStyle(Color.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -284,14 +291,14 @@ private struct AIConfigurationContentView: View {
                 Button {
                     beginAPIKeyEditing()
                 } label: {
-                    XMMenuLabel("更换密钥", systemImage: "key")
+                    XMMenuLabel("更换 API Key", systemImage: "key")
                 }
 
                 Button(role: .destructive) {
                     isAPIKeyFocused = false
                     showsDeleteKeyAlert = true
                 } label: {
-                    Label("移除", systemImage: "trash")
+                    Label("移除 API Key", systemImage: "trash")
                 }
                 .tint(Color.feedbackError)
             } label: {
@@ -321,8 +328,10 @@ private struct AIConfigurationContentView: View {
             : .singleItem
     }
 
-    private var credentialAnimation: Animation? {
-        reduceMotion ? nil : .smooth(duration: 0.18)
+    private var credentialAnimation: Animation {
+        reduceMotion
+            ? .easeOut(duration: 0.12)
+            : .smooth(duration: 0.18)
     }
 
     private var settingsDivider: some View {
@@ -367,7 +376,7 @@ private struct AIConfigurationContentView: View {
     private var deleteKeyAlertDescriptor: XMSystemAlertDescriptor {
         XMSystemAlertDescriptor(
             title: "移除 \(viewModel.selectedProvider.displayName) API Key？",
-            message: "移除后，当前服务商将无法继续使用，AI 功能会同时关闭。",
+            message: "移除后，AI 功能将关闭。",
             actions: [
                 XMSystemAlertAction(title: "取消", role: .cancel) { },
                 XMSystemAlertAction(title: "移除", role: .destructive) {

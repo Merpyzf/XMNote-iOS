@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 AIRepositoryProtocol 读取与原子保存单任务 Prompt，生成离线预览并执行字段优化
+ * [INPUT]: 依赖 AIRepositoryProtocol 与 AIPersonalErrorCopy，读取与原子保存单任务 Prompt，生成离线预览并执行字段优化
  * [OUTPUT]: 对外提供 AIPromptEditorViewModel，统一管理双字段草稿、校验、恢复、预览与优化建议
  * [POS]: ViewModels/Personal 的提示词编辑状态源，被独立 push 编辑页及其三个按需 Sheet 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -121,7 +121,7 @@ final class AIPromptEditorViewModel {
         } catch is CancellationError {
             return
         } catch {
-            errorMessage = "读取失败：\(error.localizedDescription)"
+            errorMessage = AIPersonalErrorCopy.message(for: error, context: .readPrompt)
         }
     }
 
@@ -141,7 +141,7 @@ final class AIPromptEditorViewModel {
         } catch is CancellationError {
             return false
         } catch {
-            errorMessage = "无法保存，请重试"
+            errorMessage = AIPersonalErrorCopy.message(for: error, context: .savePrompt)
             return false
         }
     }
@@ -181,7 +181,7 @@ final class AIPromptEditorViewModel {
             errorMessage = nil
         } catch {
             preview = nil
-            errorMessage = error.localizedDescription
+            errorMessage = AIPersonalErrorCopy.message(for: error, context: .previewPrompt)
         }
     }
 
@@ -217,7 +217,7 @@ final class AIPromptEditorViewModel {
             guard activeOptimizationRequest?.id == request.id else { return }
             guard activeField == request.field,
                   template == request.template else {
-                optimizationErrorMessage = "提示词已变化，请重新生成建议"
+                optimizationErrorMessage = String(localized: "提示词已更改，请重新优化")
                 return
             }
             optimizationSuggestion = suggestion
@@ -226,7 +226,10 @@ final class AIPromptEditorViewModel {
             return
         } catch {
             guard activeOptimizationRequest?.id == request.id else { return }
-            optimizationErrorMessage = error.localizedDescription
+            optimizationErrorMessage = AIPersonalErrorCopy.message(
+                for: error,
+                context: .optimizePrompt
+            )
         }
     }
 
@@ -245,7 +248,7 @@ final class AIPromptEditorViewModel {
               template == request.template else {
             self.optimizationSuggestion = nil
             optimizationSuggestionRequest = nil
-            optimizationErrorMessage = "提示词已变化，请重新生成建议"
+            optimizationErrorMessage = String(localized: "提示词已更改，请重新优化")
             return false
         }
         switch request.field {

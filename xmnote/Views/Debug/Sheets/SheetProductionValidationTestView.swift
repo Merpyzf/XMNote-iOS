@@ -29,7 +29,6 @@ struct SheetProductionValidationTestView: View {
     @State private var bookshelfDisplaySetting = BookshelfDisplaySetting.defaultValue
     @State private var collectionDisplaySetting = BookCollectionDisplaySetting.defaultValue
     @State private var readingGoalValue = "60"
-    @State private var aiConfigurationViewModel: AIConfigurationViewModel
     @State private var apiIntegrationViewModel: ApiIntegrationViewModel
     @State private var dataBackupViewModel: DataBackupViewModel
     @State private var webDAVServerViewModel: WebDAVServerViewModel
@@ -64,9 +63,6 @@ struct SheetProductionValidationTestView: View {
         let aiRepository = SheetValidationAIRepository()
         self.validationAIRepository = aiRepository
         self.validationBookSearchRepository = BookSelectionFixtureRepository(fixture: .standard)
-
-        let aiConfigurationViewModel = AIConfigurationViewModel(repository: aiRepository)
-        _aiConfigurationViewModel = State(initialValue: aiConfigurationViewModel)
 
         let apiIntegrationViewModel = ApiIntegrationViewModel(
             repository: repositories.externalAppIntegrationRepository
@@ -521,8 +517,7 @@ struct SheetProductionValidationTestView: View {
         case .aiTag:
             AIAutoTagSheet(
                 presentation: AIAutoTagPresentation(
-                    noteID: 1,
-                    bookTitle: "设计中的设计"
+                    noteID: 1
                 ),
                 repository: validationAIRepository
             )
@@ -661,9 +656,11 @@ struct SheetProductionValidationTestView: View {
             )
 
         case .aiPrompt:
-            AIConfigurationPromptEditSheet(
-                kind: .noteExplanation,
-                viewModel: aiConfigurationViewModel
+            AIPromptTrialSheet(
+                kind: .autoTag,
+                template: Self.autoTagTrialTemplate,
+                aiRepository: validationAIRepository,
+                noteRepository: repositories.noteRepository
             )
 
         case .apiIntegration:
@@ -1287,6 +1284,13 @@ private struct SheetPreviewExcludedBooksNavigationStack: View {
 }
 
 private extension SheetProductionValidationTestView {
+    /// 对齐生产 AI 标签试运行的双结果条件，只在安全替身中追加一条未保存要求。
+    static var autoTagTrialTemplate: AIPromptTemplate {
+        var template = AIPromptConfiguration.androidAlignedDefault.template(for: .autoTag)
+        template.user += "\n最多推荐 2 个标签。"
+        return template
+    }
+
     static func tagOptions(from snapshot: SheetPreviewSnapshot?) -> [NoteEditorTagOption] {
         guard let entities = snapshot?.representativeTags, !entities.isEmpty else {
             return tags
@@ -1450,7 +1454,7 @@ private extension SheetProductionValidationTestView {
             case .readingProgress: "阅读进度编辑"
             case .heatmapHelp: "热力图说明"
             case .readingGoal: "阅读目标编辑"
-            case .aiPrompt: "AI Prompt 编辑"
+            case .aiPrompt: "AI 标签提示词测试"
             case .apiIntegration: "API 集成编辑"
             case .backupHistory: "备份历史"
             case .backupRestore: "备份恢复确认"
@@ -1526,7 +1530,7 @@ private extension SheetProductionValidationTestView {
             case .readingProgress: "BookReadingProgressSheet"
             case .heatmapHelp: "HeatmapHelpSheetView"
             case .readingGoal: "ReadingGoalEditorSheet"
-            case .aiPrompt: "AIConfigurationPromptEditSheet"
+            case .aiPrompt: "AIPromptTrialSheet"
             case .apiIntegration: "ApiIntegrationEditSheet"
             case .backupHistory: "BackupHistorySheetView"
             case .backupRestore: "BackupRestoreConfirmSheet"
@@ -1561,7 +1565,7 @@ private extension SheetProductionValidationTestView {
             if owner == "XMTagNameSheet · 新建" { return .xmTagNameCreate }
             if owner == "XMTagNameSheet · 重命名" { return .xmTagNameRename }
             if owner.hasPrefix("分享选项") { return .readingShare }
-            if owner == "AIConfigurationPromptEditSheet" { return .aiPrompt }
+            if owner == "AIPromptTrialSheet" { return .aiPrompt }
             if owner == "ApiIntegrationEditSheet" { return .apiIntegration }
             if owner == "BackupHistorySheetView" { return .backupHistory }
             if owner == "BackupRestoreConfirmSheet" { return .backupRestore }
@@ -2105,21 +2109,59 @@ private struct SheetValidationAIRepository: AIRepositoryProtocol {
         comparesDefault: Bool
     ) -> AsyncThrowingStream<AIPromptTrialEvent, Error> {
         AsyncThrowingStream { continuation in
+            let currentContent = kind == .autoTag
+                ? "{\"tags\":[{\"name\":\"概念\",\"reason\":\"直接关联书摘的抽象主题\"}]}"
+                : "## 核心观点\n\n当前提示词的试运行结果"
             continuation.yield(
                 .content(
                     target: .current,
-                    markdown: "## 核心观点\n\n当前提示词的试运行结果"
+                    markdown: currentContent
                 )
             )
-            continuation.yield(.completed(target: .current))
+            if kind == .autoTag {
+                continuation.yield(
+                    .completedAutoTags(
+                        target: .current,
+                        suggestions: [
+                            AIAutoTagSuggestion(
+                                name: "概念",
+                                isExisting: true,
+                                reason: "直接关联书摘的抽象主题",
+                                isSelected: true
+                            ),
+                        ]
+                    )
+                )
+            } else {
+                continuation.yield(.completed(target: .current))
+            }
             if comparesDefault {
+                let originalContent = kind == .autoTag
+                    ? "{\"tags\":[{\"name\":\"阅读\",\"reason\":\"原始提示词的标签结果\"}]}"
+                    : "## 核心观点\n\n应用原始提示词的试运行结果"
                 continuation.yield(
                     .content(
                         target: .appDefault,
-                        markdown: "## 核心观点\n\n应用原始提示词的试运行结果"
+                        markdown: originalContent
                     )
                 )
-                continuation.yield(.completed(target: .appDefault))
+                if kind == .autoTag {
+                    continuation.yield(
+                        .completedAutoTags(
+                            target: .appDefault,
+                            suggestions: [
+                                AIAutoTagSuggestion(
+                                    name: "阅读",
+                                    isExisting: false,
+                                    reason: "原始提示词的标签结果",
+                                    isSelected: true
+                                ),
+                            ]
+                        )
+                    )
+                } else {
+                    continuation.yield(.completed(target: .appDefault))
+                }
             }
             continuation.finish()
         }

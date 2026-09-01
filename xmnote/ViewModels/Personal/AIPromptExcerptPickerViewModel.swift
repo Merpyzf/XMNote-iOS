@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 NoteRepositoryProtocol 按全部书摘范围观察搜索与稳定分页结果
+ * [INPUT]: 依赖 NoteRepositoryProtocol 与 AIPersonalErrorCopy，按全部书摘范围观察搜索与稳定分页结果
  * [OUTPUT]: 对外提供 AIPromptExcerptPickerViewModel，管理书摘选择 Sheet 的防抖搜索、分页、空态与保留内容失败
  * [POS]: ViewModels/Personal 的提示词试运行书摘选择状态源，被 AIPromptExcerptPickerSheet 创建并持有
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -152,9 +152,15 @@ final class AIPromptExcerptPickerViewModel {
                 }
                 self.isLoading = false
                 if self.items.isEmpty {
-                    self.errorMessage = error.localizedDescription
+                    self.errorMessage = AIPersonalErrorCopy.message(
+                        for: error,
+                        context: .readExcerpts
+                    )
                 } else {
-                    self.retainedErrorMessage = error.localizedDescription
+                    self.retainedErrorMessage = AIPersonalErrorCopy.message(
+                        for: error,
+                        context: .readExcerpts
+                    )
                 }
             }
         }

@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 AIRepositoryProtocol、提示词试运行书摘/流式事件与当前提示词模板快照
+ * [INPUT]: 依赖 AIRepositoryProtocol、AIPersonalErrorCopy、提示词试运行书摘/流式事件与当前提示词模板快照
  * [OUTPUT]: 对外提供 AIPromptTrialSessionViewModel 与分目标生成阶段，统一维护一次测试 Sheet 会话的输入、结果和取消边界
  * [POS]: ViewModels/Personal 的提示词试运行会话状态源，被准备页与 Push 结果页共同消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -7,18 +7,22 @@
 
 import Foundation
 
-/// 单个提示词目标的试运行阶段；失败保留已生成 Markdown，供界面继续展示可信的部分结果。
+/// 单个提示词目标的试运行阶段；标签结果保留原始 JSON 与 Repository 校准后的展示快照。
 nonisolated enum AIPromptTrialPhase: Equatable, Sendable {
     case idle
     case connecting
     case streaming(String)
     case completed(String)
+    case completedAutoTags(rawJSON: String, suggestions: [AIAutoTagSuggestion])
+    case invalidAutoTags(rawJSON: String)
     case failed(message: String, partialContent: String)
 
     var content: String {
         switch self {
         case .streaming(let content), .completed(let content):
             content
+        case .completedAutoTags(let rawJSON, _), .invalidAutoTags(let rawJSON):
+            rawJSON
         case .failed(_, let partialContent):
             partialContent
         case .idle, .connecting:
@@ -202,7 +206,7 @@ final class AIPromptTrialSessionViewModel {
             return
         } catch {
             guard activeRequestID == requestID else { return }
-            errorMessage = error.localizedDescription
+            errorMessage = AIPersonalErrorCopy.message(for: error, context: .generateTrial)
         }
     }
 
@@ -228,20 +232,37 @@ final class AIPromptTrialSessionViewModel {
         case .content(let target, let markdown):
             phases[target] = .streaming(markdown)
         case .completed(let target):
-            let content = phase(for: target).content
-            if content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                phases[target] = .failed(
-                    message: AIRepositoryError.emptyResponse.localizedDescription,
-                    partialContent: ""
-                )
-            } else {
-                phases[target] = .completed(content)
+            applyCompletion(to: target) { .completed($0) }
+        case .completedAutoTags(let target, let suggestions):
+            applyCompletion(to: target) {
+                .completedAutoTags(rawJSON: $0, suggestions: suggestions)
             }
+        case .invalidAutoTags(let target):
+            applyCompletion(to: target) { .invalidAutoTags(rawJSON: $0) }
         case .failed(let target, let error):
             phases[target] = .failed(
-                message: error.localizedDescription,
+                message: AIPersonalErrorCopy.message(for: error, context: .generateTrial),
                 partialContent: phase(for: target).content
             )
+        }
+    }
+
+    /// 在结构化投影前统一拦截空响应，确保文本与标签目标共用同一失败语义。
+    private func applyCompletion(
+        to target: AIPromptTrialTarget,
+        makePhase: (String) -> AIPromptTrialPhase
+    ) {
+        let content = phase(for: target).content
+        if content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            phases[target] = .failed(
+                message: AIPersonalErrorCopy.message(
+                    for: AIRepositoryError.emptyResponse,
+                    context: .generateTrial
+                ),
+                partialContent: ""
+            )
+        } else {
+            phases[target] = makePhase(content)
         }
     }
 }
