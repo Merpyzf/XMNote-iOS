@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 BookPickerView 选择有效本地书籍，依赖 CheckInAmountLevel 与写入回调
- * [OUTPUT]: 对外提供 ReadCalendarCheckInSheet，承接当日打卡的书籍与阅读量选择
+ * [INPUT]: 依赖 BookPickerView 选择有效本地书籍，依赖 ReiconBookOutline、CheckInAmountLevel 与写入回调
+ * [OUTPUT]: 对外提供 ReadCalendarCheckInSheet，以 Reicon 表达书籍领域对象并承接当日打卡的书籍与阅读量选择
  * [POS]: ReadCalendar 业务 Sheet，仅组织输入与即时写入反馈
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -9,6 +9,12 @@ import SwiftUI
 
 /// 当日打卡输入页；保存期间即时禁用入口，失败由页面保留现场并展示错误。
 struct ReadCalendarCheckInSheet: View {
+    /// 打卡表单中书籍领域图标的视觉尺寸与对齐槽位。
+    private enum Layout {
+        static let bookIconSlotSize: CGFloat = 24
+        static let bookIconSize: CGFloat = 18
+    }
+
     let date: Date
     let recordID: Int64?
     let initialBook: ReadCalendarDayBook?
@@ -74,8 +80,19 @@ struct ReadCalendarCheckInSheet: View {
                                     }
                                 }
                             } else {
-                                Label("选择书籍", systemImage: "books.vertical")
-                                    .foregroundStyle(Color.textPrimary)
+                                HStack(spacing: Spacing.base) {
+                                    Image(.reiconBookOutline)
+                                        .renderingMode(.template)
+                                        .resizable()
+                                        .scaledToFit()
+                                        .foregroundStyle(Color.iconSecondary)
+                                        .frame(width: Layout.bookIconSize, height: Layout.bookIconSize)
+                                        .frame(width: Layout.bookIconSlotSize)
+                                        .accessibilityHidden(true)
+
+                                    Text("选择书籍")
+                                        .foregroundStyle(Color.textPrimary)
+                                }
                             }
                             Spacer()
                             Image(systemName: "chevron.right")

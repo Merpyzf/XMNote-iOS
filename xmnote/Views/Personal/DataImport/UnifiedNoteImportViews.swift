@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 NoteImportParserRegistry、NoteImportRepositoryProtocol、BookPickerView 与系统文件/剪贴板能力
- * [OUTPUT]: 对外提供统一文件/剪贴板解析入口和全来源导入预览
+ * [OUTPUT]: 对外提供带 Reicon 输入方式标识的统一文件/剪贴板解析入口和全来源导入预览
  * [POS]: Views/Personal/DataImport 的全来源公共交互层；UI 只调用 Golden 验证过的 Parser Registry
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -30,9 +30,12 @@ struct NoteImportSourceScreen: View {
 
     var body: some View {
         VStack(spacing: Spacing.section) {
-            Image(systemName: inputIcon)
-                .font(.system(size: 56, weight: .light))
+            Image(inputIcon)
+                .resizable()
+                .scaledToFit()
                 .foregroundStyle(Color.appTint)
+                .frame(width: 56, height: 56)
+                .accessibilityHidden(true)
             Text(instruction)
                 .font(AppTypography.body)
                 .foregroundStyle(Color.textSecondary)
@@ -83,8 +86,13 @@ struct NoteImportSourceScreen: View {
         )
     }
 
-    private var inputIcon: String {
-        switch input { case .file, .fileCandidates: "doc.badge.plus"; case .clipboard, .clipboardCandidates: "doc.on.clipboard" }
+    private var inputIcon: ImageResource {
+        switch input {
+        case .file, .fileCandidates:
+            .reiconFilePlusOutline
+        case .clipboard, .clipboardCandidates:
+            .reiconClipboardTextOutline
+        }
     }
 
     private var instruction: String {

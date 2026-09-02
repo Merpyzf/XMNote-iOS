@@ -782,11 +782,15 @@ private struct TopBarActionLabMenuControl: View {
                     XMMenuLabel("回顾设置", systemImage: "slider.horizontal.3")
                 }
             case .notes:
-                Button(action: {}) {
-                    XMMenuLabel("最新优先", systemImage: "clock")
-                }
-                Button(action: {}) {
-                    XMMenuLabel("按书籍分组", systemImage: "books.vertical")
+                Menu {
+                    Button(action: {}) {
+                        XMMenuLabel("最新优先", systemImage: "clock")
+                    }
+                    Button(action: {}) {
+                        XMMenuLabel("按书籍分组", systemImage: "books.vertical")
+                    }
+                } label: {
+                    XMMenuLabel("排序", systemImage: "arrow.up.arrow.down")
                 }
             case .personal:
                 Button(action: {}) {
@@ -1074,11 +1078,11 @@ private enum TopBarActionLabContext: String, CaseIterable, Identifiable, Hashabl
         case .collection: return "书单"
         }
     }
-    var trailingSystemImage: String { self == .notes ? "arrow.up.arrow.down" : "ellipsis" }
+    var trailingSystemImage: String { "ellipsis" }
     var trailingAccessibilityLabel: String {
         switch self {
         case .review: return "回顾更多操作"
-        case .notes: return "排序"
+        case .notes: return "笔记更多操作"
         case .personal: return "我的更多操作"
         case .collection: return "书单更多操作"
         }

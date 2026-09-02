@@ -1,13 +1,13 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer 注入 AIRepositoryProtocol，依赖 AIConfigurationViewModel、设置分组卡片与统一反馈组件
- * [OUTPUT]: 对外提供 AIConfigurationView，以统一设置页层级承载 DeepSeek 模型/API 凭证与三类独立 push Prompt 编辑入口
- * [POS]: Views/Personal 的 AI 配置页面壳层，被 PersonalRoute.aiConfiguration 导航消费
+ * [OUTPUT]: 对外提供 AIConfigurationView，以统一设置页层级和 Reicon 语义图标承载“AI 助手”的 DeepSeek 模型、API 凭证管理与三类独立 push Prompt 编辑入口
+ * [POS]: Views/Personal 的 AI 助手页面壳层，被 PersonalRoute.aiConfiguration 导航消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
 
-/// AI 配置页严格复用当前设置页卡片、字体、颜色与导航结构，不引入独立视觉语言。
+/// AI 助手配置页严格复用当前设置页卡片、字体、颜色与导航结构，不引入独立视觉语言。
 struct AIConfigurationView: View {
     @Environment(RepositoryContainer.self) private var repositories
     @Environment(XMToastCenter.self) private var toastCenter
@@ -25,7 +25,7 @@ struct AIConfigurationView: View {
                 LoadingStateView("正在载入…", style: .card)
             }
         }
-        .navigationTitle("AI 配置")
+        .navigationTitle("AI 助手")
         .navigationBarTitleDisplayMode(.inline)
         .task {
             guard viewModel == nil else { return }
@@ -189,9 +189,11 @@ private struct AIConfigurationContentView: View {
                     ForEach(AIPromptKind.allCases) { kind in
                         NavigationLink(value: AppRoute.personal(.aiPromptEditor(kind))) {
                             HStack(spacing: Spacing.base) {
-                                Image(systemName: kind.systemImage)
-                                    .font(AppTypography.bodyMedium)
+                                Image(kind.iconResource)
+                                    .resizable()
+                                    .scaledToFit()
                                     .foregroundStyle(Color.iconSecondary)
+                                    .frame(width: 18, height: 18)
                                     .frame(width: XMSettingsPageLayout.iconSlotWidth)
                                     .accessibilityHidden(true)
 
@@ -388,14 +390,14 @@ private struct AIConfigurationContentView: View {
 }
 
 private extension AIPromptKind {
-    var systemImage: String {
+    var iconResource: ImageResource {
         switch self {
         case .noteExplanation:
-            "quote.bubble"
+            .reiconQuoteUpOutline
         case .wordLookup:
-            "text.magnifyingglass"
+            .reiconSearchOutline
         case .autoTag:
-            "tag"
+            .reiconTagOutline
         }
     }
 }

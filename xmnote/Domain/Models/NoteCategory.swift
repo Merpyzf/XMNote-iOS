@@ -28,19 +28,17 @@ nonisolated enum NoteCategory: String, CaseIterable, Identifiable, Hashable, Sen
 
 /// 书摘聚合入口的稳定排序协议；持久化使用 rawValue，不绑定中文展示文案。
 nonisolated enum NoteExcerptGroupSort: String, CaseIterable, Identifiable, Hashable, Sendable, Codable {
-    case defaultOrder
-    case countDescending
     case countAscending
-    case titleAscending
+    case countDescending
+    case customOrder
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .defaultOrder: "默认顺序"
-        case .countDescending: "数量从多到少"
-        case .countAscending: "数量从少到多"
-        case .titleAscending: "名称顺序"
+        case .countAscending: "书摘数量 • 由少到多"
+        case .countDescending: "书摘数量 • 由多到少"
+        case .customOrder: "自定义顺序"
         }
     }
 }

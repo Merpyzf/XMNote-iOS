@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 CalendarMonthStepperBar/ReadCalendarMonthGrid/ReadCalendarCoverFanStack/ReadCalendarSelectedDaySummaryBar 页面私有组件、ReadCalendarDay/ReadCalendarMonthlyDurationBook 领域模型、ReadCalendarTheme、ReadCalendarTextStyle 与 DesignTokens
- * [OUTPUT]: 对外提供 ReadCalendarContentView（含短内容回弹的月/年视图、事件模式选中日摘要、统计设置过滤态、同期摘要弹层、年度热力图、书封浮层与按模式区分的日期交互）
+ * [INPUT]: 依赖 CalendarMonthStepperBar/ReadCalendarMonthGrid/ReadCalendarCoverFanStack/ReadCalendarSelectedDaySummaryBar 页面私有组件、ReadCalendarDay/ReadCalendarMonthlyDurationBook 领域模型、阅读日历两态 Reicon 资源、ReadCalendarTheme、ReadCalendarTextStyle 与 DesignTokens
+ * [OUTPUT]: 对外提供 ReadCalendarContentView（含无广域模式动效的 Reicon 模式切换、短内容回弹的月/年视图、事件模式选中日摘要、统计设置过滤态、同期摘要弹层、年度热力图、书封浮层与按模式区分的日期交互）
  * [POS]: ReadCalendar 业务页面壳层组件，负责日历主内容组合、选中日安全区摘要、封面全量展开、日期选择/详情导航分流与业务内弹层触发
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -29,16 +29,42 @@ struct ReadCalendarContentView: View {
             }
         }
 
-        /// 返回顶部模式切换器使用的稳定图标，由系统选中底板表达当前状态。
-        var iconName: String {
+        var outlineIconResource: ImageResource {
             switch self {
             case .heatmap:
-                return "square.grid.3x3"
+                return .reiconGridOutline
             case .activityEvent:
-                return "list.bullet.rectangle"
+                return .reiconAlign3LeftOutline
             case .bookCover:
-                return "books.vertical"
+                return .reiconBook4Outline
             }
+        }
+
+        var filledIconResource: ImageResource {
+            switch self {
+            case .heatmap:
+                return .reiconGridFilled
+            case .activityEvent:
+                return .reiconAlign3LeftFilled
+            case .bookCover:
+                return .reiconBook4Filled
+            }
+        }
+
+        var iconOpticalSize: CGFloat {
+            switch self {
+            case .heatmap:
+                return 14
+            case .activityEvent:
+                return 16
+            case .bookCover:
+                return 13.5
+            }
+        }
+
+        /// 根据当前选择状态返回对应线性或面性资源，保持业务语义与视觉状态一致。
+        func iconResource(isSelected: Bool) -> ImageResource {
+            isSelected ? filledIconResource : outlineIconResource
         }
     }
 
@@ -223,7 +249,6 @@ struct ReadCalendarContentView: View {
         static let topControlBackgroundOpacity: CGFloat = 1
         static let topControlLayerZIndex: Double = 12
         static let contentLayerZIndex: Double = 0
-        static let displayModeTransitionDuration: CGFloat = 0.24
         static let horizontalPagerProgrammaticDuration: CGFloat = 0.24
         static let weekdayHeaderHeight: CGFloat = 32
         static let pageMinHeight: CGFloat = 252
@@ -363,7 +388,7 @@ private extension ReadCalendarContentView {
                     .transition(selectedDaySummaryTransition)
                 }
             }
-            .animation(selectedDaySummaryAnimation, value: selectedActivityDaySummary)
+            .animation(selectedDaySummaryAnimation, value: activeSelectedDate)
             .animation(accessibilityReduceMotion ? nil : Motion.errorState, value: props.errorMessage)
             .onAppear {
                 onBookCoverFullscreenPresentationChanged(isBookCoverFullscreenPresented)
@@ -729,10 +754,6 @@ private extension ReadCalendarContentView {
     var isCurrentYearHeatmapLoading: Bool {
         let hasLoadedMonth = heatmapYearMonthPages.contains { $0.loadState == .loaded }
         return props.selectedYearLoadState == .loading && !hasLoadedMonth
-    }
-
-    var summaryFloatingButtonIconName: String {
-        "chart.bar.xaxis"
     }
 
     var summaryFloatingButtonAccessibilityLabel: String {
@@ -1128,7 +1149,10 @@ private extension ReadCalendarContentView {
         }
         .padding(.top, Layout.calendarInnerTopPadding)
         .padding(.bottom, Layout.calendarInnerBottomPadding + interactiveBottomInset)
-        .animation(displayModeTransitionAnimation, value: props.displayMode)
+        .transaction(value: props.displayMode) { transaction in
+            transaction.animation = nil
+            transaction.disablesAnimations = true
+        }
     }
 
     /// 根据根状态切换加载、空态和内容区，并承载悬浮总结按钮。
@@ -1159,7 +1183,6 @@ private extension ReadCalendarContentView {
             GeometryReader { proxy in
                 if shouldMountSummaryFloatingButton {
                     ReadCalendarSummaryFloatingButton(
-                        iconSystemName: summaryFloatingButtonIconName,
                         accessibilityLabel: summaryFloatingButtonAccessibilityLabel,
                         action: openSummaryManually
                     )
@@ -1180,15 +1203,9 @@ private extension ReadCalendarContentView {
     var activeContent: some View {
         if isHeatmapMode {
             heatmapYearContent
-                .transition(.opacity)
         } else {
             calendarPager
-                .transition(.opacity)
         }
-    }
-
-    var displayModeTransitionAnimation: Animation? {
-        accessibilityReduceMotion ? nil : .smooth(duration: Layout.displayModeTransitionDuration)
     }
 
     var shouldShowWeekdayHeader: Bool {

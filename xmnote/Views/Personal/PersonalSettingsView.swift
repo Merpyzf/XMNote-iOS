@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 PersonalRoute、XMSettingsPage/Section/Group 与页面私有导航行
- * [OUTPUT]: 对外提供 PersonalSettingsView，以 canonical 设置结构承载个人模块设置入口
+ * [OUTPUT]: 对外提供 PersonalSettingsView，以 canonical 设置结构和 Reicon 业务图标承载个人模块设置入口
  * [POS]: Views/Personal 页面壳层，由“我的”顶部设置按钮进入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -15,9 +15,11 @@ struct PersonalSettingsView: View {
                 XMSettingsGroup(presentation: .singleItem) {
                     NavigationLink(value: AppRoute.personal(.readingTimerSettings)) {
                         HStack(spacing: Spacing.base) {
-                            Image(systemName: "timer")
-                                .font(AppTypography.bodyMedium)
+                            Image(.reiconTimerOutline)
+                                .resizable()
+                                .scaledToFit()
                                 .foregroundStyle(Color.iconSecondary)
+                                .frame(width: 18, height: 18)
                                 .frame(width: XMSettingsPageLayout.iconSlotWidth)
                                 .accessibilityHidden(true)
 

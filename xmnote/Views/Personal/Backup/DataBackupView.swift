@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 DataBackupViewModel 驱动本地与云端备份状态，复用 XMPopupButton 选择备份方式
- * [OUTPUT]: 对外提供 DataBackupView，以统一设置页文本层级和等高 Popup 指示器承载本地备份、云端备份与恢复确认入口
+ * [OUTPUT]: 对外提供 DataBackupView，以统一设置页文本层级、Reicon 业务图标和等高 Popup 指示器承载本地备份、云端备份与恢复确认入口
  * [POS]: Backup 模块入口壳层，统一组织 iOS 原生本地备份与云备份操作
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -180,10 +180,13 @@ private extension DataBackupContentView {
             Task { await viewModel.prepareLocalExport() }
         } label: {
             HStack(spacing: Spacing.base) {
-                Image(systemName: "square.and.arrow.up")
-                    .font(AppTypography.body)
+                Image(.reiconFileSendOutline)
+                    .resizable()
+                    .scaledToFit()
                     .foregroundStyle(Color.iconSecondary)
+                    .frame(width: 18, height: 18)
                     .frame(width: XMSettingsPageLayout.iconSlotWidth)
+                    .accessibilityHidden(true)
 
                 Text("导出到文件")
                     .font(SettingsTypography.rowTitle)
@@ -217,10 +220,13 @@ private extension DataBackupContentView {
             viewModel.beginLocalImport()
         } label: {
             HStack(spacing: Spacing.base) {
-                Image(systemName: "arrow.down.doc")
-                    .font(AppTypography.body)
+                Image(.reiconFileDownloadOutline)
+                    .resizable()
+                    .scaledToFit()
                     .foregroundStyle(Color.iconSecondary)
+                    .frame(width: 18, height: 18)
                     .frame(width: XMSettingsPageLayout.iconSlotWidth)
+                    .accessibilityHidden(true)
 
                 Text("从文件恢复")
                     .font(SettingsTypography.rowTitle)
@@ -325,10 +331,13 @@ private extension DataBackupContentView {
     var webdavContent: some View {
         NavigationLink(value: AppRoute.personal(.webdavServers)) {
             HStack(spacing: Spacing.base) {
-                Image(systemName: "externaldrive")
-                    .font(AppTypography.body)
+                Image(.reiconServerCloudOutline)
+                    .resizable()
+                    .scaledToFit()
                     .foregroundStyle(Color.iconSecondary)
+                    .frame(width: 18, height: 18)
                     .frame(width: XMSettingsPageLayout.iconSlotWidth)
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: Spacing.compact) {
                     Text("WebDAV 服务器")
@@ -381,8 +390,12 @@ private extension DataBackupContentView {
             Circle()
                 .fill(Color.controlFillSecondary)
                 .overlay {
-                    Image(systemName: "person.fill")
+                    Image(.reiconUserFilled)
+                        .resizable()
+                        .scaledToFit()
                         .foregroundStyle(Color.iconSecondary)
+                        .frame(width: 18, height: 18)
+                        .accessibilityHidden(true)
                 }
                 .frame(width: Layout.avatarSize, height: Layout.avatarSize)
 
@@ -409,10 +422,13 @@ private extension DataBackupContentView {
             Task { await viewModel.authorizeAliyunDrive() }
         } label: {
             HStack(spacing: Spacing.base) {
-                Image(systemName: "person.crop.circle.badge.checkmark")
-                    .font(AppTypography.body)
+                Image(.reiconUserCheckOutline)
+                    .resizable()
+                    .scaledToFit()
                     .foregroundStyle(Color.iconSecondary)
+                    .frame(width: 18, height: 18)
                     .frame(width: XMSettingsPageLayout.iconSlotWidth)
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: Spacing.compact) {
                     Text("登录阿里云盘")
@@ -496,8 +512,12 @@ private extension DataBackupContentView {
                     Circle()
                         .fill(Color.controlFillSecondary)
                         .overlay {
-                            Image(systemName: "person.fill")
+                            Image(.reiconUserFilled)
+                                .resizable()
+                                .scaledToFit()
                                 .foregroundStyle(Color.iconSecondary)
+                                .frame(width: 18, height: 18)
+                                .accessibilityHidden(true)
                         }
                 }
             }
@@ -507,8 +527,12 @@ private extension DataBackupContentView {
             Circle()
                 .fill(Color.controlFillSecondary)
                 .overlay {
-                    Image(systemName: "person.fill")
+                    Image(.reiconUserFilled)
+                        .resizable()
+                        .scaledToFit()
                         .foregroundStyle(Color.iconSecondary)
+                        .frame(width: 18, height: 18)
+                        .accessibilityHidden(true)
                 }
                 .frame(width: Layout.avatarSize, height: Layout.avatarSize)
         }
@@ -550,10 +574,13 @@ private extension DataBackupContentView {
             Task { await viewModel.performCloudBackup() }
         } label: {
             HStack(spacing: Spacing.base) {
-                Image(systemName: "icloud.and.arrow.up")
-                    .font(AppTypography.body)
+                Image(.reiconCloudUploadOutline)
+                    .resizable()
+                    .scaledToFit()
                     .foregroundStyle(Color.iconSecondary)
+                    .frame(width: 18, height: 18)
                     .frame(width: XMSettingsPageLayout.iconSlotWidth)
+                    .accessibilityHidden(true)
 
                 Text("立即备份")
                     .font(SettingsTypography.rowTitle)
@@ -593,10 +620,13 @@ private extension DataBackupContentView {
             }
         } label: {
             HStack(spacing: Spacing.base) {
-                Image(systemName: "icloud.and.arrow.down")
-                    .font(AppTypography.body)
+                Image(.reiconCloudDownloadOutline)
+                    .resizable()
+                    .scaledToFit()
                     .foregroundStyle(Color.iconSecondary)
+                    .frame(width: 18, height: 18)
                     .frame(width: XMSettingsPageLayout.iconSlotWidth)
+                    .accessibilityHidden(true)
 
                 Text("从云端恢复")
                     .font(SettingsTypography.rowTitle)

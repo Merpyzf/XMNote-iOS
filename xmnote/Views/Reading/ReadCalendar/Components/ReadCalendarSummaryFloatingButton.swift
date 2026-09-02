@@ -1,8 +1,8 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 ReadCalendarTheme、DesignTokens 与 SwiftUI glassEffect，依赖图标/文案与回调触发月度或年度统计弹层
- * [OUTPUT]: 对外提供 ReadCalendarSummaryFloatingButton（统计悬浮按钮）
+ * [INPUT]: 依赖 ReiconChart4Outline、ReadCalendarTheme、DesignTokens 与 SwiftUI glassEffect，依赖文案与回调触发月度或年度统计弹层
+ * [OUTPUT]: 对外提供 ReadCalendarSummaryFloatingButton（18pt Outline Reicon 统计悬浮按钮）
  * [POS]: ReadCalendar 业务内浮层入口组件，承载右下角液态玻璃按钮交互
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -11,18 +11,21 @@ import SwiftUI
 struct ReadCalendarSummaryFloatingButton: View {
     private enum Layout {
         static let buttonSize: CGFloat = 48
-        static let iconSize: CGFloat = 16
+        static let iconSize: CGFloat = 18
     }
 
-    let iconSystemName: String
     let accessibilityLabel: String
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: iconSystemName)
-                .font(.system(size: Layout.iconSize, weight: .medium))
+            Image(.reiconChart4Outline)
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
                 .foregroundStyle(ReadCalendarTheme.topAction)
+                .frame(width: Layout.iconSize, height: Layout.iconSize)
+                .accessibilityHidden(true)
                 .frame(width: Layout.buttonSize, height: Layout.buttonSize)
                 .contentShape(Circle())
         }

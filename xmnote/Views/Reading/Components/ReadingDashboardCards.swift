@@ -2,7 +2,7 @@ import SwiftUI
 
 /**
  * [INPUT]: 依赖 ReadingDashboardSnapshot 相关领域模型、XMBookCover、XMBookCoverAppearance、CardContainer、HorizontalPagingHost 与页面私有排版/图表外观提供首页卡片渲染能力
- * [OUTPUT]: 对外提供支持 pending/content 语义呈现的首页趋势、功能、最近在读与年度总结页面私有卡片
+ * [OUTPUT]: 对外提供支持 pending/content 语义呈现的首页趋势、功能、Reicon 阅读空态、最近在读与年度总结页面私有卡片
  * [POS]: Reading/Components 页面私有子视图集合，负责在读首页各卡片区块的展示
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -663,7 +663,7 @@ private struct ReadingDailyGoalCardLayout {
 
 }
 
-/// ReadingResumeBookCardLayout 统一继续阅读卡的标题节奏与封面剩余空间填充策略，保证与今日阅读卡并排时的对齐感。
+/// ReadingResumeBookCardLayout 统一继续阅读卡的标题节奏、封面空间与空态水印安全边距，保证与今日阅读卡并排时的对齐感。
 private struct ReadingResumeBookCardLayout {
     let cardSize: CGSize
 
@@ -683,15 +683,11 @@ private struct ReadingResumeBookCardLayout {
 
     var emptyTextSpacing: CGFloat { Spacing.compact }
 
-    var emptyActionTopSpacing: CGFloat { Spacing.tight }
-
     var emptyActionIconSize: CGFloat { subtitleFontSize }
 
-    var emptySymbolSize: CGFloat { cardWidth * 0.54 }
+    var emptySymbolSize: CGFloat { cardWidth * 0.40 }
 
-    var emptySymbolTrailingOffset: CGFloat { Spacing.tight }
-
-    var emptySymbolBottomInset: CGFloat { Spacing.base }
+    var emptySymbolInset: CGFloat { Spacing.base }
 }
 
 /// ReadingDailyGoalCard 承接今日阅读目标的标题、状态和弧环进度，提供目标编辑入口。
@@ -891,7 +887,7 @@ private struct ReadingResumeBookCard: View {
             }
         }
         .disabled(presentation.isPending)
-        .accessibilityLabel("继续阅读，先添加一本书", isEnabled: book == nil)
+        .accessibilityLabel("继续阅读，添加一本书", isEnabled: book == nil)
         .accessibilityHint("打开添加书籍页面", isEnabled: book == nil)
     }
 
@@ -935,7 +931,7 @@ private struct ReadingResumeBookCard: View {
         )
     }
 
-    /// 只保留继续阅读栏目与业务剪影，其他空态行动文案透明占位以维持生产几何。
+    /// 保留与空态主动作同构的透明文字几何，并以业务水印稳定 pending 到 empty 的切换。
     @ViewBuilder
     private func pendingResumeContent(layout: ReadingResumeBookCardLayout) -> some View {
         VStack(alignment: .leading, spacing: Spacing.none) {
@@ -945,15 +941,18 @@ private struct ReadingResumeBookCard: View {
                     .foregroundStyle(Color.textSecondary)
                     .lineLimit(1)
 
-                Text("先添加一本书")
-                    .font(ReadingFeatureCardTypography.title(baseSize: layout.titleFontSize))
-                    .lineLimit(dynamicTypeSize.xmUsesExpandedTextLayout ? 2 : 1)
-                    .opacity(0)
+                HStack(alignment: .firstTextBaseline, spacing: layout.emptyTextSpacing) {
+                    Text("添加一本书")
+                        .font(ReadingFeatureCardTypography.title(baseSize: layout.titleFontSize))
+                        .lineLimit(dynamicTypeSize.xmUsesExpandedTextLayout ? 2 : 1)
+                        .minimumScaleFactor(dynamicTypeSize.xmUsesExpandedTextLayout ? 1 : 0.9)
+                        .multilineTextAlignment(.leading)
 
-                Text("去添加")
-                    .font(ReadingFeatureCardTypography.subtitle(baseSize: layout.subtitleFontSize))
-                    .padding(.top, layout.emptyActionTopSpacing)
-                    .opacity(0)
+                    Image(systemName: "chevron.right")
+                        .font(ReadingFeatureCardTypography.actionIcon(baseSize: layout.emptyActionIconSize))
+                        .accessibilityHidden(true)
+                }
+                .opacity(0)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, layout.contentInset)
@@ -961,20 +960,7 @@ private struct ReadingResumeBookCard: View {
             .layoutPriority(1)
 
             if !dynamicTypeSize.xmUsesExpandedTextLayout {
-                Image(systemName: "books.vertical.fill")
-                    .resizable()
-                    .scaledToFit()
-                    .symbolRenderingMode(.monochrome)
-                    .foregroundStyle(Color.textPrimary.opacity(0.08))
-                    .frame(width: layout.emptySymbolSize, height: layout.emptySymbolSize)
-                    .offset(x: layout.emptySymbolTrailingOffset)
-                    .padding(.bottom, layout.emptySymbolBottomInset)
-                    .frame(
-                        maxWidth: .infinity,
-                        maxHeight: .infinity,
-                        alignment: .bottomTrailing
-                    )
-                    .accessibilityHidden(true)
+                emptyResumeWatermark(layout: layout)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -1024,7 +1010,7 @@ private struct ReadingResumeBookCard: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
-    /// 以左对齐行动文案和右下系统书籍剪影承接无在读书籍状态，并让两者使用独立布局空间。
+    /// 以两级左对齐文案和右下低对比业务水印承接无在读书籍状态，让主动作成为第一视觉焦点。
     @ViewBuilder
     private func emptyResumeContent(layout: ReadingResumeBookCardLayout) -> some View {
         VStack(alignment: .leading, spacing: Spacing.none) {
@@ -1035,26 +1021,19 @@ private struct ReadingResumeBookCard: View {
                     .lineLimit(1)
                     .minimumScaleFactor(dynamicTypeSize.xmUsesExpandedTextLayout ? 1 : 0.9)
 
-                Text("先添加一本书")
-                    .font(ReadingFeatureCardTypography.title(baseSize: layout.titleFontSize))
-                    .foregroundStyle(Color.textPrimary)
-                    .lineLimit(dynamicTypeSize.xmUsesExpandedTextLayout ? 2 : 1)
-                    .minimumScaleFactor(dynamicTypeSize.xmUsesExpandedTextLayout ? 1 : 0.9)
-                    .multilineTextAlignment(.leading)
-
-                HStack(spacing: layout.emptyTextSpacing) {
-                    Text("去添加")
-                        .font(ReadingFeatureCardTypography.subtitle(baseSize: layout.subtitleFontSize))
+                HStack(alignment: .firstTextBaseline, spacing: layout.emptyTextSpacing) {
+                    Text("添加一本书")
+                        .font(ReadingFeatureCardTypography.title(baseSize: layout.titleFontSize))
                         .foregroundStyle(Color.textPrimary)
-                        .lineLimit(1)
+                        .lineLimit(dynamicTypeSize.xmUsesExpandedTextLayout ? 2 : 1)
                         .minimumScaleFactor(dynamicTypeSize.xmUsesExpandedTextLayout ? 1 : 0.9)
+                        .multilineTextAlignment(.leading)
 
                     Image(systemName: "chevron.right")
                         .font(ReadingFeatureCardTypography.actionIcon(baseSize: layout.emptyActionIconSize))
                         .foregroundStyle(ReadingDashboardAppearance.accent)
                         .accessibilityHidden(true)
                 }
-                .padding(.top, layout.emptyActionTopSpacing)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, layout.contentInset)
@@ -1062,26 +1041,28 @@ private struct ReadingResumeBookCard: View {
             .layoutPriority(1)
 
             if !dynamicTypeSize.xmUsesExpandedTextLayout {
-                Image(systemName: "books.vertical.fill")
-                    .resizable()
-                    .scaledToFit()
-                    .symbolRenderingMode(.monochrome)
-                    .foregroundStyle(Color.textPrimary.opacity(0.08))
-                    .frame(
-                        width: layout.emptySymbolSize,
-                        height: layout.emptySymbolSize
-                    )
-                    .offset(x: layout.emptySymbolTrailingOffset)
-                    .padding(.bottom, layout.emptySymbolBottomInset)
-                    .frame(
-                        maxWidth: .infinity,
-                        maxHeight: .infinity,
-                        alignment: .bottomTrailing
-                    )
-                    .accessibilityHidden(true)
+                emptyResumeWatermark(layout: layout)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    /// 渲染可继承语义 tint 的 Reicon 业务水印，并在卡片右下保留稳定安全边距。
+    @ViewBuilder
+    private func emptyResumeWatermark(layout: ReadingResumeBookCardLayout) -> some View {
+        Image(.reiconBookOpenFilled)
+            .renderingMode(.template)
+            .resizable()
+            .scaledToFit()
+            .foregroundStyle(Color.textPrimary.opacity(0.08))
+            .frame(width: layout.emptySymbolSize, height: layout.emptySymbolSize)
+            .padding([.trailing, .bottom], layout.emptySymbolInset)
+            .frame(
+                maxWidth: .infinity,
+                maxHeight: .infinity,
+                alignment: .bottomTrailing
+            )
+            .accessibilityHidden(true)
     }
 
     /// 统一继续阅读卡顶部两行文案排版，使其和今日阅读卡形成一组稳定的双列头部节奏。
@@ -1141,9 +1122,11 @@ struct ReadingRecentBooksCard: View {
 
                 switch presentation {
                 case .pending:
-                    Image(systemName: "books.vertical")
-                        .font(AppTypography.title2)
+                    Image(.reiconBookOutline)
+                        .resizable()
+                        .scaledToFit()
                         .foregroundStyle(Color.textHint)
+                        .frame(width: 28, height: 28)
                         .frame(maxWidth: .infinity)
                         .frame(height: 160)
                         .accessibilityHidden(true)

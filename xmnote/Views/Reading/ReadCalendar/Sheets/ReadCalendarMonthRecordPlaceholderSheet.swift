@@ -1,8 +1,8 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖目标月份与回调事件，依赖 ReadCalendarTheme、DesignTokens 与 xmSheetContentPanel 提供视觉语义
- * [OUTPUT]: 对外提供使用中性占位图标的 ReadCalendarMonthRecordPlaceholderSheet（月度阅读记录占位弹层）
+ * [INPUT]: 依赖目标月份与回调事件，依赖 ReiconChart4Outline、ReadCalendarTheme、DesignTokens 与 xmSheetContentPanel 提供视觉语义
+ * [OUTPUT]: 对外提供使用中性占位图标与 Reicon 总结入口的 ReadCalendarMonthRecordPlaceholderSheet（月度阅读记录占位弹层）
  * [POS]: ReadCalendar 业务模块 Sheet，占位承接“点击月份进入当月阅读记录页”的后续能力
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -15,6 +15,7 @@ struct ReadCalendarMonthRecordPlaceholderSheet: View {
         static let iconSize: CGFloat = 32
         static let cardPadding: CGFloat = Spacing.base
         static let buttonHeight: CGFloat = InteractionMetrics.minimumTouchTarget
+        static let buttonIconSize: CGFloat = 18
     }
 
     let monthStart: Date
@@ -39,7 +40,16 @@ struct ReadCalendarMonthRecordPlaceholderSheet: View {
                 Button {
                     onOpenMonthSummary(monthStart)
                 } label: {
-                    Label("查看当月总结", systemImage: "chart.bar.xaxis")
+                    Label {
+                        Text("查看当月总结")
+                    } icon: {
+                        Image(.reiconChart4Outline)
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: Layout.buttonIconSize, height: Layout.buttonIconSize)
+                            .accessibilityHidden(true)
+                    }
                         .font(AppTypography.subheadlineSemibold)
                         .frame(minHeight: Layout.buttonHeight)
                 }

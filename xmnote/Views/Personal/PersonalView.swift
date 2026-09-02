@@ -7,7 +7,7 @@
 
 /**
  * [INPUT]: 依赖 AppState、DesktopWebSessionCoordinator、AppNavigationCoordinator、XMSettingsGroup、PersonalRoute、DebugRoute 与阅读日历根级呈现回调
- * [OUTPUT]: 对外提供 PersonalView，以 17/15pt 设置行层级与页面私有 SF Symbols 光学校准承载我的 Tab 核心入口、阅读日历独立入口、网页端入口状态与新增优先顶部更多菜单
+ * [OUTPUT]: 对外提供 PersonalView，以会员优先、四项常用功能、三组无标题紧凑卡片、16/13pt 设置行层级与页面私有 Reicon Outline 映射承载我的 Tab 核心入口、网页端状态与顶部新增、设置操作
  * [POS]: Personal 模块容器壳层，承载设置列表、网页端与备份入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -36,61 +36,43 @@ struct PersonalView: View {
         case about
         case debugCenter
 
-        var systemName: String {
+        /// 返回“我的”页固定使用的线性 Reicon 资源。
+        var resource: ImageResource {
             switch self {
             case .readCalendar:
-                "calendar"
+                .reiconCalendarCheckOutline
             case .readReminder:
-                "bell"
+                .reiconBellOutline
             case .desktopWeb:
-                "display"
+                .reiconDesktopOutline
             case .dataImport:
-                "square.and.arrow.down"
+                .reiconInboxInOutline
             case .dataBackup:
-                "externaldrive"
+                .reiconCloudOutline
             case .batchExport:
-                "square.and.arrow.up"
+                .reiconFileDownloadOutline
             case .apiIntegration:
-                "link"
+                .reiconPuzzlePieceOutline
             case .aiConfiguration:
-                "sparkles"
+                .reiconSparklesOutline
             case .tagManagement:
-                "tag"
+                .reiconTag5Outline
             case .groupManagement:
-                "folder"
+                .reiconFolderOutline
             case .bookSource:
-                "books.vertical"
+                .reiconCompassOutline
             case .authorManagement:
-                "person.2"
+                .reiconUsersOutline
             case .pressManagement:
-                "building.2"
+                .reiconBuildingOutline
             case .helpDocumentation:
-                "questionmark.circle"
+                .reiconHelpCircleOutline
             case .feedback:
-                "envelope"
+                .reiconMessageDotsOutline
             case .about:
-                "info.circle"
+                .reiconInfoCircleOutline
             case .debugCenter:
-                "hammer"
-            }
-        }
-
-        var visualScale: CGFloat {
-            switch self {
-            case .desktopWeb, .dataBackup, .bookSource, .pressManagement:
-                0.88
-            case .apiIntegration, .aiConfiguration, .tagManagement, .authorManagement:
-                0.94
-            case .readCalendar,
-                 .readReminder,
-                 .dataImport,
-                 .batchExport,
-                 .groupManagement,
-                 .helpDocumentation,
-                 .feedback,
-                 .about,
-                 .debugCenter:
-                1
+                .reiconFlaskOutline
             }
         }
     }
@@ -99,9 +81,14 @@ struct PersonalView: View {
         static let panelSpacing: CGFloat = Spacing.comfortable
         static let panelEdgeVerticalInset: CGFloat = Spacing.half
         static let settingsRowIconCanvas: CGFloat = 24
+        static let settingsRowIconSize: CGFloat = 16
+        static let premiumIconSize: CGFloat = 30
+        static let shortcutIconSize: CGFloat = 18
+        static let shortcutIconCanvas: CGFloat = 24
+        static let shortcutMinHeight: CGFloat = 64
         static let rowMinHeight: CGFloat = InteractionMetrics.minimumTouchTarget
-        static let rowDividerLeading: CGFloat = Spacing.contentEdge + settingsRowIconCanvas + Spacing.base
-        static let topBarTrailingIconSize: CGFloat = 15
+        static let rowDividerLeading: CGFloat = Spacing.contentEdge + settingsRowIconCanvas + Spacing.tight
+        static let topBarTrailingIconSize: CGFloat = 18
     }
 
     @Environment(AppState.self) private var appState
@@ -130,8 +117,9 @@ struct PersonalView: View {
             ScrollView {
                 VStack(spacing: Layout.panelSpacing) {
                     premiumSection
-                    readingAndDataSection
-                    managementSection
+                    shortcutsSection
+                    toolsSection
+                    libraryManagementSection
                     supportAndAboutSection
                 }
                 .padding(.horizontal, Spacing.screenEdge)
@@ -151,24 +139,26 @@ struct PersonalView: View {
                         presentation: .pillSegment
                     )
                 } trailing: {
-                    Menu {
-                        Button {
-                            navigationCoordinator.push(.personal(.settings), in: .profile)
-                        } label: {
-                            XMMenuLabel("设置", systemImage: "slider.horizontal.3")
-                        }
+                    Button {
+                        navigationCoordinator.push(.personal(.settings), in: .profile)
                     } label: {
-                        TopBarActionIcon(
-                            systemName: "ellipsis",
-                            iconSize: Layout.topBarTrailingIconSize,
-                            foregroundColor: Color.iconPrimary.opacity(0.88),
-                            hitShape: .rectangle
-                        )
+                        Image(.reiconSettings4Outline)
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(
+                                width: Layout.topBarTrailingIconSize,
+                                height: Layout.topBarTrailingIconSize
+                            )
+                            .foregroundStyle(Color.iconPrimary.opacity(0.88))
+                            .frame(
+                                width: InteractionMetrics.minimumTouchTarget,
+                                height: InteractionMetrics.minimumTouchTarget
+                            )
+                            .contentShape(Rectangle())
                     }
                     .topBarActionPillSegmentStyle(true)
-                    .xmMenuNeutralTint()
-                    .menuOrder(.fixed)
-                    .accessibilityLabel("我的更多操作")
+                    .accessibilityLabel("设置")
                 }
             }
             .zIndex(1)
@@ -191,13 +181,17 @@ extension PersonalView {
                 verticalPadding: Spacing.none
             ) {
                 NavigationLink(value: AppRoute.personal(.premium)) {
-                    HStack(spacing: Spacing.base) {
-                        Image(systemName: "crown.fill")
-                            .font(AppTypography.title3Semibold)
+                    HStack(spacing: Spacing.tight) {
+                        Image(.reiconCrownFilled)
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: Layout.premiumIconSize, height: Layout.premiumIconSize)
                             .foregroundStyle(Color.feedbackWarning)
+                            .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: Spacing.compact) {
                             Text("开通会员")
-                                .font(AppTypography.headlineSemibold)
+                                .font(AppTypography.callout)
                                 .foregroundStyle(Color.textPrimary)
                             Text("解锁全部高级功能")
                                 .font(AppTypography.caption)
@@ -217,33 +211,48 @@ extension PersonalView {
         }
     }
 
-    // MARK: - 阅读与数据
+    // MARK: - 常用功能
 
-    private var readingAndDataSection: some View {
-        groupedPanel {
-            actionRow(.readCalendar, "阅读日历", action: onOpenReadCalendar)
-            settingsRow(.readReminder, "阅读提醒", route: .readReminder)
-            settingsRow(
-                .desktopWeb,
-                "网页端",
-                route: .desktopWeb,
-                trailingText: desktopWebStatusText,
-                trailingColor: .feedbackSuccess,
-                isLast: true
-            )
-            .animation(.smooth, value: desktopWebSessionCoordinator.state.isRunning)
-            PersonalSettingsDivider(leadingInset: Layout.rowDividerLeading)
-            settingsRow(.dataImport, "书摘导入", route: .dataImport)
-            settingsRow(.dataBackup, "数据备份", route: .dataBackup)
-            settingsRow(.batchExport, "批量导出", route: .batchExport)
-            settingsRow(.apiIntegration, "API 集成", route: .apiIntegration)
-            settingsRow(.aiConfiguration, "AI 配置", route: .aiConfiguration, isLast: true)
+    private var shortcutsSection: some View {
+        XMSettingsGroup(
+            horizontalPadding: Spacing.none,
+            verticalPadding: Spacing.none
+        ) {
+            LazyVGrid(
+                columns: shortcutColumns,
+                alignment: .center,
+                spacing: Spacing.none
+            ) {
+                shortcutAction(.readCalendar, "阅读日历", action: onOpenReadCalendar)
+                shortcutNavigation(
+                    .desktopWeb,
+                    "网页端",
+                    route: .desktopWeb,
+                    statusText: desktopWebStatusText,
+                    statusColor: .feedbackSuccess
+                )
+                .animation(.smooth, value: desktopWebSessionCoordinator.state.isRunning)
+                shortcutNavigation(.dataImport, "书摘导入", route: .dataImport)
+                shortcutNavigation(.dataBackup, "数据备份", route: .dataBackup)
+            }
+            .padding(.vertical, Spacing.compact)
         }
     }
 
-    // MARK: - 管理
+    // MARK: - 工具
 
-    private var managementSection: some View {
+    private var toolsSection: some View {
+        groupedPanel {
+            settingsRow(.readReminder, "阅读提醒", route: .readReminder)
+            settingsRow(.batchExport, "笔记导出", route: .batchExport)
+            settingsRow(.apiIntegration, "应用关联", route: .apiIntegration)
+            settingsRow(.aiConfiguration, "AI 助手", route: .aiConfiguration, isLast: true)
+        }
+    }
+
+    // MARK: - 书库管理
+
+    private var libraryManagementSection: some View {
         groupedPanel {
             settingsRow(.tagManagement, "标签管理", route: .tagManagement)
             settingsRow(.groupManagement, "书籍分组", route: .groupManagement)
@@ -257,10 +266,11 @@ extension PersonalView {
 
     private var supportAndAboutSection: some View {
         groupedPanel {
+            debugCenterRow()
             actionRow(.helpDocumentation, "帮助文档") {
                 // TODO: 打开帮助文档
             }
-            actionRow(.feedback, "反馈") {
+            actionRow(.feedback, "问题反馈") {
                 // TODO: 发送反馈邮件
             }
             settingsRow(
@@ -268,9 +278,8 @@ extension PersonalView {
                 "关于应用",
                 route: .about,
                 trailingText: appVersion,
-                isLast: !hasDebugSection
+                isLast: true
             )
-            debugCenterRow()
         }
     }
 
@@ -282,14 +291,6 @@ extension PersonalView {
         desktopWebSessionCoordinator.state.isRunning ? "运行中" : nil
     }
 
-    private var hasDebugSection: Bool {
-#if DEBUG
-        true
-#else
-        false
-#endif
-    }
-
     private var appVersion: String {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
         return "v\(version)"
@@ -299,6 +300,13 @@ extension PersonalView {
 // MARK: - Helpers
 
 extension PersonalView {
+
+    private var shortcutColumns: [GridItem] {
+        Array(
+            repeating: GridItem(.flexible(), spacing: Spacing.none),
+            count: dynamicTypeSize.isAccessibilitySize ? 2 : 4
+        )
+    }
 
     private func groupedPanel<Content: View>(
         @ViewBuilder content: () -> Content
@@ -312,6 +320,81 @@ extension PersonalView {
             }
             .padding(.vertical, Layout.panelEdgeVerticalInset)
         }
+    }
+
+    private func shortcutNavigation(
+        _ icon: PersonalEntryIcon,
+        _ title: String,
+        route: PersonalRoute,
+        statusText: String? = nil,
+        statusColor: Color = .textSecondary
+    ) -> some View {
+        NavigationLink(value: AppRoute.personal(route)) {
+            shortcutContent(
+                icon: icon,
+                title: title,
+                statusText: statusText,
+                statusColor: statusColor
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .accessibilityValue(statusText ?? "")
+    }
+
+    private func shortcutAction(
+        _ icon: PersonalEntryIcon,
+        _ title: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            shortcutContent(icon: icon, title: title)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+    }
+
+    private func shortcutContent(
+        icon: PersonalEntryIcon,
+        title: String,
+        statusText: String? = nil,
+        statusColor: Color = .textSecondary
+    ) -> some View {
+        VStack(spacing: Spacing.half) {
+            Image(icon.resource)
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .foregroundStyle(Color.textPrimary)
+                .frame(width: Layout.shortcutIconSize, height: Layout.shortcutIconSize)
+                .frame(width: Layout.shortcutIconCanvas, height: Layout.shortcutIconCanvas)
+                .accessibilityHidden(true)
+
+            HStack(spacing: Spacing.compact) {
+                Text(title)
+                    .font(AppTypography.footnote)
+                    .foregroundStyle(Color.textPrimary)
+
+                if let statusText {
+                    ViewThatFits(in: .horizontal) {
+                        Text(statusText)
+                            .font(AppTypography.caption2)
+                            .foregroundStyle(statusColor)
+                            .lineLimit(1)
+
+                        Circle()
+                            .fill(statusColor)
+                            .frame(width: Spacing.half, height: Spacing.half)
+                    }
+                    .accessibilityHidden(true)
+                }
+            }
+            .multilineTextAlignment(.center)
+        }
+        .padding(.horizontal, Spacing.compact)
+        .frame(maxWidth: .infinity)
+        .frame(minHeight: Layout.shortcutMinHeight)
+        .contentShape(Rectangle())
     }
 
     private func settingsRow(
@@ -360,10 +443,14 @@ extension PersonalView {
     @ViewBuilder
     private func debugCenterRow() -> some View {
 #if DEBUG
-        NavigationLink(value: AppRoute.debug(.debugCenter)) {
-            rowContent(icon: .debugCenter, title: "测试中心")
+        VStack(spacing: Spacing.none) {
+            NavigationLink(value: AppRoute.debug(.debugCenter)) {
+                rowContent(icon: .debugCenter, title: "测试中心")
+            }
+            .buttonStyle(.plain)
+
+            PersonalSettingsDivider(leadingInset: Layout.rowDividerLeading)
         }
-        .buttonStyle(.plain)
 #endif
     }
 
@@ -373,12 +460,13 @@ extension PersonalView {
         trailingText: String? = nil,
         trailingColor: Color = .textSecondary
     ) -> some View {
-        HStack(spacing: Spacing.base) {
-            Image(systemName: icon.systemName)
-                .font(AppTypography.body)
-                .symbolRenderingMode(.monochrome)
-                .foregroundStyle(Color.iconSecondary)
-                .scaleEffect(icon.visualScale)
+        HStack(spacing: Spacing.tight) {
+            Image(icon.resource)
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .foregroundStyle(Color.textPrimary)
+                .frame(width: Layout.settingsRowIconSize, height: Layout.settingsRowIconSize)
                 .frame(
                     width: Layout.settingsRowIconCanvas,
                     height: Layout.settingsRowIconCanvas
@@ -386,14 +474,14 @@ extension PersonalView {
                 .accessibilityHidden(true)
 
             Text(title)
-                .font(SettingsTypography.rowTitle)
+                .font(AppTypography.callout)
                 .foregroundStyle(Color.textPrimary)
 
             Spacer(minLength: Spacing.base)
 
             if let trailingText {
                 Text(trailingText)
-                    .font(SettingsTypography.rowValue)
+                    .font(AppTypography.footnote)
                     .foregroundStyle(trailingColor)
                     .lineLimit(1)
                     .minimumScaleFactor(0.9)

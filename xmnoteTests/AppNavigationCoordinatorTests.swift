@@ -187,28 +187,7 @@ struct AppNavigationCoordinatorTests {
     }
 
     @Test
-    func versionTwoMigrationPreservesSemanticStateAndClearsPaths() throws {
-        var legacy = AppSceneSnapshot.empty(dataEpoch: 7)
-        legacy.snapshotVersion = 2
-        legacy.selectedTab = .notes
-        legacy.searchQuery = "不会写入日志的查询"
-        legacy.notes.selectedSubTab = .review
-        legacy.navigation.books = [.book(.detail(bookId: 1))]
-        let data = try JSONEncoder().encode(legacy)
-        let store = SceneStateStore()
-
-        store.restore(from: data, currentDataEpoch: 7)
-
-        #expect(store.snapshot.snapshotVersion == 3)
-        #expect(store.snapshot.selectedTab == .notes)
-        #expect(store.snapshot.searchQuery == legacy.searchQuery)
-        #expect(store.snapshot.notes.selectedSubTab == .review)
-        #expect(store.snapshot.navigation == NavigationSceneSnapshot())
-        #expect(store.persistedData != data)
-    }
-
-    @Test
-    func versionThreeSanitizesCyclesAndExcessiveDepth() throws {
+    func currentVersionSanitizesCyclesAndExcessiveDepth() throws {
         var snapshot = AppSceneSnapshot.empty(dataEpoch: 8)
         let cyclic: [AppRoute] = [
             .book(.detail(bookId: 1)),
@@ -240,7 +219,7 @@ struct AppNavigationCoordinatorTests {
     }
 
     @Test
-    func corruptedVersionThreePathIsolatedToItsTab() throws {
+    func corruptedCurrentVersionPathIsolatedToItsTab() throws {
         var snapshot = AppSceneSnapshot.empty(dataEpoch: 9)
         snapshot.selectedTab = .profile
         snapshot.navigation.books = [

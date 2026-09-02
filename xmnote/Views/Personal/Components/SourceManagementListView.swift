@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 SourceManagementItem/SourceManagementScope、XMKeywordHighlighting 与页面传入的搜索关键词和来源操作回调，承接书籍来源管理页的一列展示与本地拖拽排序
- * [OUTPUT]: 对外提供 SourceManagementListView，以 17pt 主文本向系统分组 List 输出来源行、中性上下文菜单、只读默认来源、滑动/无障碍操作与排序提交
+ * [OUTPUT]: 对外提供 SourceManagementListView，以 17pt 主文本和 Reicon 来源身份图标向系统分组 List 输出来源行、中性上下文菜单、只读默认来源、滑动/无障碍操作与排序提交
  * [POS]: Views/Personal/Components 的书籍来源管理页面私有行集合，被 SourceManagementView 的单一分组容器消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -127,9 +127,11 @@ private struct SourceManagementRowView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                     if item.isAppDefault {
-                        Image(systemName: "checkmark.seal")
-                            .font(AppTypography.caption)
+                        Image(.reiconVerifiedFilled)
+                            .resizable()
+                            .scaledToFit()
                             .foregroundStyle(Color.textHint)
+                            .frame(width: 14, height: 14)
                             .accessibilityHidden(true)
                     }
                 }
@@ -155,12 +157,18 @@ private struct SourceManagementRowView: View {
     }
 
     private var sourceIcon: some View {
-        Image(systemName: item.isAppDefault ? "building.columns" : "books.vertical")
-            .font(AppTypography.subheadlineSemibold)
+        Image(sourceIconResource)
+            .resizable()
+            .scaledToFit()
             .foregroundStyle(Color.iconSecondary)
+            .frame(width: 18, height: 18)
             .frame(width: SourceManagementRowMetrics.iconBoxSize, height: SourceManagementRowMetrics.iconBoxSize)
             .background(Color.surfaceNested, in: RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous))
             .accessibilityHidden(true)
+    }
+
+    private var sourceIconResource: ImageResource {
+        item.isAppDefault ? .reiconBuildingOutline : .reiconBookBookmarkOutline
     }
 
     @ViewBuilder

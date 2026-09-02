@@ -1,6 +1,6 @@
 # 设计语言
 
-本参考负责 XMNote 的整体产品表达、信息层级、文案、适配和可访问性。具体排版与布局读取 [排版、间距与布局](typography-and-layout.md)，颜色与材质读取 [颜色、表层、图标与材质](color-surfaces-and-material.md)。
+本参考负责 XMNote 的整体产品表达、信息层级、文案、适配和可访问性。具体排版与布局读取 [排版、间距与布局](typography-and-layout.md)，颜色与材质读取 [颜色、表层与材质](color-surfaces-and-material.md)，图标读取 [图标设计与使用](iconography.md)。
 
 ## 产品表达
 

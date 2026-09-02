@@ -2,7 +2,7 @@ import SwiftUI
 
 /**
  * [INPUT]: 依赖 RepositoryContainer/AppState 注入统计、取色仓储与会员限制开关，依赖 ReadCalendarViewModel 提供月历状态与事件布局数据
- * [OUTPUT]: 对外提供 ReadCalendarView（挂载内容页、透传统计过滤设置、提供语义化日历设置菜单并映射领域层年度同期摘要）
+ * [OUTPUT]: 对外提供 ReadCalendarView（挂载内容页、透传统计过滤设置、以统一系统菜单表达页面操作并映射领域层年度同期摘要）
  * [POS]: Reading 模块核心页面入口，承接导航与数据加载，具体日历 UI 由业务内壳层组件负责（含设置入口与显示模式切换）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -55,17 +55,7 @@ struct ReadCalendarView: View {
                         todayStart: Calendar.current.startOfDay(for: Date())
                     )
                 },
-                onDisplayModeChanged: { mode in
-                    displayMode = mode
-                    guard mode == .heatmap else { return }
-                    yearSelectionTask?.cancel()
-                    yearSelectionTask = Task {
-                        await viewModel.prepareHeatmapYearIfNeeded(
-                            using: repositories.readCalendarRepository,
-                            colorRepository: repositories.readCalendarColorRepository
-                        )
-                    }
-                },
+                onDisplayModeChanged: handleDisplayModeChanged,
                 onPagerSelectionChanged: { monthStart in
                     handleRequestedMonth(monthStart)
                 },
@@ -110,7 +100,7 @@ struct ReadCalendarView: View {
                     Button {
                         isCheckInPresented = true
                     } label: {
-                        Label("今天打卡", systemImage: "checkmark.circle")
+                        XMMenuLabel("今天打卡", systemImage: "checkmark.circle")
                     }
                     Button {
                         onOpenRoute(.share(
@@ -118,12 +108,12 @@ struct ReadCalendarView: View {
                             initialType: shareTypeForDisplayMode
                         ))
                     } label: {
-                        Label("分享日历", systemImage: "square.and.arrow.up")
+                        XMMenuLabel("分享日历", systemImage: "square.and.arrow.up")
                     }
                     Button {
                         isSettingsPresented = true
                     } label: {
-                        Label("日历设置", systemImage: "slider.horizontal.3")
+                        XMMenuLabel("日历设置", systemImage: "slider.horizontal.3")
                     }
                 } label: {
                     Label("更多", systemImage: "ellipsis")
@@ -257,6 +247,25 @@ private extension ReadCalendarView {
     func handleScenePhaseChange(_ phase: ScenePhase) {
         guard phase == .active, canPersistSceneSnapshot else { return }
         scheduleLifecycleRefresh()
+    }
+
+    /// 在 SwiftUI 主 Actor 上以无动画事务提交显示模式；进入热力图时取消旧任务并启动继承主 Actor 的年度准备任务，避免快速切换沿用陈旧请求。
+    func handleDisplayModeChanged(_ mode: ReadCalendarContentView.DisplayMode) {
+        guard mode != displayMode else { return }
+
+        let transaction = Transaction(animation: nil)
+        withTransaction(transaction) {
+            displayMode = mode
+        }
+
+        guard mode == .heatmap else { return }
+        yearSelectionTask?.cancel()
+        yearSelectionTask = Task {
+            await viewModel.prepareHeatmapYearIfNeeded(
+                using: repositories.readCalendarRepository,
+                colorRepository: repositories.readCalendarColorRepository
+            )
+        }
     }
 
     /// 在分页写入前执行免费月份边界判断，拒绝后保持原页现场不变。

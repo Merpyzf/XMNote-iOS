@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer/AppState、ReadCalendarShareViewModel、分享卡、XMSystemSearchBar/XMScrollEdgeChrome 与系统年月选择/弹窗/XMActivityShareSheet
- * [OUTPUT]: 对外提供 ReadCalendarShareView，完成支持短内容回弹的三类预览、48 模板、排行、可搜索书籍排除重算、会员拦截、保存与分享
+ * [INPUT]: 依赖 RepositoryContainer/AppState、ReadCalendarShareViewModel、分享卡、阅读日历 Reicon 资源、XMSystemSearchBar/XMScrollEdgeChrome 与系统年月选择/弹窗/XMActivityShareSheet
+ * [OUTPUT]: 对外提供 ReadCalendarShareView，以 Reicon 表达分享配置业务对象并完成短内容回弹的三类预览、48 模板、排行、可搜索书籍排除重算、会员拦截、保存与分享
  * [POS]: ReadCalendar 分享页面壳层，采用 iOS 原生 push、Sheet 与系统分享/相册能力表达 Android 业务规则
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -10,6 +10,9 @@ import SwiftUI
 /// 分享选项列表的局部几何量，保持分隔线与带图标行的文字起点对齐。
 private enum ReadCalendarShareLayout {
     static let optionDividerLeadingInset: CGFloat = 44
+    static let optionIconSlotSize: CGFloat = 24
+    static let optionIconSize: CGFloat = 18
+    static let premiumIconSize: CGFloat = 12
 }
 
 /// 阅读日历分享页；所有会员能力均允许在预览阶段探索，只在受限选择或导出动作处明确说明。
@@ -163,7 +166,7 @@ struct ReadCalendarShareView: View {
             optionButton(
                 title: "时间范围",
                 value: monthButtonTitle,
-                systemImage: "calendar"
+                iconResource: .reiconCalendarOutline
             ) {
                 pendingMonth = nil
                 activeSheet = .monthPicker
@@ -172,7 +175,7 @@ struct ReadCalendarShareView: View {
             optionButton(
                 title: "卡片模板",
                 value: viewModel.template.title,
-                systemImage: "paintpalette"
+                iconResource: .reiconPaletteOutline
             ) {
                 activeSheet = .templatePicker
             }
@@ -182,7 +185,7 @@ struct ReadCalendarShareView: View {
             optionButton(
                 title: "排除书籍",
                 value: viewModel.excludedBookIDs.isEmpty ? "未排除" : "已排除 \(viewModel.excludedBookIDs.count) 本",
-                systemImage: "books.vertical"
+                iconResource: .reiconBookOutline
             ) {
                 if appState.shouldEnforcePremiumRestrictions {
                     premiumBlock = .excludedBooks
@@ -196,9 +199,14 @@ struct ReadCalendarShareView: View {
 
     private var rankingControl: some View {
         HStack(spacing: Spacing.base) {
-            Image(systemName: "list.number")
+            Image(.reiconRankingOutline)
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
                 .foregroundStyle(Color.iconSecondary)
-                .frame(width: 24)
+                .frame(width: ReadCalendarShareLayout.optionIconSize, height: ReadCalendarShareLayout.optionIconSize)
+                .frame(width: ReadCalendarShareLayout.optionIconSlotSize)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: Spacing.tiny) {
                 Text("排行榜数量")
                     .font(AppTypography.body)
@@ -234,14 +242,19 @@ struct ReadCalendarShareView: View {
     private func optionButton(
         title: String,
         value: String,
-        systemImage: String,
+        iconResource: ImageResource,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             HStack(spacing: Spacing.base) {
-                Image(systemName: systemImage)
+                Image(iconResource)
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
                     .foregroundStyle(Color.iconSecondary)
-                    .frame(width: 24)
+                    .frame(width: ReadCalendarShareLayout.optionIconSize, height: ReadCalendarShareLayout.optionIconSize)
+                    .frame(width: ReadCalendarShareLayout.optionIconSlotSize)
+                    .accessibilityHidden(true)
                 Text(title)
                     .font(AppTypography.body)
                     .foregroundStyle(Color.textPrimary)
@@ -316,9 +329,16 @@ struct ReadCalendarShareView: View {
                                     .frame(height: 72)
                                     .overlay(alignment: .topTrailing) {
                                         if !template.isFree {
-                                            Image(systemName: "crown.fill")
-                                                .font(.caption2)
+                                            Image(.reiconCrownFilled)
+                                                .renderingMode(.template)
+                                                .resizable()
+                                                .scaledToFit()
+                                                .frame(
+                                                    width: ReadCalendarShareLayout.premiumIconSize,
+                                                    height: ReadCalendarShareLayout.premiumIconSize
+                                                )
                                                 .foregroundStyle(templateAccent(template))
+                                                .accessibilityHidden(true)
                                                 .padding(Spacing.half)
                                         }
                                     }
