@@ -9,7 +9,7 @@ import SwiftUI
 
 /**
  * [INPUT]: 依赖可选 AppRuntimeContext、已原子恢复的 AppSceneSnapshot、scene 级 AppNavigationCoordinator、阅读日历、外部导入/网页动作与各业务目的页
- * [OUTPUT]: 对外提供 MainTabView（五个类型安全浏览栈、首帧 Tab 稳定显现、回顾同构启动壳层、带根级退出控件的单一全屏任务栈、恢复表面门控、阅读计时 UIKit Zoom、底部计时条与退场后一次性回流）
+ * [OUTPUT]: 对外提供 MainTabView（五个类型安全浏览栈、四个 Reicon Filled 业务 Tab 图标、首帧 Tab 稳定显现、回顾同构启动壳层、带根级退出控件的单一全屏任务栈、恢复表面门控、阅读计时 UIKit Zoom、底部计时条与退场后一次性回流）
  * [POS]: 应用根导航宿主，只消费协调器状态并使用系统 push/cover；恢复目的页提交前不暴露底层根页
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -229,7 +229,7 @@ struct MainTabView: View {
     /// 构建五个彼此独立的浏览栈；这里只描述页面树，不附加根级状态监听与呈现器。
     private var tabContent: some View {
         TabView(selection: $navigationCoordinator.selectedTab) {
-            Tab("在读", systemImage: "calendar", value: .reading) {
+            Tab(value: .reading) {
                 NavigationStack(path: navigationCoordinator.pathBinding(for: .reading)) {
                     Group {
                         if let runtime {
@@ -292,9 +292,15 @@ struct MainTabView: View {
                         appDestination(for: route, hostTab: .reading)
                     }
                 }
+            } label: {
+                ReiconTabLabel(
+                    title: "在读",
+                    resource: .reiconCalendarFilled,
+                    isSelected: selectedTab == .reading
+                )
             }
 
-            Tab("书籍", systemImage: "book", value: .books) {
+            Tab(value: .books) {
                 NavigationStack(path: navigationCoordinator.pathBinding(for: .books)) {
                     Group {
                         if let runtime {
@@ -329,9 +335,15 @@ struct MainTabView: View {
                         appDestination(for: route, hostTab: .books)
                     }
                 }
+            } label: {
+                ReiconTabLabel(
+                    title: "书籍",
+                    resource: .reiconBookOpenFilled,
+                    isSelected: selectedTab == .books
+                )
             }
 
-            Tab("笔记", systemImage: "archivebox", value: .notes) {
+            Tab(value: .notes) {
                 NavigationStack(path: navigationCoordinator.pathBinding(for: .notes)) {
                     Group {
                         if let runtime {
@@ -371,9 +383,15 @@ struct MainTabView: View {
                         appDestination(for: route, hostTab: .notes)
                     }
                 }
+            } label: {
+                ReiconTabLabel(
+                    title: "笔记",
+                    resource: .reiconNotes2Filled,
+                    isSelected: selectedTab == .notes
+                )
             }
 
-            Tab("我的", systemImage: "person", value: .profile) {
+            Tab(value: .profile) {
                 NavigationStack(path: navigationCoordinator.pathBinding(for: .profile)) {
                     Group {
                         if let runtime {
@@ -406,6 +424,12 @@ struct MainTabView: View {
                         appDestination(for: route, hostTab: .profile)
                     }
                 }
+            } label: {
+                ReiconTabLabel(
+                    title: "我的",
+                    resource: .reiconUserFilled,
+                    isSelected: selectedTab == .profile
+                )
             }
 
             Tab("搜索", systemImage: "magnifyingglass", value: .search, role: .search) {
@@ -440,6 +464,41 @@ struct MainTabView: View {
                     }
                 }
             }
+        }
+    }
+
+    /// 用页面私有标签为业务 Tab 提供一致的 Filled 图标，并只为选中图标补齐品牌色。
+    private struct ReiconTabLabel: View {
+        let title: LocalizedStringKey
+        let resource: ImageResource
+        let isSelected: Bool
+
+        var body: some View {
+            Label {
+                Text(title)
+            } icon: {
+                tabIcon
+            }
+        }
+
+        /// 自定义资产不会稳定继承 Tab 的选中 tint；仅在选中态显式补齐品牌色。
+        @ViewBuilder
+        private var tabIcon: some View {
+            if isSelected {
+                icon
+                    .foregroundStyle(Color.appTint)
+            } else {
+                icon
+            }
+        }
+
+        private var icon: some View {
+            Image(resource)
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 22, height: 22)
+                .accessibilityHidden(true)
         }
     }
 

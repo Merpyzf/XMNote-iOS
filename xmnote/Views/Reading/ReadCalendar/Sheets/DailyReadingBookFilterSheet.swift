@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 DailyReadingBookSummary、XMBookCover、当前书籍筛选值与选择回调
- * [OUTPUT]: 对外提供 DailyReadingBookFilterSheet，以系统列表完成当天书籍范围选择
+ * [INPUT]: 依赖 DailyReadingBookSummary、XMBookCover、ReiconBookOutline、当前书籍筛选值与选择回调
+ * [OUTPUT]: 对外提供 DailyReadingBookFilterSheet，以 Reicon 表达“全部书籍”并通过系统列表完成当天书籍范围选择
  * [POS]: ReadCalendar 当日阅读轨迹页面私有业务 Sheet，由顶部更多菜单按需打开
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -15,6 +15,7 @@ struct DailyReadingBookFilterSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @ScaledMetric(relativeTo: .body) private var coverWidth = 30.0
+    @ScaledMetric(relativeTo: .body) private var bookIconSize = 18.0
 
     var body: some View {
         XMSheetScaffold(
@@ -77,10 +78,14 @@ struct DailyReadingBookFilterSheet: View {
                         border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline)
                     )
                 } else {
-                    Image(systemName: "books.vertical")
-                        .font(AppTypography.bodyMedium)
+                    Image(.reiconBookOutline)
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
                         .foregroundStyle(selected ? Color.selectionAccent : Color.iconSecondary)
+                        .frame(width: bookIconSize, height: bookIconSize)
                         .frame(width: coverWidth, height: coverWidth / 0.7)
+                        .accessibilityHidden(true)
                 }
 
                 Text(title.isEmpty ? "未命名书籍" : title)

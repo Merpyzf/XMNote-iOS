@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 DailyReadingBookSummary、DailyReadingTimelineFilter、DailyReadingSortOrder 与统一顶部菜单样式
- * [OUTPUT]: 对外提供 DailyReadingMoreMenu，集中承载打卡、书籍筛选、记录类型与排序入口
+ * [INPUT]: 依赖 DailyReadingBookSummary、DailyReadingTimelineFilter、DailyReadingSortOrder、阅读日历 Reicon 资源与统一顶部菜单样式
+ * [OUTPUT]: 对外提供 DailyReadingMoreMenu，以 Reicon 表达打卡/书籍领域入口并集中承载记录类型与排序操作
  * [POS]: ReadCalendar 当日阅读轨迹页面私有顶部组件，保持导航栏仅有一个中性更多入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -9,6 +9,11 @@ import SwiftUI
 
 /// 当日阅读轨迹的统一更多菜单；普通入口保持中性，具体选中状态由系统勾选表达。
 struct DailyReadingMoreMenu: View {
+    /// 当日阅读轨迹菜单的局部 Reicon 尺寸。
+    private enum Layout {
+        static let menuIconSize: CGFloat = 18
+    }
+
     let bookCount: Int
     let canCheckIn: Bool
     let isWriting: Bool
@@ -24,7 +29,18 @@ struct DailyReadingMoreMenu: View {
             Button {
                 onCheckIn()
             } label: {
-                XMMenuLabel("打卡", systemImage: "calendar.badge.plus")
+                Label {
+                    Text("打卡")
+                        .fontWeight(.medium)
+                } icon: {
+                    Image(.reiconCalendarCheckOutline)
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: Layout.menuIconSize, height: Layout.menuIconSize)
+                        .accessibilityHidden(true)
+                }
+                .foregroundStyle(Color.menuActionForeground)
             }
             .disabled(!canCheckIn || isWriting)
             .accessibilityLabel("打卡")
@@ -34,7 +50,18 @@ struct DailyReadingMoreMenu: View {
                 Button {
                     onShowBookFilter()
                 } label: {
-                    XMMenuLabel("筛选书籍", systemImage: "books.vertical")
+                    Label {
+                        Text("筛选书籍")
+                            .fontWeight(.medium)
+                    } icon: {
+                        Image(.reiconBookOutline)
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: Layout.menuIconSize, height: Layout.menuIconSize)
+                            .accessibilityHidden(true)
+                    }
+                    .foregroundStyle(Color.menuActionForeground)
                 }
             }
 

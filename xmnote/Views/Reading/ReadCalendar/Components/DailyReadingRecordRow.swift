@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 DailyReadingRecord、NoteReviewCardItem、XMBookCover、Timeline 内容卡片/来源尾注、首页时间线共享配色令牌、页面私有时长排版与统一记录动作回调
- * [OUTPUT]: 对外提供 DailyReadingRecordRow，渲染共享配色时间轴、无重复标题的四格打卡、固定类型相关书籍卡、内容记录卡与中性菜单操作
+ * [INPUT]: 依赖 DailyReadingRecord、NoteReviewCardItem、XMBookCover、阅读日历 Reicon 资源、Timeline 内容卡片/来源尾注、首页时间线共享配色令牌、页面私有时长排版与统一记录动作回调
+ * [OUTPUT]: 对外提供 DailyReadingRecordRow，渲染共享配色时间轴、无重复标题的四格打卡、固定类型相关书籍卡、内容记录卡与区分业务对象/系统动作的中性菜单
  * [POS]: ReadCalendar 当日阅读轨迹页面私有组件，统一主内容优先的信息层级、点击行为、长按菜单与辅助操作
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -21,6 +21,11 @@ enum DailyReadingRecordAction {
 
 /// 当日阅读轨迹记录行；书籍身份始终位于卡片内部，模糊计时不伪装具体钟点。
 struct DailyReadingRecordRow: View {
+    /// 记录上下文菜单的局部 Reicon 尺寸。
+    private enum MenuLayout {
+        static let iconSize: CGFloat = 17
+    }
+
     let record: DailyReadingRecord
     let isLast: Bool
     let noteActionItem: NoteReviewCardItem?
@@ -148,8 +153,10 @@ struct DailyReadingRecordRow: View {
 
     @ViewBuilder
     private var recordMenuItems: some View {
-        Button("打开书籍", systemImage: "book") {
+        Button {
             onOpenBook(record.event.sourceBookId)
+        } label: {
+            reiconMenuLabel("打开书籍", iconResource: .reiconBookOutline)
         }
 
         switch record.event.kind {
@@ -159,7 +166,11 @@ struct DailyReadingRecordRow: View {
             Button("编辑", systemImage: "pencil") { onAction(.edit) }
 
             if let noteActionItem {
-                Button("编辑标签", systemImage: "tag") { onAction(.editTags(noteActionItem)) }
+                Button {
+                    onAction(.editTags(noteActionItem))
+                } label: {
+                    reiconMenuLabel("编辑标签", iconResource: .reiconTag5Outline)
+                }
             }
 
             Menu("复制") {
@@ -187,8 +198,10 @@ struct DailyReadingRecordRow: View {
             if let item = noteActionItem {
                 if let rawURL = item.weReadOriginalURL,
                    let url = URL(string: rawURL) {
-                    Button("打开微信读书原文", systemImage: "book") {
+                    Button {
                         onAction(.openWeRead(url))
+                    } label: {
+                        reiconMenuLabel("打开微信读书原文", iconResource: .reiconBookOutline)
                     }
                 }
                 Button("生成分享卡片", systemImage: "square.and.arrow.up") {
@@ -210,8 +223,10 @@ struct DailyReadingRecordRow: View {
             Button("编辑", systemImage: "pencil") { onAction(.edit) }
             Button("复制", systemImage: "doc.on.doc") { onAction(.copy(shareText)) }
         case .relevantBook(let event):
-            Button("打开相关书籍", systemImage: "books.vertical") {
+            Button {
                 onOpenBook(event.contentBookId)
+            } label: {
+                reiconMenuLabel("打开相关书籍", iconResource: .reiconBookOutline)
             }
             Button("编辑关联书籍", systemImage: "pencil") {
                 onAction(.editRelatedBook)
@@ -228,6 +243,23 @@ struct DailyReadingRecordRow: View {
                 Label("删除", systemImage: "trash")
             }
             .tint(Color.red)
+        }
+    }
+
+    /// 生成上下文菜单中的业务对象标签，保持 Reicon 与系统动作图标的职责分工。
+    private func reiconMenuLabel(
+        _ title: LocalizedStringKey,
+        iconResource: ImageResource
+    ) -> some View {
+        Label {
+            Text(title)
+        } icon: {
+            Image(iconResource)
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .frame(width: MenuLayout.iconSize, height: MenuLayout.iconSize)
+                .accessibilityHidden(true)
         }
     }
 
