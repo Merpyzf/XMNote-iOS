@@ -1,0 +1,297 @@
+{
+  "schemaVersion": 1,
+  "caseId": "a03.tag-delete.late-failure",
+  "title": "A-03 批量删除标签时第二项晚失败",
+  "status": "exact-current",
+  "baseline": {
+    "sha256": "${B0_SHA256}",
+    "userVersion": 47,
+    "roomIdentityHash": "4e076c66571412594ff567eae85b68fc",
+    "schemaFingerprint": "${SCHEMA_FINGERPRINT}"
+  },
+  "targetDatabase": {
+    "userVersion": 48,
+    "roomIdentityHash": "cda5a591da1f57aca266af36255e5df7",
+    "schemaFingerprint": "055724e3c2ec28094f771961e2df1cf807efc99ac26f87e9d7308377d9b8eab2"
+  },
+  "runtimeProfile": {
+    "sha256": "${RUNTIME_PROFILE_SHA256}",
+    "requiredSettings": []
+  },
+  "aliases": [
+    {
+      "name": "firstBook",
+      "entity": "book",
+      "description": "操作前关联 firstTag 的有效书",
+      "requirements": [
+        "is_deleted=0",
+        "仅有一条指向 firstTag 的目标关系",
+        "id 小于 secondBook"
+      ],
+      "selector": "active-book"
+    },
+    {
+      "name": "secondBook",
+      "entity": "book",
+      "description": "操作前关联 secondTag 的有效书",
+      "requirements": [
+        "is_deleted=0",
+        "仅有一条指向 secondTag 的目标关系",
+        "id 大于 firstBook"
+      ],
+      "selector": "active-book"
+    },
+    {
+      "name": "firstTag",
+      "entity": "tag",
+      "description": "批量循环中第一项完整删除的有效书籍标签",
+      "requirements": [
+        "is_deleted=0",
+        "与 firstBook 有有效关系",
+        "id 小于 secondTag"
+      ]
+    },
+    {
+      "name": "secondTag",
+      "entity": "tag",
+      "description": "实体 DELETE 注入晚失败的第二个标签",
+      "requirements": [
+        "is_deleted=0",
+        "与 secondBook 有有效关系",
+        "id 大于 firstTag"
+      ]
+    }
+  ],
+  "intent": {
+    "summary": "依次删除两个书籍标签，在第二个标签实体 DELETE 注入 test-only 晚失败",
+    "selectionScope": "batch",
+    "confirmation": "destructive-required",
+    "outcome": "failed",
+    "repeatTrigger": "once",
+    "selectedAliases": [
+      "firstTag",
+      "secondTag"
+    ]
+  },
+  "adapters": {
+    "android": {
+      "entry": "标签管理页批量删除入口",
+      "steps": [
+        {
+          "action": "打开标签管理并稳定读取",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "选择两个标签并安装第二项实体删除失败注入",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "触发确定性晚失败，验证本次业务命令完整回滚",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host force-stop、创建 resume marker 后冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    },
+    "ios": {
+      "entry": "原生标签管理编辑模式删除入口",
+      "steps": [
+        {
+          "action": "打开标签管理并稳定读取",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "选择两个标签并安装第二项实体删除失败注入",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "触发确定性晚失败，验证本次业务命令完整回滚",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host 终止 App 后以同一副本冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    }
+  },
+  "database": {
+    "allowedWrites": [],
+    "forbiddenWrites": [],
+    "platformInternalTables": [
+      {
+        "table": "grdb_migrations",
+        "platform": "ios",
+        "reason": "GRDB 平台内部迁移记录"
+      }
+    ],
+    "timeColumns": [],
+    "strictExceptions": []
+  },
+  "setup": {
+    "mode": "none"
+  },
+  "oracle": {
+    "currentOracle": "批量删除标签需要共同事务，任一标签失败时标签实体及全部关系均保持 S2。",
+    "desiredSemantics": "批量删除标签需要共同事务，任一标签失败时标签实体及全部关系均保持 S2。",
+    "semanticProjections": [
+      {
+        "name": "active-selected-tags",
+        "description": "两个目标标签的有效集合",
+        "sql": "SELECT id AS tag_id FROM tag WHERE id IN (:firstTag, :secondTag) AND is_deleted = 0 ORDER BY id",
+        "mode": "ordered-rows",
+        "columns": [
+          {
+            "name": "tag_id",
+            "aliasEntity": "tag"
+          }
+        ],
+        "parameters": {
+          "firstTag": {
+            "binding": "firstTag"
+          },
+          "secondTag": {
+            "binding": "secondTag"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": [
+            {
+              "tag_id": "firstTag"
+            },
+            {
+              "tag_id": "secondTag"
+            }
+          ],
+          "iosBefore": [
+            {
+              "tag_id": "firstTag"
+            },
+            {
+              "tag_id": "secondTag"
+            }
+          ],
+          "androidAfter": [
+            {
+              "tag_id": "firstTag"
+            },
+            {
+              "tag_id": "secondTag"
+            }
+          ],
+          "iosAfter": [
+            {
+              "tag_id": "firstTag"
+            },
+            {
+              "tag_id": "secondTag"
+            }
+          ]
+        }
+      },
+      {
+        "name": "active-selected-tag-relations",
+        "description": "两个目标标签和书籍的有效关系",
+        "sql": "SELECT book_id, tag_id FROM tag_book WHERE book_id IN (:firstBook, :secondBook) AND tag_id IN (:firstTag, :secondTag) AND is_deleted = 0 ORDER BY book_id, tag_id",
+        "mode": "ordered-rows",
+        "columns": [
+          {
+            "name": "book_id",
+            "aliasEntity": "book"
+          },
+          {
+            "name": "tag_id",
+            "aliasEntity": "tag"
+          }
+        ],
+        "parameters": {
+          "firstBook": {
+            "binding": "firstBook"
+          },
+          "secondBook": {
+            "binding": "secondBook"
+          },
+          "firstTag": {
+            "binding": "firstTag"
+          },
+          "secondTag": {
+            "binding": "secondTag"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": [
+            {
+              "book_id": "firstBook",
+              "tag_id": "firstTag"
+            },
+            {
+              "book_id": "secondBook",
+              "tag_id": "secondTag"
+            }
+          ],
+          "iosBefore": [
+            {
+              "book_id": "firstBook",
+              "tag_id": "firstTag"
+            },
+            {
+              "book_id": "secondBook",
+              "tag_id": "secondTag"
+            }
+          ],
+          "androidAfter": [
+            {
+              "book_id": "firstBook",
+              "tag_id": "firstTag"
+            },
+            {
+              "book_id": "secondBook",
+              "tag_id": "secondTag"
+            }
+          ],
+          "iosAfter": [
+            {
+              "book_id": "firstBook",
+              "tag_id": "firstTag"
+            },
+            {
+              "book_id": "secondBook",
+              "tag_id": "secondTag"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "lifecycle": {
+    "checkpoints": [
+      {
+        "stage": "S0",
+        "meaning": "不可变 B0"
+      },
+      {
+        "stage": "S1",
+        "meaning": "首次打开"
+      },
+      {
+        "stage": "S2",
+        "meaning": "批量删除确认前"
+      },
+      {
+        "stage": "S3",
+        "meaning": "第二标签实体物理删除晚失败后"
+      },
+      {
+        "stage": "S4",
+        "meaning": "独立进程冷启动后的稳定状态"
+      }
+    ],
+    "requireS3S4BusinessStable": true,
+    "requireRestart": true,
+    "restoreDirection": "none"
+  }
+}

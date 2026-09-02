@@ -1,0 +1,206 @@
+{
+  "schemaVersion": 1,
+  "caseId": "a-02-delete-books-late-failure",
+  "title": "A-02 批量删除书籍时的晚失败",
+  "status": "exact-current",
+  "baseline": {
+    "sha256": "${B0_SHA256}",
+    "userVersion": 47,
+    "roomIdentityHash": "4e076c66571412594ff567eae85b68fc",
+    "schemaFingerprint": "${SCHEMA_FINGERPRINT}"
+  },
+  "targetDatabase": {
+    "userVersion": 48,
+    "roomIdentityHash": "cda5a591da1f57aca266af36255e5df7",
+    "schemaFingerprint": "055724e3c2ec28094f771961e2df1cf807efc99ac26f87e9d7308377d9b8eab2"
+  },
+  "runtimeProfile": {
+    "sha256": "${RUNTIME_PROFILE_SHA256}",
+    "requiredSettings": [
+      "bookSortMode"
+    ]
+  },
+  "aliases": [
+    {
+      "name": "firstBook",
+      "entity": "book",
+      "description": "批量命令中先处理的有效普通书",
+      "requirements": [
+        "id!=0",
+        "is_deleted=0",
+        "id 小于 secondBook"
+      ],
+      "selector": "active-book"
+    },
+    {
+      "name": "secondBook",
+      "entity": "book",
+      "description": "注入晚失败的第二本有效普通书",
+      "requirements": [
+        "id!=0",
+        "is_deleted=0",
+        "id 大于 firstBook"
+      ],
+      "selector": "active-book"
+    }
+  ],
+  "intent": {
+    "summary": "确认删除两本书，在第二本书的末端关联清理处注入 test-only 晚失败",
+    "selectionScope": "batch",
+    "confirmation": "destructive-required",
+    "outcome": "failed",
+    "repeatTrigger": "once",
+    "selectedAliases": [
+      "firstBook",
+      "secondBook"
+    ]
+  },
+  "adapters": {
+    "android": {
+      "entry": "书籍列表批量选择",
+      "steps": [
+        {
+          "action": "打开页面并稳定读取",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "选择两本书并安装第二本晚失败注入",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "触发确定性晚失败，验证本次业务命令完整回滚",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host force-stop .uitest 后以 resume 模式冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    },
+    "ios": {
+      "entry": "原生书籍列表编辑选择",
+      "steps": [
+        {
+          "action": "打开页面并稳定读取",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "选择两本书并安装第二本晚失败注入",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "触发确定性晚失败，验证本次业务命令完整回滚",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host 终止 App 后以同一副本冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    }
+  },
+  "database": {
+    "allowedWrites": [],
+    "forbiddenWrites": [],
+    "platformInternalTables": [
+      {
+        "table": "grdb_migrations",
+        "platform": "ios",
+        "reason": "GRDB 平台内部迁移记录"
+      }
+    ],
+    "timeColumns": [],
+    "strictExceptions": []
+  },
+  "setup": {
+    "mode": "none"
+  },
+  "oracle": {
+    "currentOracle": "批量删除书籍必须是单一业务事务，任何末端关联失败都不改变任一本书。",
+    "desiredSemantics": "批量删除书籍必须是单一业务事务，任何末端关联失败都不改变任一本书。",
+    "semanticProjections": [
+      {
+        "name": "active-selected-books",
+        "description": "比较失败后仍有效的目标书集合",
+        "sql": "SELECT id AS book_id FROM book WHERE id IN (:firstBook, :secondBook) AND is_deleted = 0 ORDER BY id",
+        "mode": "ordered-rows",
+        "columns": [
+          {
+            "name": "book_id",
+            "aliasEntity": "book"
+          }
+        ],
+        "parameters": {
+          "firstBook": {
+            "binding": "firstBook"
+          },
+          "secondBook": {
+            "binding": "secondBook"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": [
+            {
+              "book_id": "firstBook"
+            },
+            {
+              "book_id": "secondBook"
+            }
+          ],
+          "iosBefore": [
+            {
+              "book_id": "firstBook"
+            },
+            {
+              "book_id": "secondBook"
+            }
+          ],
+          "androidAfter": [
+            {
+              "book_id": "firstBook"
+            },
+            {
+              "book_id": "secondBook"
+            }
+          ],
+          "iosAfter": [
+            {
+              "book_id": "firstBook"
+            },
+            {
+              "book_id": "secondBook"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "lifecycle": {
+    "checkpoints": [
+      {
+        "stage": "S0",
+        "meaning": "不可变 B0"
+      },
+      {
+        "stage": "S1",
+        "meaning": "首次打开"
+      },
+      {
+        "stage": "S2",
+        "meaning": "删除确认前"
+      },
+      {
+        "stage": "S3",
+        "meaning": "晚失败返回后"
+      },
+      {
+        "stage": "S4",
+        "meaning": "独立进程冷启动后的稳定状态"
+      }
+    ],
+    "requireS3S4BusinessStable": true,
+    "requireRestart": true,
+    "restoreDirection": "none"
+  }
+}

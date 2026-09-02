@@ -25,7 +25,7 @@ struct BookCollectionRepositorySemanticsTests {
     }
 
     @Test
-    func addBooksToCollectionAllowsExistingDeletedBookRowsAndKeepsActiveDuplicates() async throws {
+    func addBooksToCollectionAllowsDeletedBookRowsAndKeepsOneRelationPerBook() async throws {
         let harness = try Self.makeHarness()
         let collectionID: Int64 = 92_001
         let activeBookID: Int64 = 92_101
@@ -59,10 +59,14 @@ struct BookCollectionRepositorySemanticsTests {
         #expect(deletedRelation.order == Int64(Int32.max))
         #expect(deletedRelation.updatedDate == 0)
         #expect(deletedRelation.isDeleted == 0)
+
+        let relations = try await harness.collectionBookStates(collectionID: collectionID)
+        #expect(relations.filter { $0.bookID == activeBookID }.count == 1)
+        #expect(relations.filter { $0.bookID == deletedBookID }.count == 1)
     }
 
     @Test
-    func annualSyncDeletesOutdatedRelationWithoutTimestampAndCreatesMissingYearRelation() async throws {
+    func annualSyncPhysicallyDeletesOutdatedRelationAndCreatesMissingYearRelation() async throws {
         let harness = try Self.makeHarness()
         let bookID: Int64 = 93_101
         let outdatedCollectionID: Int64 = 93_201
@@ -85,9 +89,12 @@ struct BookCollectionRepositorySemanticsTests {
             try AnnualCollectionSync.syncAfterReadHistoryChanged(db, bookID: bookID)
         }
 
-        let outdatedRelation = try #require(try await harness.collectionBook(collectionID: outdatedCollectionID, bookID: bookID, includeDeleted: true))
-        #expect(outdatedRelation.isDeleted == 1)
-        #expect(outdatedRelation.updatedDate == 777)
+        let outdatedRelation = try await harness.collectionBook(
+            collectionID: outdatedCollectionID,
+            bookID: bookID,
+            includeDeleted: true
+        )
+        #expect(outdatedRelation == nil)
 
         let targetRelation = try #require(try await harness.collectionBook(collectionID: targetCollectionID, bookID: bookID))
         #expect(targetRelation.recommend == "")
@@ -176,8 +183,8 @@ private extension BookCollectionRepositorySemanticsTests {
                 let deletionPredicate = includeDeleted ? "" : "AND is_deleted = 0"
                 // SQL 目的：读取指定书籍与书单关系的推荐语、排序与时间戳，用于验证 Android relation 写入副作用。
                 // 涉及表：collection_book。
-                // 关键过滤：collection_id/book_id 精确匹配；默认仅取有效关系，includeDeleted 用于验证软删除后的时间戳。
-                // 时间字段：读取 created_date/updated_date 原值，确认去重与软删除路径不会误改时间。
+                // 关键过滤：collection_id/book_id 精确匹配；默认仅取有效关系，includeDeleted 用于确认物理删除后不存在历史行。
+                // 时间字段：读取 created_date/updated_date 原值，确认去重路径不会误改时间。
                 // 返回字段：recommend、order、created_date、updated_date、is_deleted。
                 return try Row.fetchOne(
                     db,

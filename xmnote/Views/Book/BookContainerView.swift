@@ -6,8 +6,8 @@
 //
 
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 BookCollectionImportRouter、HomeSubtabScaffold、InteractionMetrics、BookViewModel 与 BookCollectionListViewModel 驱动书架浏览、书单列表、显示设置与顶部操作
- * [OUTPUT]: 对外提供 BookContainerView 与 BookSubTab 枚举，承载书籍/书单二级页切换、外部导入入口定位、顶部批量菜单、统一批量标签 Sheet、删除确认、书单入口与方案 A 规格的横向三点更多菜单
+ * [INPUT]: 依赖 RepositoryContainer、BookshelfEditingAccessoryCoordinator、HomeSubtabScaffold、InteractionMetrics、BookViewModel 与 BookCollectionListViewModel 驱动书架浏览、书单列表、显示设置与整理操作
+ * [OUTPUT]: 对外提供 BookContainerView 与 BookSubTab 枚举，承载书籍/书单二级页切换、书单模式切换视口锚点、外部导入入口定位、顶部编辑摘要、根级底部整理动作、统一批量 Sheet 与删除确认
  * [POS]: Book 模块容器壳层，承载书籍页与书架管理模式编排
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -134,16 +134,19 @@ struct BookContainerView: View {
 
 private struct BookContentView: View {
     @Environment(RepositoryContainer.self) private var repositories
+    @Environment(BookshelfEditingAccessoryCoordinator.self) private var editingAccessoryCoordinator
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Bindable var viewModel: BookViewModel
     @Binding var selectedSubTab: BookSubTab
     @State private var collectionViewModel: BookCollectionListViewModel?
     @State private var collectionEditMode: EditMode = .inactive
+    @State private var collectionViewportAnchorID: Int64?
     @State private var showsDisplaySettingSheet = false
     @State private var showsCollectionDisplaySettingSheet = false
     @State private var editingPresentation = BookshelfEditingPresentationState()
-    @State private var chromeTransitionTask: Task<Void, Never>?
+    @State private var chromeTransitionID: UUID?
+    @State private var accessoryOwnerID = UUID()
     @State private var browseSearch = BookshelfSearchDrawerState()
     let onAddBook: () -> Void
     let onAddNote: () -> Void
@@ -225,6 +228,8 @@ private struct BookContentView: View {
         .sheet(item: $viewModel.activeBatchSheet) { sheet in
             switch sheet {
             case .tags(
+                mode: let mode,
+                bookIDs: let bookIDs,
                 options: let options,
                 initialSelectedIDs: let initialSelectedIDs,
                 allowsEmptySelection: let allowsEmptySelection,
@@ -232,14 +237,21 @@ private struct BookContentView: View {
                 errorMessage: let errorMessage
             ):
                 BookshelfBatchTagsSheet(
+                    mode: mode,
                     options: options,
-                    selectedCount: viewModel.selectedBookIDs.count,
+                    selectedCount: bookIDs.count,
                     initialSelectedIDs: initialSelectedIDs,
                     allowsEmptySelection: allowsEmptySelection,
                     isLoading: isLoading,
                     errorMessage: errorMessage,
                     onCreate: viewModel.createBatchTag(named:),
-                    onSave: viewModel.submitBatchTags
+                    onSave: { tagIDs in
+                        await viewModel.submitTagMutation(
+                            bookIDs: bookIDs,
+                            tagIDs: tagIDs,
+                            mode: mode
+                        )
+                    }
                 )
             case .source(options: let options, initialSelectedID: let initialSelectedID):
                 BookshelfBatchSourceSheet(
@@ -291,6 +303,21 @@ private struct BookContentView: View {
                 )
             }
         }
+        .xmSystemAlert(item: $viewModel.activeBatchTagModeConfirmation) { confirmation in
+            XMSystemAlertDescriptor(
+                title: "批量设置标签",
+                message: "请选择对已选 \(confirmation.bookIDs.count) 本书执行的标签操作。",
+                actions: [
+                    XMSystemAlertAction(title: "取消", role: .cancel) { },
+                    XMSystemAlertAction(title: "添加标签") {
+                        viewModel.confirmBatchTagMode(.add, bookIDs: confirmation.bookIDs)
+                    },
+                    XMSystemAlertAction(title: "移除标签") {
+                        viewModel.confirmBatchTagMode(.remove, bookIDs: confirmation.bookIDs)
+                    }
+                ]
+            )
+        }
         .xmSystemAlert(item: $viewModel.activeDeleteConfirmation) { confirmation in
             defaultDeleteDescriptor(for: confirmation)
         }
@@ -308,6 +335,12 @@ private struct BookContentView: View {
         }
         .onChange(of: viewModel.isEditing) { _, _ in
             syncChromePhaseWithEditingState()
+        }
+        .onChange(of: editingAccessorySnapshot, initial: true) { _, snapshot in
+            publishEditingAccessory(snapshot)
+        }
+        .onChange(of: editingAccessoryCoordinator.pendingCommand) { _, command in
+            handleEditingAccessoryCommand(command)
         }
         .onChange(of: selectedSubTab) { _, newValue in
             guard newValue != .books else { return }
@@ -334,54 +367,13 @@ private struct BookContentView: View {
                     statusText: editStatusText,
                     onToggleSelectAll: toggleVisibleSelection,
                     onCancel: exitEditingWithChoreography
-                ) {
-                    editBatchMenu
-                }
+                )
                 .frame(height: topBarRowHeight)
             }
             .frame(height: topBarRowHeight, alignment: .top)
             .transition(BookshelfManagementMotion.topChromeTransition(reduceMotion: reduceMotion))
             .zIndex(2)
         }
-    }
-
-    private var editBatchMenu: some View {
-        Menu {
-            Section {
-                Button(action: viewModel.pinSelectedItems) {
-                    Label("置顶", systemImage: "pin")
-                }
-                .disabled(!viewModel.canSubmitSelectedPin || isEditBatchActionBusy)
-            }
-
-            Section {
-                ForEach(viewModel.defaultBottomActions) { action in
-                    Button {
-                        viewModel.performBottomAction(action)
-                    } label: {
-                        Label(action.title, systemImage: action.systemImage)
-                    }
-                    .disabled(!isEditBatchActionEnabled(action))
-                }
-            }
-
-            Section {
-                Button(role: .destructive, action: viewModel.presentDeleteConfirmation) {
-                    Label("删除", systemImage: "trash")
-                }
-                .disabled(!viewModel.canDeleteSelectedItems || isEditBatchActionBusy)
-            }
-        } label: {
-            Image(systemName: "ellipsis.circle")
-                .font(AppTypography.body)
-                .foregroundStyle(Color.textPrimary)
-                .frame(
-                    width: InteractionMetrics.minimumTouchTarget,
-                    height: InteractionMetrics.minimumTouchTarget
-                )
-                .contentShape(Rectangle())
-        }
-        .accessibilityLabel("批量操作")
     }
 
     private var isEditBatchActionBusy: Bool {
@@ -397,6 +389,81 @@ private struct BookContentView: View {
                 .pin, .unpin, .reorder, .moveOut, .renameGroup, .deleteGroup, .renameTag, .deleteTag,
                 .renameSource, .deleteSource, .deleteBooks:
             return viewModel.canMoreSelectedItems
+        }
+    }
+
+    private var editingAccessorySnapshot: BookshelfEditingAccessorySnapshot? {
+        guard selectedSubTab == .books,
+              viewModel.isEditing || chromePhase != .normal else {
+            return nil
+        }
+        let actions = [.pin] + viewModel.defaultBottomActions + [.deleteBooks]
+        let enabledActions = Set(actions.filter(isEditingAccessoryActionEnabled))
+        return BookshelfEditingAccessorySnapshot(
+            ownerID: accessoryOwnerID,
+            source: .mainBookshelf,
+            bookshelfTitle: "主书架",
+            actions: actions,
+            enabledActions: enabledActions,
+            selectedCount: viewModel.selectedBookIDs.count + viewModel.selectedGroupCount,
+            isBusy: isEditBatchActionBusy
+        )
+    }
+
+    private func isEditingAccessoryActionEnabled(_ action: BookshelfBookListEditAction) -> Bool {
+        switch action {
+        case .pin:
+            return viewModel.canSubmitSelectedPin && !isEditBatchActionBusy
+        case .deleteBooks:
+            return viewModel.canDeleteSelectedItems && !isEditBatchActionBusy
+        case .moveToStart, .moveToEnd, .moveToGroup, .addToBookList, .setTag, .setSource,
+                .setReadStatus, .exportNote, .exportBook:
+            return isEditBatchActionEnabled(action)
+        case .unpin, .reorder, .moveOut, .renameGroup, .deleteGroup, .renameTag, .deleteTag,
+                .renameSource, .deleteSource:
+            return false
+        }
+    }
+
+    /// 仅把页面当前编辑快照发布给根 Tab，业务对象和执行闭包始终留在页面内。
+    private func publishEditingAccessory(_ snapshot: BookshelfEditingAccessorySnapshot?) {
+        if let snapshot {
+            if editingAccessoryCoordinator.presentationID(ownedBy: accessoryOwnerID) == nil {
+                editingAccessoryCoordinator.activatePresentation(with: snapshot)
+            } else if editingAccessoryCoordinator.presentationPhase == .exiting {
+                guard chromePhase == .enteringEdit else { return }
+                editingAccessoryCoordinator.activatePresentation(with: snapshot)
+            } else {
+                editingAccessoryCoordinator.updatePayload(snapshot)
+            }
+        } else {
+            guard editingAccessoryCoordinator.presentationPhase != .exiting
+                    || editingAccessoryCoordinator.presentationID(ownedBy: accessoryOwnerID) == nil else {
+                return
+            }
+            editingAccessoryCoordinator.revokeImmediately(ownerID: accessoryOwnerID)
+        }
+    }
+
+    /// 消费属于当前页面的 accessory 请求，并转发到既有 ViewModel 业务入口。
+    private func handleEditingAccessoryCommand(_ command: BookshelfEditingAccessoryCommand?) {
+        guard let command, command.ownerID == accessoryOwnerID else { return }
+        guard editingAccessoryCoordinator.consume(
+            requestID: command.requestID,
+            ownerID: command.ownerID,
+            presentationID: command.presentationID
+        ) else { return }
+        switch command.action {
+        case .pin:
+            viewModel.pinSelectedItems()
+        case .deleteBooks:
+            viewModel.presentDeleteConfirmation()
+        case .moveToStart, .moveToEnd, .moveToGroup, .addToBookList, .setTag, .setSource,
+                .setReadStatus, .exportNote, .exportBook:
+            viewModel.performBottomAction(command.action)
+        case .unpin, .reorder, .moveOut, .renameGroup, .deleteGroup, .renameTag, .deleteTag,
+                .renameSource, .deleteSource:
+            break
         }
     }
 
@@ -503,65 +570,75 @@ private struct BookContentView: View {
         }
     }
 
-    /// 进入书架管理模式，并为菜单收口与顶部 chrome 切换保留清晰节奏。
-    /// - Note: 所有 SwiftUI 状态都在 MainActor 上修改；延迟任务会被后续进入/退出请求取消，避免旧阶段覆盖新阶段。
+    /// 进入书架管理模式，并以可反向的顶部 chrome 动画同步选择态与底部 accessory。
+    /// - Note: 所有状态都在 MainActor 上修改；每次请求都会替换 transition ID，过期 completion 无法覆盖最新阶段。
     private func enterEditingWithChoreography(initialSelection: BookshelfItemID? = nil) {
         guard selectedSubTab == .books, viewModel.canEditCurrentDimension else {
             return
         }
-        chromeTransitionTask?.cancel()
+        let transitionID = UUID()
+        chromeTransitionID = transitionID
         isEditingChoreographyActive = true
         prepareBrowseSearchForEditing()
 
-        withAnimation(BookshelfManagementMotion.modeAnimation(reduceMotion: reduceMotion)) {
+        withAnimation(
+            BookshelfManagementMotion.modeAnimation(reduceMotion: reduceMotion),
+            completionCriteria: .logicallyComplete
+        ) {
             chromePhase = .enteringEdit
             viewModel.enterEditing(initialSelection: initialSelection)
-        }
-
-        guard viewModel.isEditing else {
-            chromePhase = .normal
-            isEditingChoreographyActive = false
-            chromeTransitionTask = nil
-            return
-        }
-
-        chromeTransitionTask = Task { @MainActor in
-            try? await Task.sleep(for: BookshelfManagementMotion.editBarRevealDelay(reduceMotion: reduceMotion))
-            guard !Task.isCancelled else { return }
+        } completion: {
+            guard chromeTransitionID == transitionID else { return }
             guard selectedSubTab == .books, viewModel.isEditing else {
                 chromePhase = .normal
                 isEditingChoreographyActive = false
-                chromeTransitionTask = nil
+                chromeTransitionID = nil
                 return
             }
-            withAnimation(BookshelfManagementMotion.editBarRevealAnimation(reduceMotion: reduceMotion)) {
-                chromePhase = .editing
-            }
+            chromePhase = .editing
             isEditingChoreographyActive = false
-            chromeTransitionTask = nil
+            chromeTransitionID = nil
         }
     }
 
-    /// 退出书架管理模式并恢复普通浏览 chrome，系统 Tab Bar 在整个过程中保持可见。
-    /// - Note: 方法只编排本地展示阶段；真正的选择清理仍交给 `BookViewModel.exitEditing()`，延迟任务可取消以处理快速反复切换。
+    /// 退出书架管理模式，同时淡出 accessory 与恢复浏览 chrome，各自 completion 只处理自己的生命周期。
+    /// - Note: 所有状态都在 MainActor 上修改；owner、presentation 与 transition 三重校验阻止旧退场清掉后续重新进入。
     private func exitEditingWithChoreography() {
         guard viewModel.isEditing || chromePhase != .normal else { return }
-        chromeTransitionTask?.cancel()
+        let transitionID = UUID()
+        let accessoryPresentationID = editingAccessoryCoordinator.presentationID(ownedBy: accessoryOwnerID)
+        chromeTransitionID = transitionID
         isEditingChoreographyActive = true
 
-        withAnimation(BookshelfManagementMotion.editBarExitAnimation(reduceMotion: reduceMotion)) {
-            chromePhase = .exitingEdit
+        if let accessoryPresentationID {
+            withAnimation(
+                BookshelfManagementMotion.accessoryExitAnimation(reduceMotion: reduceMotion),
+                completionCriteria: .logicallyComplete
+            ) {
+                editingAccessoryCoordinator.beginExit(
+                    ownerID: accessoryOwnerID,
+                    presentationID: accessoryPresentationID,
+                    transitionID: transitionID
+                )
+            } completion: {
+                editingAccessoryCoordinator.completeExit(
+                    ownerID: accessoryOwnerID,
+                    presentationID: accessoryPresentationID,
+                    transitionID: transitionID
+                )
+            }
         }
 
-        chromeTransitionTask = Task { @MainActor in
-            try? await Task.sleep(for: BookshelfManagementMotion.editExitRestoreDelay(reduceMotion: reduceMotion))
-            guard !Task.isCancelled else { return }
-            withAnimation(BookshelfManagementMotion.restoreAnimation(reduceMotion: reduceMotion)) {
-                viewModel.exitEditing()
-                chromePhase = .normal
-            }
+        withAnimation(
+            BookshelfManagementMotion.restoreAnimation(reduceMotion: reduceMotion),
+            completionCriteria: .logicallyComplete
+        ) {
+            viewModel.exitEditing()
+            chromePhase = .normal
+        } completion: {
+            guard chromeTransitionID == transitionID else { return }
             isEditingChoreographyActive = false
-            chromeTransitionTask = nil
+            chromeTransitionID = nil
         }
     }
 
@@ -582,7 +659,7 @@ private struct BookContentView: View {
             if viewModel.isEditing {
                 viewModel.exitEditing()
             }
-            chromeTransitionTask?.cancel()
+            chromeTransitionID = nil
             editingPresentation.resetForContextLoss()
             collapseBrowseSearchIfUnsupported()
             return
@@ -591,7 +668,7 @@ private struct BookContentView: View {
         if viewModel.isEditing, chromePhase == .normal {
             chromePhase = .editing
         } else if !viewModel.isEditing, chromePhase != .normal {
-            chromeTransitionTask?.cancel()
+            chromeTransitionID = nil
             chromePhase = .normal
             collapseBrowseSearchIfUnsupported()
         }
@@ -654,8 +731,8 @@ private struct BookContentView: View {
 
     /// 二级页切换离开书籍页时立即收束页面私有状态，避免搜索与整理模式的退场动画污染子页面切换。
     private func resetBookChromeForSubtabSwitch() {
-        chromeTransitionTask?.cancel()
-        chromeTransitionTask = nil
+        chromeTransitionID = nil
+        editingAccessoryCoordinator.revokeImmediately(ownerID: accessoryOwnerID)
 
         var transaction = Transaction(animation: nil)
         transaction.disablesAnimations = true
@@ -705,8 +782,8 @@ private struct BookContentView: View {
 
     /// 页面失活时立即清理展示阶段和业务编辑态，避免异步动画任务回写已离开的页面。
     private func resetEditingPresentationForContextLoss() {
-        chromeTransitionTask?.cancel()
-        chromeTransitionTask = nil
+        chromeTransitionID = nil
+        editingAccessoryCoordinator.revokeImmediately(ownerID: accessoryOwnerID)
         editingPresentation.resetForContextLoss()
         collapseBrowseSearchIfUnsupported()
         viewModel.exitEditing()
@@ -807,6 +884,7 @@ private struct BookContentView: View {
                 BookCollectionListView(
                     viewModel: collectionViewModel,
                     editMode: $collectionEditMode,
+                    viewportAnchorID: $collectionViewportAnchorID,
                     onOpenCollection: { collectionID in
                         onOpenBookRoute(.collectionDetail(collectionID: collectionID))
                     }

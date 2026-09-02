@@ -8,7 +8,7 @@
 import SwiftUI
 
 /// 书架整理模式的本地 chrome 阶段，描述顶部编辑栏与普通浏览栏的展示交接。
-enum BookshelfEditingChromePhase: Equatable {
+enum BookshelfEditingChromePhase: Equatable, Sendable {
     case normal
     case enteringEdit
     case editing

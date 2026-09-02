@@ -1,0 +1,282 @@
+{
+  "schemaVersion": 1,
+  "caseId": "a-05-sort-late-failure",
+  "title": "A-05 书籍与分组混排逐条写入时的晚失败",
+  "status": "exact-current",
+  "baseline": {
+    "sha256": "${B0_SHA256}",
+    "userVersion": 47,
+    "roomIdentityHash": "4e076c66571412594ff567eae85b68fc",
+    "schemaFingerprint": "${SCHEMA_FINGERPRINT}"
+  },
+  "targetDatabase": {
+    "userVersion": 48,
+    "roomIdentityHash": "cda5a591da1f57aca266af36255e5df7",
+    "schemaFingerprint": "055724e3c2ec28094f771961e2df1cf807efc99ac26f87e9d7308377d9b8eab2"
+  },
+  "runtimeProfile": {
+    "sha256": "${RUNTIME_PROFILE_SHA256}",
+    "requiredSettings": [
+      "bookSortMode",
+      "bookGroupingMode"
+    ]
+  },
+  "aliases": [
+    {
+      "name": "prefixBook",
+      "entity": "book",
+      "description": "目标序列第一项，数据库成功写为顺序 0 的有效书",
+      "requirements": [
+        "is_deleted=0",
+        "S2 时 book_order=103",
+        "id 大于 failingBook"
+      ],
+      "selector": "active-book"
+    },
+    {
+      "name": "prefixGroup",
+      "entity": "group",
+      "description": "目标序列第二项，数据库成功写为顺序 1 的有效分组",
+      "requirements": [
+        "is_deleted=0",
+        "S2 时 group_order=101"
+      ]
+    },
+    {
+      "name": "failingBook",
+      "entity": "book",
+      "description": "目标序列第三项，内存先改为 2 但数据库 UPDATE 被 trigger 中止",
+      "requirements": [
+        "is_deleted=0",
+        "S2 时 book_order=102",
+        "id 介于 suffixBook 与 prefixBook"
+      ],
+      "selector": "active-book"
+    },
+    {
+      "name": "suffixBook",
+      "entity": "book",
+      "description": "目标序列第四项，异常被捕获后循环终止而未执行",
+      "requirements": [
+        "is_deleted=0",
+        "S2 时 book_order=100",
+        "id 小于 failingBook"
+      ],
+      "selector": "active-book"
+    }
+  ],
+  "intent": {
+    "summary": "提交 Book→Group→Book→Book 的混排目标序列，在第三项 book_order UPDATE 注入 test-only 晚失败",
+    "selectionScope": "batch",
+    "confirmation": "immediate",
+    "outcome": "committed",
+    "repeatTrigger": "once",
+    "selectedAliases": [
+      "prefixBook",
+      "prefixGroup",
+      "failingBook",
+      "suffixBook"
+    ]
+  },
+  "adapters": {
+    "android": {
+      "entry": "书籍与分组混排的手动排序入口",
+      "steps": [
+        {
+          "action": "打开手动排序并稳定读取",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "形成 Book、Group、Book、Book 目标序列并安装第三项失败注入",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "触发确定性晚失败，验证本次业务命令完整回滚",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host force-stop、创建 resume marker 后冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    },
+    "ios": {
+      "entry": "原生书籍与分组混排手动排序入口",
+      "steps": [
+        {
+          "action": "打开手动排序并稳定读取",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "形成等价目标序列并安装第三项失败注入",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "触发确定性晚失败，验证本次业务命令完整回滚",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host 终止 App 后以同一副本冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    }
+  },
+  "database": {
+    "allowedWrites": [],
+    "forbiddenWrites": [],
+    "platformInternalTables": [
+      {
+        "table": "grdb_migrations",
+        "platform": "ios",
+        "reason": "GRDB 平台内部迁移记录"
+      }
+    ],
+    "timeColumns": [],
+    "strictExceptions": []
+  },
+  "setup": {
+    "mode": "none"
+  },
+  "oracle": {
+    "currentOracle": "书籍与分组混排顺序必须在共同事务中原子写入；任何一项失败时全部顺序回滚并向调用层报告失败。",
+    "desiredSemantics": "书籍与分组混排顺序必须在共同事务中原子写入；任何一项失败时全部顺序回滚并向调用层报告失败。",
+    "semanticProjections": [
+      {
+        "name": "mixed-sort-book-orders",
+        "description": "混排中的三本书最终顺序",
+        "sql": "SELECT id AS book_id, book_order FROM book WHERE id IN (:prefixBook, :failingBook, :suffixBook) ORDER BY id",
+        "mode": "ordered-rows",
+        "columns": [
+          {
+            "name": "book_id",
+            "aliasEntity": "book"
+          },
+          {
+            "name": "book_order"
+          }
+        ],
+        "parameters": {
+          "prefixBook": {
+            "binding": "prefixBook"
+          },
+          "failingBook": {
+            "binding": "failingBook"
+          },
+          "suffixBook": {
+            "binding": "suffixBook"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": [
+            {
+              "book_id": "suffixBook",
+              "book_order": 100
+            },
+            {
+              "book_id": "failingBook",
+              "book_order": 102
+            },
+            {
+              "book_id": "prefixBook",
+              "book_order": 103
+            }
+          ],
+          "iosBefore": [
+            {
+              "book_id": "suffixBook",
+              "book_order": 100
+            },
+            {
+              "book_id": "failingBook",
+              "book_order": 102
+            },
+            {
+              "book_id": "prefixBook",
+              "book_order": 103
+            }
+          ],
+          "androidAfter": [
+            {
+              "book_id": "suffixBook",
+              "book_order": 100
+            },
+            {
+              "book_id": "failingBook",
+              "book_order": 102
+            },
+            {
+              "book_id": "prefixBook",
+              "book_order": 103
+            }
+          ],
+          "iosAfter": [
+            {
+              "book_id": "suffixBook",
+              "book_order": 100
+            },
+            {
+              "book_id": "failingBook",
+              "book_order": 102
+            },
+            {
+              "book_id": "prefixBook",
+              "book_order": 103
+            }
+          ]
+        }
+      },
+      {
+        "name": "mixed-sort-group-order",
+        "description": "混排中第二项分组的数据库顺序",
+        "sql": "SELECT group_order FROM `group` WHERE id = :prefixGroup",
+        "mode": "scalar",
+        "columns": [
+          {
+            "name": "group_order"
+          }
+        ],
+        "parameters": {
+          "prefixGroup": {
+            "binding": "prefixGroup"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": 101,
+          "iosBefore": 101,
+          "androidAfter": 101,
+          "iosAfter": 101
+        }
+      }
+    ]
+  },
+  "lifecycle": {
+    "checkpoints": [
+      {
+        "stage": "S0",
+        "meaning": "不可变 B0"
+      },
+      {
+        "stage": "S1",
+        "meaning": "首次打开混排页"
+      },
+      {
+        "stage": "S2",
+        "meaning": "Book→Group→Book→Book 提交前"
+      },
+      {
+        "stage": "S3",
+        "meaning": "第三项数据库写入失败且异常被吞后"
+      },
+      {
+        "stage": "S4",
+        "meaning": "独立进程冷启动后的稳定状态"
+      }
+    ],
+    "requireS3S4BusinessStable": true,
+    "requireRestart": true,
+    "restoreDirection": "none"
+  }
+}

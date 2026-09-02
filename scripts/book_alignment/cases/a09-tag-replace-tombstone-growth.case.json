@@ -1,0 +1,369 @@
+{
+  "schemaVersion": 1,
+  "caseId": "a09.tag-replace-tombstone-growth",
+  "title": "A-09 单本标签重复替换不累积历史关系",
+  "status": "exact-current",
+  "baseline": {
+    "sha256": "${B0_SHA256}",
+    "userVersion": 47,
+    "roomIdentityHash": "4e076c66571412594ff567eae85b68fc",
+    "schemaFingerprint": "${SCHEMA_FINGERPRINT}"
+  },
+  "targetDatabase": {
+    "userVersion": 48,
+    "roomIdentityHash": "cda5a591da1f57aca266af36255e5df7",
+    "schemaFingerprint": "055724e3c2ec28094f771961e2df1cf807efc99ac26f87e9d7308377d9b8eab2"
+  },
+  "runtimeProfile": {
+    "sha256": "${RUNTIME_PROFILE_SHA256}",
+    "requiredSettings": []
+  },
+  "aliases": [
+    {
+      "name": "targetBook",
+      "entity": "book",
+      "description": "连续执行三次单本标签替换的有效书",
+      "requirements": [
+        "is_deleted=0",
+        "操作前仅有 originalTag 有效关系"
+      ],
+      "selector": "active-book"
+    },
+    {
+      "name": "originalTag",
+      "entity": "tag",
+      "description": "操作前有效书籍标签",
+      "requirements": [
+        "is_deleted=0",
+        "type=2",
+        "与 targetBook 有效关联"
+      ]
+    },
+    {
+      "name": "replacementTagA",
+      "entity": "tag",
+      "description": "第一次和第三次替换选择的书籍标签",
+      "requirements": [
+        "is_deleted=0",
+        "type=2",
+        "操作前无 targetBook 有效关系"
+      ]
+    },
+    {
+      "name": "replacementTagB",
+      "entity": "tag",
+      "description": "第二次替换选择的书籍标签",
+      "requirements": [
+        "is_deleted=0",
+        "type=2",
+        "操作前无 targetBook 有效关系"
+      ]
+    }
+  ],
+  "intent": {
+    "summary": "对同一本书依次替换为标签 A、B、A，验证物理关系始终收敛为最终唯一关系",
+    "selectionScope": "single",
+    "confirmation": "required",
+    "outcome": "committed",
+    "repeatTrigger": "once",
+    "selectedAliases": [
+      "targetBook",
+      "replacementTagA",
+      "replacementTagB"
+    ]
+  },
+  "adapters": {
+    "android": {
+      "entry": "单本书籍整理的设置标签入口",
+      "steps": [
+        {
+          "action": "打开并稳定读取原始标签",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "确认操作前只有一条有效关系",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "连续提交 A、B、A 三次替换",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host force-stop 后冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    },
+    "ios": {
+      "entry": "原生单本标签整理入口",
+      "steps": [
+        {
+          "action": "打开并稳定读取原始标签",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "确认操作前只有一条有效关系",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "连续提交 A、B、A 三次替换",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host 终止 App 后冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    }
+  },
+  "database": {
+    "allowedWrites": [
+      {
+        "table": "tag_book",
+        "operations": [
+          "insert",
+          "delete"
+        ],
+        "platforms": [
+          "android",
+          "ios"
+        ],
+        "reason": "每次 REPLACE 物理删除旧关系并插入唯一目标关系"
+      }
+    ],
+    "forbiddenWrites": [
+      {
+        "table": "book",
+        "operations": [
+          "insert",
+          "update",
+          "delete"
+        ],
+        "columns": [
+          "*"
+        ],
+        "platforms": [
+          "android",
+          "ios"
+        ],
+        "reason": "标签替换不得修改书主记录"
+      },
+      {
+        "table": "tag",
+        "operations": [
+          "insert",
+          "update",
+          "delete"
+        ],
+        "columns": [
+          "*"
+        ],
+        "platforms": [
+          "android",
+          "ios"
+        ],
+        "reason": "选择既有标签不得修改标签实体"
+      }
+    ],
+    "platformInternalTables": [
+      {
+        "table": "grdb_migrations",
+        "platform": "ios",
+        "reason": "GRDB 平台内部迁移记录"
+      }
+    ],
+    "timeColumns": [
+      {
+        "table": "tag_book",
+        "column": "created_date",
+        "unit": "epoch-millis",
+        "monotonic": true,
+        "allowZeroOnInsert": false,
+        "requireOperationWindow": true,
+        "toleranceMillis": 1000,
+        "reason": "每次替换后唯一目标关系的创建时间"
+      }
+    ],
+    "strictExceptions": []
+  },
+  "setup": {
+    "mode": "none"
+  },
+  "oracle": {
+    "currentOracle": "连续执行 A、B、A 三次 REPLACE 后，两端均只保留一条指向 replacementTagA 的物理有效关系，且不存在 tombstone。",
+    "desiredSemantics": "连续执行 A、B、A 三次 REPLACE 后，两端均只保留一条指向 replacementTagA 的物理有效关系，且不存在 tombstone。",
+    "semanticProjections": [
+      {
+        "name": "target-book-tag-row-counts",
+        "description": "目标书的物理、删除和有效关系数量",
+        "sql": "SELECT COUNT(*) AS physical_count, SUM(CASE WHEN is_deleted != 0 THEN 1 ELSE 0 END) AS deleted_count, SUM(CASE WHEN is_deleted = 0 THEN 1 ELSE 0 END) AS active_count FROM tag_book WHERE book_id = :targetBook",
+        "mode": "ordered-rows",
+        "columns": [
+          {
+            "name": "physical_count"
+          },
+          {
+            "name": "deleted_count"
+          },
+          {
+            "name": "active_count"
+          }
+        ],
+        "parameters": {
+          "targetBook": {
+            "binding": "targetBook"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": [
+            {
+              "physical_count": 1,
+              "deleted_count": 0,
+              "active_count": 1
+            }
+          ],
+          "iosBefore": [
+            {
+              "physical_count": 1,
+              "deleted_count": 0,
+              "active_count": 1
+            }
+          ],
+          "androidAfter": [
+            {
+              "physical_count": 1,
+              "deleted_count": 0,
+              "active_count": 1
+            }
+          ],
+          "iosAfter": [
+            {
+              "physical_count": 1,
+              "deleted_count": 0,
+              "active_count": 1
+            }
+          ]
+        }
+      },
+      {
+        "name": "target-book-tag-lifecycle",
+        "description": "按标签冻结删除、重建、再次删除后的物理行与有效行分布",
+        "sql": "SELECT tag_id, COUNT(*) AS physical_count, SUM(CASE WHEN is_deleted != 0 THEN 1 ELSE 0 END) AS deleted_count, SUM(CASE WHEN is_deleted = 0 THEN 1 ELSE 0 END) AS active_count FROM tag_book WHERE book_id = :targetBook GROUP BY tag_id ORDER BY tag_id",
+        "mode": "ordered-rows",
+        "columns": [
+          {
+            "name": "tag_id",
+            "aliasEntity": "tag"
+          },
+          {
+            "name": "physical_count"
+          },
+          {
+            "name": "deleted_count"
+          },
+          {
+            "name": "active_count"
+          }
+        ],
+        "parameters": {
+          "targetBook": {
+            "binding": "targetBook"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": [
+            {
+              "tag_id": "originalTag",
+              "physical_count": 1,
+              "deleted_count": 0,
+              "active_count": 1
+            }
+          ],
+          "iosBefore": [
+            {
+              "tag_id": "originalTag",
+              "physical_count": 1,
+              "deleted_count": 0,
+              "active_count": 1
+            }
+          ],
+          "androidAfter": [
+            {
+              "tag_id": "replacementTagA",
+              "physical_count": 1,
+              "deleted_count": 0,
+              "active_count": 1
+            }
+          ],
+          "iosAfter": [
+            {
+              "tag_id": "replacementTagA",
+              "physical_count": 1,
+              "deleted_count": 0,
+              "active_count": 1
+            }
+          ]
+        }
+      },
+      {
+        "name": "target-book-final-active-tag",
+        "description": "三次替换后两端有效关系都唯一指向标签 A",
+        "sql": "SELECT tag_id FROM tag_book WHERE book_id = :targetBook AND is_deleted = 0 ORDER BY tag_id",
+        "mode": "ordered-rows",
+        "columns": [
+          {
+            "name": "tag_id",
+            "aliasEntity": "tag"
+          }
+        ],
+        "parameters": {
+          "targetBook": {
+            "binding": "targetBook"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidAfter": [
+            {
+              "tag_id": "replacementTagA"
+            }
+          ],
+          "iosAfter": [
+            {
+              "tag_id": "replacementTagA"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "lifecycle": {
+    "checkpoints": [
+      {
+        "stage": "S0",
+        "meaning": "不可变 B0"
+      },
+      {
+        "stage": "S1",
+        "meaning": "首次打开"
+      },
+      {
+        "stage": "S2",
+        "meaning": "首次替换前"
+      },
+      {
+        "stage": "S3",
+        "meaning": "连续三次替换后"
+      },
+      {
+        "stage": "S4",
+        "meaning": "独立进程冷启动后的稳定状态"
+      }
+    ],
+    "requireS3S4BusinessStable": true,
+    "requireRestart": true,
+    "restoreDirection": "none"
+  }
+}

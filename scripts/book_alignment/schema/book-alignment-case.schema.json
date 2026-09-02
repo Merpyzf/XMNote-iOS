@@ -1,0 +1,445 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://xmnote.local/schemas/book-alignment-case.schema.json",
+  "title": "BookAlignmentCase",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "caseId",
+    "title",
+    "status",
+    "baseline",
+    "runtimeProfile",
+    "aliases",
+    "intent",
+    "adapters",
+    "database",
+    "setup",
+    "oracle",
+    "lifecycle"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "caseId": { "$ref": "#/$defs/safeName" },
+    "title": { "type": "string", "minLength": 1 },
+    "status": {
+      "enum": [
+        "exact-current",
+        "platform-variant",
+        "known-android-bug-compat",
+        "safety-exception",
+        "pending-protocol"
+      ]
+    },
+    "baseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sha256", "userVersion", "roomIdentityHash", "schemaFingerprint"],
+      "properties": {
+        "sha256": { "$ref": "#/$defs/shaOrBinding" },
+        "userVersion": { "type": "integer", "minimum": 1 },
+        "roomIdentityHash": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+        "schemaFingerprint": { "$ref": "#/$defs/shaOrBinding" }
+      }
+    },
+    "targetDatabase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["userVersion", "roomIdentityHash", "schemaFingerprint"],
+      "properties": {
+        "userVersion": { "type": "integer", "minimum": 1 },
+        "roomIdentityHash": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+        "schemaFingerprint": { "$ref": "#/$defs/shaOrBinding" }
+      }
+    },
+    "runtimeProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sha256", "requiredSettings"],
+      "properties": {
+        "sha256": { "$ref": "#/$defs/shaOrBinding" },
+        "requiredSettings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/safeName" },
+          "uniqueItems": true
+        }
+      }
+    },
+    "aliases": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/alias" }
+    },
+    "intent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "summary",
+        "selectionScope",
+        "confirmation",
+        "outcome",
+        "repeatTrigger"
+      ],
+      "properties": {
+        "summary": { "type": "string", "minLength": 1 },
+        "selectionScope": {
+          "enum": ["single", "batch", "group-expanded", "all-visible", "none"]
+        },
+        "confirmation": {
+          "enum": ["immediate", "required", "cancellable", "destructive-required"]
+        },
+        "outcome": { "enum": ["committed", "cancelled", "failed"] },
+        "repeatTrigger": { "enum": ["once", "idempotent", "single-commit"] },
+        "selectedAliases": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/safeName" },
+          "uniqueItems": true
+        }
+      }
+    },
+    "adapters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["android", "ios"],
+      "properties": {
+        "android": { "$ref": "#/$defs/adapter" },
+        "ios": { "$ref": "#/$defs/adapter" }
+      }
+    },
+    "database": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allowedWrites",
+        "forbiddenWrites",
+        "platformInternalTables",
+        "timeColumns",
+        "strictExceptions"
+      ],
+      "properties": {
+        "allowedWrites": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/writeRule" }
+        },
+        "forbiddenWrites": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/writeRule" }
+        },
+        "platformInternalTables": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["table", "platform", "reason"],
+            "properties": {
+              "table": { "$ref": "#/$defs/sqlIdentifier" },
+              "platform": { "enum": ["android", "ios"] },
+              "reason": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "timeColumns": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/timeColumn" }
+        },
+        "strictExceptions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/strictException" }
+        }
+      }
+    },
+    "setup": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode"],
+          "properties": { "mode": { "const": "none" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "sqlFile", "sha256", "reason"],
+          "properties": {
+            "mode": { "const": "deterministic-sql" },
+            "sqlFile": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._/-]+\\.sql$"
+            },
+            "sha256": { "$ref": "#/$defs/shaOrBinding" },
+            "reason": { "type": "string", "minLength": 1 }
+          }
+        }
+      ]
+    },
+    "oracle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["currentOracle", "desiredSemantics", "semanticProjections"],
+      "properties": {
+        "currentOracle": { "type": "string", "minLength": 1 },
+        "desiredSemantics": { "type": "string", "minLength": 1 },
+        "semanticProjections": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/projection" }
+        }
+      }
+    },
+    "lifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "checkpoints",
+        "requireS3S4BusinessStable",
+        "requireRestart",
+        "restoreDirection"
+      ],
+      "properties": {
+        "checkpoints": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/checkpoint" }
+        },
+        "requireS3S4BusinessStable": { "type": "boolean" },
+        "requireRestart": { "type": "boolean" },
+        "restoreDirection": { "enum": ["none", "android-to-ios"] }
+      }
+    }
+  },
+  "$defs": {
+    "safeName": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,95}$"
+    },
+    "sqlIdentifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+    },
+    "shaOrBinding": {
+      "oneOf": [
+        { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        { "enum": ["${B0_SHA256}", "${SCHEMA_FINGERPRINT}", "${RUNTIME_PROFILE_SHA256}", "${SETUP_SQL_SHA256}"] }
+      ]
+    },
+    "alias": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "entity", "description", "requirements"],
+      "properties": {
+        "name": { "$ref": "#/$defs/safeName" },
+        "entity": {
+          "enum": [
+            "book",
+            "group",
+            "tag",
+            "source",
+            "readStatus",
+            "collection",
+            "author",
+            "publisher",
+            "categoryContent",
+            "other"
+          ]
+        },
+        "description": { "type": "string", "minLength": 1 },
+        "requirements": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "selector": {
+          "enum": [
+            "active-book",
+            "active-ungrouped-book",
+            "active-empty-group",
+            "active-non-empty-group"
+          ]
+        }
+      }
+    },
+    "adapter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entry", "steps"],
+      "properties": {
+        "entry": { "type": "string", "minLength": 1 },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["action"],
+            "properties": {
+              "action": { "type": "string", "minLength": 1 },
+              "targetAlias": { "$ref": "#/$defs/safeName" },
+              "checkpoint": { "enum": ["S0", "S1", "S2", "S3", "S4", "S5", "S6", "S7"] },
+              "semanticExpectation": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    },
+    "writeRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["table", "operations", "platforms", "reason"],
+      "properties": {
+        "table": { "$ref": "#/$defs/sqlIdentifier" },
+        "operations": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["insert", "update", "delete"] }
+        },
+        "columns": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "oneOf": [
+              { "$ref": "#/$defs/sqlIdentifier" },
+              { "const": "*" }
+            ]
+          }
+        },
+        "platforms": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["android", "ios"] }
+        },
+        "reason": { "type": "string", "minLength": 1 }
+      }
+    },
+    "timeColumn": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "table",
+        "column",
+        "unit",
+        "monotonic",
+        "allowZeroOnInsert",
+        "requireOperationWindow",
+        "reason"
+      ],
+      "properties": {
+        "table": { "$ref": "#/$defs/sqlIdentifier" },
+        "column": { "$ref": "#/$defs/sqlIdentifier" },
+        "unit": { "enum": ["epoch-millis", "epoch-seconds"] },
+        "monotonic": { "type": "boolean" },
+        "allowZeroOnInsert": { "type": "boolean" },
+        "requireOperationWindow": { "type": "boolean" },
+        "toleranceMillis": { "type": "integer", "minimum": 0, "maximum": 60000 },
+        "reason": { "type": "string", "minLength": 1 }
+      }
+    },
+    "strictException": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "reasons", "maxMatches", "rationale"],
+      "properties": {
+        "code": { "$ref": "#/$defs/safeName" },
+        "reasons": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "table": { "$ref": "#/$defs/sqlIdentifier" },
+        "column": { "$ref": "#/$defs/sqlIdentifier" },
+        "androidCount": { "type": "integer", "minimum": 0 },
+        "iosCount": { "type": "integer", "minimum": 0 },
+        "maxMatches": { "type": "integer", "minimum": 1 },
+        "rationale": { "type": "string", "minLength": 1 }
+      }
+    },
+    "projection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "description",
+        "sql",
+        "mode",
+        "columns",
+        "parameters",
+        "compareAndroidIOSAfter",
+        "expected"
+      ],
+      "properties": {
+        "name": { "$ref": "#/$defs/safeName" },
+        "description": { "type": "string", "minLength": 1 },
+        "sql": { "type": "string", "pattern": "^\\s*(SELECT|WITH)\\b" },
+        "mode": { "enum": ["ordered-rows", "unordered-rows", "scalar"] },
+        "columns": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name"],
+            "properties": {
+              "name": { "$ref": "#/$defs/sqlIdentifier" },
+              "aliasEntity": {
+                "enum": [
+                  "book",
+                  "group",
+                  "tag",
+                  "source",
+                  "readStatus",
+                  "collection",
+                  "author",
+                  "publisher",
+                  "categoryContent",
+                  "other"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["binding"],
+                "properties": { "binding": { "$ref": "#/$defs/safeName" } }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["literal"],
+                "properties": {
+                  "literal": { "type": ["null", "boolean", "integer", "number", "string"] }
+                }
+              }
+            ]
+          }
+        },
+        "compareAndroidIOSAfter": { "type": "boolean" },
+        "expected": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "androidBefore": {},
+            "iosBefore": {},
+            "androidAfter": {},
+            "iosAfter": {}
+          }
+        }
+      }
+    },
+    "checkpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stage", "meaning"],
+      "properties": {
+        "stage": { "enum": ["S0", "S1", "S2", "S3", "S4", "S5", "S6", "S7"] },
+        "meaning": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

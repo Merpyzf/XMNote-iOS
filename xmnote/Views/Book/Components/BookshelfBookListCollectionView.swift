@@ -999,6 +999,20 @@ private extension BookshelfBookListCollectionHostView {
             updateCollectionVisibilityForSearchDrawerPreparation()
             return
         }
+        let didEnterEditingWithoutSearch = !previousConfiguration.isEditing
+            && configuration.isEditing
+            && !configuration.hasBrowseSearchText
+            && !configuration.hasBrowseSearchKeyword
+        if didEnterEditingWithoutSearch {
+            didApplyInitialSearchDrawerOffset = true
+            isPendingInitialSearchDrawerOffset = false
+            let hiddenOffsetY = hiddenSearchDrawerOffsetY()
+            if collectionView.contentOffset.y < hiddenOffsetY - 0.5 {
+                setSearchDrawerHidden(animated: false)
+            }
+            updateCollectionVisibilityForSearchDrawerPreparation()
+            return
+        }
         if configuration.showsExpandedSearchSurface {
             didApplyInitialSearchDrawerOffset = true
             isPendingInitialSearchDrawerOffset = false

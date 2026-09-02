@@ -1,0 +1,225 @@
+{
+  "schemaVersion": 1,
+  "caseId": "a-01-delete-groups-late-failure",
+  "title": "A-01 批量删除非空分组时的晚失败",
+  "status": "exact-current",
+  "baseline": {
+    "sha256": "${B0_SHA256}",
+    "userVersion": 47,
+    "roomIdentityHash": "4e076c66571412594ff567eae85b68fc",
+    "schemaFingerprint": "${SCHEMA_FINGERPRINT}"
+  },
+  "targetDatabase": {
+    "userVersion": 48,
+    "roomIdentityHash": "cda5a591da1f57aca266af36255e5df7",
+    "schemaFingerprint": "055724e3c2ec28094f771961e2df1cf807efc99ac26f87e9d7308377d9b8eab2"
+  },
+  "runtimeProfile": {
+    "sha256": "${RUNTIME_PROFILE_SHA256}",
+    "requiredSettings": [
+      "bookSortMode",
+      "newBookPosition"
+    ]
+  },
+  "aliases": [
+    {
+      "name": "firstGroup",
+      "entity": "group",
+      "description": "批量命令中先处理的有效非空分组",
+      "requirements": [
+        "is_deleted=0",
+        "至少有一本有效书",
+        "id 小于 secondGroup"
+      ],
+      "selector": "active-non-empty-group"
+    },
+    {
+      "name": "secondGroup",
+      "entity": "group",
+      "description": "注入晚失败的第二个有效非空分组",
+      "requirements": [
+        "is_deleted=0",
+        "至少有一本有效书",
+        "id 大于 firstGroup"
+      ],
+      "selector": "active-non-empty-group"
+    },
+    {
+      "name": "firstGroupBook",
+      "entity": "book",
+      "description": "仅属于 firstGroup 的有效书",
+      "requirements": [
+        "is_deleted=0",
+        "存在 firstGroup 的有效 group_book"
+      ]
+    },
+    {
+      "name": "secondGroupBook",
+      "entity": "book",
+      "description": "仅属于 secondGroup 的有效书",
+      "requirements": [
+        "is_deleted=0",
+        "存在 secondGroup 的有效 group_book"
+      ]
+    }
+  ],
+  "intent": {
+    "summary": "确认批量删除两个非空分组，在第二组关系写入处注入 test-only 晚失败",
+    "selectionScope": "batch",
+    "confirmation": "destructive-required",
+    "outcome": "failed",
+    "repeatTrigger": "once",
+    "selectedAliases": [
+      "firstGroup",
+      "secondGroup"
+    ]
+  },
+  "adapters": {
+    "android": {
+      "entry": "分组管理页批量选择两个非空分组",
+      "steps": [
+        {
+          "action": "打开页面并稳定读取",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "选中两个分组并安装第二组晚失败注入",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "触发确定性晚失败，验证本次业务命令完整回滚",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host force-stop .uitest 后以 resume 模式冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    },
+    "ios": {
+      "entry": "原生分组管理编辑模式批量选择两个非空分组",
+      "steps": [
+        {
+          "action": "打开页面并稳定读取",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "选中两个分组并安装第二组晚失败注入",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "触发确定性晚失败，验证本次业务命令完整回滚",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host 终止 App 后以同一副本冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    }
+  },
+  "database": {
+    "allowedWrites": [],
+    "forbiddenWrites": [],
+    "platformInternalTables": [
+      {
+        "table": "grdb_migrations",
+        "platform": "ios",
+        "reason": "GRDB 平台内部迁移记录"
+      }
+    ],
+    "timeColumns": [],
+    "strictExceptions": []
+  },
+  "setup": {
+    "mode": "none"
+  },
+  "oracle": {
+    "currentOracle": "两个分组的关系迁移与删除属于一个事务，任一失败均保持两个分组及关系不变。",
+    "desiredSemantics": "两个分组的关系迁移与删除属于一个事务，任一失败均保持两个分组及关系不变。",
+    "semanticProjections": [
+      {
+        "name": "active-selected-groups",
+        "description": "按逻辑别名比较两个目标分组的有效集合",
+        "sql": "SELECT id AS group_id FROM \"group\" WHERE id IN (:firstGroup, :secondGroup) AND is_deleted = 0 ORDER BY id",
+        "mode": "ordered-rows",
+        "columns": [
+          {
+            "name": "group_id",
+            "aliasEntity": "group"
+          }
+        ],
+        "parameters": {
+          "firstGroup": {
+            "binding": "firstGroup"
+          },
+          "secondGroup": {
+            "binding": "secondGroup"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": [
+            {
+              "group_id": "firstGroup"
+            },
+            {
+              "group_id": "secondGroup"
+            }
+          ],
+          "iosBefore": [
+            {
+              "group_id": "firstGroup"
+            },
+            {
+              "group_id": "secondGroup"
+            }
+          ],
+          "androidAfter": [
+            {
+              "group_id": "firstGroup"
+            },
+            {
+              "group_id": "secondGroup"
+            }
+          ],
+          "iosAfter": [
+            {
+              "group_id": "firstGroup"
+            },
+            {
+              "group_id": "secondGroup"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "lifecycle": {
+    "checkpoints": [
+      {
+        "stage": "S0",
+        "meaning": "不可变 B0"
+      },
+      {
+        "stage": "S1",
+        "meaning": "首次打开"
+      },
+      {
+        "stage": "S2",
+        "meaning": "确认前且失败注入已安装"
+      },
+      {
+        "stage": "S3",
+        "meaning": "失败返回后"
+      },
+      {
+        "stage": "S4",
+        "meaning": "独立进程冷启动后的稳定状态"
+      }
+    ],
+    "requireS3S4BusinessStable": true,
+    "requireRestart": true,
+    "restoreDirection": "none"
+  }
+}

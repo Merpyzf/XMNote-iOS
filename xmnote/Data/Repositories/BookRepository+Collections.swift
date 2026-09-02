@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 GRDB Database、CollectionRecord、CollectionBookRecord 与书架展示模型，读取和写入 Android 对齐的书单数据
- * [OUTPUT]: 为 BookRepository 补充书单列表、详情、创建、编辑、删除、排序、书单书籍元信息、收藏理由与年度一致性修复能力
+ * [OUTPUT]: 为 BookRepository 补充书单列表、详情、创建、编辑、物理删除、排序、书单书籍元信息、收藏理由与年度一致性修复能力
  * [POS]: Data 层书单迁移协作者，集中封装 collection / collection_book 的跨端数据语义
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -149,41 +149,42 @@ extension BookRepository {
         )
     }
 
-    /// 删除手动书单；collection 本体不更新时间戳，relation 按 Android deleteByCollectionId 更新时间戳。
+    /// 在当前事务内物理删除手动书单及其关系，并清理由该操作产生的孤立占位书。
     nonisolated func deleteBookCollection(_ db: Database, collectionID: Int64) throws {
         guard try isActiveManualCollection(db, collectionID: collectionID) else {
             throw BookshelfBatchWriteError.invalidCollection
         }
-        let now = timestampMillis()
-        // SQL 目的：软删除手动书单本体，保持 Android CollectionDao.delete 不刷新 updated_date 的语义。
-        // 涉及表：collection。
-        // 关键过滤：id 精确匹配、is_deleted = 0、is_annual = 0。
-        // 时间字段：不更新 updated_date。
-        try db.execute(
-            sql: """
-                UPDATE collection
-                SET is_deleted = 1
-                WHERE id = ?
-                  AND is_deleted = 0
-                  AND is_annual = 0
-                """,
+        // SQL 目的：删除书单前收集其全部关系所指向的书籍，供关系删除后判断引用占位书是否已孤立。
+        // 涉及表：collection_book。
+        // 关键过滤：collection_id 精确匹配；包含历史 tombstone，确保旧备份数据也能被完整清理。
+        // 时间字段：不参与；返回字段用途：book_id 作为占位书引用收敛检查输入。
+        let affectedBookIDs = try Int64.fetchAll(
+            db,
+            sql: "SELECT DISTINCT book_id FROM collection_book WHERE collection_id = ?",
             arguments: [collectionID]
         )
 
-        // SQL 目的：软删除该书单下全部有效关系，复刻 Android deleteByCollectionId 会刷新 relation updated_date 的语义。
+        // SQL 目的：物理删除该手动书单的全部有效及历史关系。
         // 涉及表：collection_book。
-        // 关键过滤：collection_id 精确匹配且 is_deleted = 0。
-        // 时间字段：updated_date 写入当前毫秒。
+        // 关键过滤：collection_id 精确匹配，不保留 is_deleted tombstone。
+        // 时间字段：物理删除不写时间字段；副作用用途：解除 collection_book.collection_id 外键。
         try db.execute(
-            sql: """
-                UPDATE collection_book
-                SET is_deleted = 1,
-                    updated_date = ?
-                WHERE collection_id = ?
-                  AND is_deleted = 0
-                """,
-            arguments: [now, collectionID]
+            sql: "DELETE FROM collection_book WHERE collection_id = ?",
+            arguments: [collectionID]
         )
+
+        // SQL 目的：在子关系清理完成后物理删除手动书单主记录。
+        // 涉及表：collection。
+        // 关键过滤：id 精确匹配、is_annual = 0；调用前已验证记录有效。
+        // 时间字段：物理删除不写时间字段；副作用用途：遵循全局硬删除语义。
+        try db.execute(
+            sql: "DELETE FROM collection WHERE id = ? AND is_annual = 0",
+            arguments: [collectionID]
+        )
+
+        for bookID in affectedBookIDs {
+            try cleanupOrphanedReferencePlaceholderBook(db, bookID: bookID)
+        }
     }
 
     /// 按传入顺序更新手动书单 order，更新时间戳与 Android updateCollectionOrder 保持一致。
@@ -216,25 +217,33 @@ extension BookRepository {
         }
     }
 
-    /// 从书单内移除 relation，保持 Android deleteSync 不更新时间戳的语义。
+    /// 从书单内物理移除关系，并在最后一个有效引用消失后清理引用占位书。
     nonisolated func removeBooksFromCollection(
         _ db: Database,
         collectionBookIDs: [Int64]
     ) throws {
         for id in normalizedPositiveIDs(collectionBookIDs) {
-            // SQL 目的：软删除单条书单关系，复刻 Android deleteSync(id) 不刷新 updated_date。
+            // SQL 目的：删除关系前读取其 book_id，供删除后判断引用占位书是否已孤立。
             // 涉及表：collection_book。
-            // 关键过滤：id 精确匹配且 is_deleted = 0。
-            // 时间字段：不更新 updated_date。
-            try db.execute(
-                sql: """
-                    UPDATE collection_book
-                    SET is_deleted = 1
-                    WHERE id = ?
-                      AND is_deleted = 0
-                    """,
+            // 关键过滤：id 精确匹配；兼容历史 tombstone 被再次清理。
+            // 时间字段：不参与；返回字段用途：book_id 作为占位书清理输入。
+            let bookID = try Int64.fetchOne(
+                db,
+                sql: "SELECT book_id FROM collection_book WHERE id = ? LIMIT 1",
                 arguments: [id]
             )
+
+            // SQL 目的：按关系主键物理删除单条书单关系。
+            // 涉及表：collection_book。
+            // 关键过滤：id 精确匹配，不保留 is_deleted tombstone。
+            // 时间字段：物理删除不写时间字段；副作用用途：移除书单成员关系。
+            try db.execute(
+                sql: "DELETE FROM collection_book WHERE id = ?",
+                arguments: [id]
+            )
+            if let bookID {
+                try cleanupOrphanedReferencePlaceholderBook(db, bookID: bookID)
+            }
         }
     }
 
@@ -832,19 +841,23 @@ private extension BookRepository {
         ) else {
             return
         }
+        // SQL 目的：重新建立书单关系前物理清理旧备份遗留的同 book_id tombstone。
+        // 涉及表：collection_book。
+        // 关键过滤：collection_id 与 book_id 精确匹配；有效等价关系已由上方 guard 排除。
+        // 时间字段：物理删除不写时间字段；副作用用途：保证同一业务键重试后只保留一条现存关系。
+        try db.execute(
+            sql: "DELETE FROM collection_book WHERE collection_id = ? AND book_id = ?",
+            arguments: [collectionID, bookID]
+        )
         let now = timestampMillis()
-        var relation = CollectionBookRecord(
-            id: nil,
-            collectionId: collectionID,
-            bookId: bookID,
+        try BookRelationWriter.insertCollectionBook(
+            db,
+            collectionID: collectionID,
+            bookID: bookID,
             recommend: recommend.trimmingCharacters(in: .whitespacesAndNewlines),
             order: try nextCollectionBookOrder(db, collectionID: collectionID),
-            createdDate: now,
-            updatedDate: 0,
-            lastSyncDate: 0,
-            isDeleted: 0
+            createdAt: now
         )
-        try relation.insert(db)
     }
 
     /// 按 Android `collection_id + book.name + book.author` 口径判断书单内是否已有同一本业务书籍。

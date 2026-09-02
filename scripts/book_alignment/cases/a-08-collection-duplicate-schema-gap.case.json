@@ -1,0 +1,278 @@
+{
+  "schemaVersion": 1,
+  "caseId": "a-08-collection-duplicate-schema-gap",
+  "title": "A-08 书单关系在 v48 schema 下保持业务唯一",
+  "status": "exact-current",
+  "baseline": {
+    "sha256": "${B0_SHA256}",
+    "userVersion": 47,
+    "roomIdentityHash": "4e076c66571412594ff567eae85b68fc",
+    "schemaFingerprint": "${SCHEMA_FINGERPRINT}"
+  },
+  "targetDatabase": {
+    "userVersion": 48,
+    "roomIdentityHash": "cda5a591da1f57aca266af36255e5df7",
+    "schemaFingerprint": "055724e3c2ec28094f771961e2df1cf807efc99ac26f87e9d7308377d9b8eab2"
+  },
+  "runtimeProfile": {
+    "sha256": "${RUNTIME_PROFILE_SHA256}",
+    "requiredSettings": []
+  },
+  "aliases": [
+    {
+      "name": "serialBook",
+      "entity": "book",
+      "description": "通过生产 Repository 串行加入两次的有效书",
+      "requirements": [
+        "is_deleted=0",
+        "S2 时与 targetCollection 无关系"
+      ],
+      "selector": "active-book"
+    },
+    {
+      "name": "duplicateProbeBook",
+      "entity": "book",
+      "description": "通过真实 collection_book DAO 连续插入两次的 schema 探针书",
+      "requirements": [
+        "is_deleted=0",
+        "S2 时与 targetCollection 无关系"
+      ],
+      "selector": "active-book"
+    },
+    {
+      "name": "targetCollection",
+      "entity": "collection",
+      "description": "接收两类目标关系的有效手动书单",
+      "requirements": [
+        "is_deleted=0",
+        "is_annual=0",
+        "S2 时不含两本探针书"
+      ]
+    }
+  ],
+  "intent": {
+    "summary": "对 serialBook 串行执行两次 Repository 加入，再由 DAO 为 duplicateProbeBook 直接插入两条关系以证明 schema 缺少唯一约束",
+    "selectionScope": "single",
+    "confirmation": "required",
+    "outcome": "committed",
+    "repeatTrigger": "idempotent",
+    "selectedAliases": [
+      "serialBook"
+    ]
+  },
+  "adapters": {
+    "android": {
+      "entry": "加入书单 Repository 路径及 test-only DAO schema 探针",
+      "steps": [
+        {
+          "action": "打开管理上下文并稳定读取",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "确认两本书均无目标关系并记录 schema",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "Repository 串行加入 serialBook 两次，再用 DAO 为 duplicateProbeBook 写两条",
+          "targetAlias": "targetCollection",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host force-stop、创建 resume marker 后冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    },
+    "ios": {
+      "entry": "原生加入书单入口及只读 schema 检查",
+      "steps": [
+        {
+          "action": "打开管理上下文并稳定读取",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "确认操作前无目标关系并记录 schema",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "串行提交两次相同 Repository 命令；不主动制造重复关系",
+          "targetAlias": "targetCollection",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host 终止 App 后以同一副本冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    }
+  },
+  "database": {
+    "allowedWrites": [
+      {
+        "table": "collection_book",
+        "operations": [
+          "insert"
+        ],
+        "platforms": [
+          "android",
+          "ios"
+        ],
+        "reason": "Repository 重复调用与直接关系写入均由业务唯一约束收敛为一条关系"
+      }
+    ],
+    "forbiddenWrites": [],
+    "platformInternalTables": [
+      {
+        "table": "grdb_migrations",
+        "platform": "ios",
+        "reason": "GRDB 平台内部迁移记录"
+      }
+    ],
+    "timeColumns": [
+      {
+        "table": "collection_book",
+        "column": "created_date",
+        "unit": "epoch-millis",
+        "monotonic": true,
+        "allowZeroOnInsert": false,
+        "requireOperationWindow": true,
+        "toleranceMillis": 1000,
+        "reason": "首次建立书单关系的创建时间"
+      }
+    ],
+    "strictExceptions": []
+  },
+  "setup": {
+    "mode": "none"
+  },
+  "oracle": {
+    "currentOracle": "v48 在 collection_id+book_id 上提供业务唯一约束；Repository 重复调用、直接 DAO 重复写入以及重启后均只保留一条关系。",
+    "desiredSemantics": "v48 在 collection_id+book_id 上提供业务唯一约束；Repository 重复调用、直接 DAO 重复写入以及重启后均只保留一条关系。",
+    "semanticProjections": [
+      {
+        "name": "serial-repository-relation-count",
+        "description": "串行执行两次 Repository 后的有效关系数",
+        "sql": "SELECT COUNT(*) AS active_count FROM collection_book WHERE book_id = :serialBook AND collection_id = :targetCollection AND is_deleted = 0",
+        "mode": "scalar",
+        "columns": [
+          {
+            "name": "active_count"
+          }
+        ],
+        "parameters": {
+          "serialBook": {
+            "binding": "serialBook"
+          },
+          "targetCollection": {
+            "binding": "targetCollection"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": 0,
+          "iosBefore": 0,
+          "androidAfter": 1,
+          "iosAfter": 1
+        }
+      },
+      {
+        "name": "serial-repository-updated-date",
+        "description": "Repository 新关系沿用 BaseEntity 的 updated_date 零默认值；无关系时投影为 -1",
+        "sql": "SELECT COALESCE(MAX(updated_date), -1) AS updated_date FROM collection_book WHERE book_id = :serialBook AND collection_id = :targetCollection AND is_deleted = 0",
+        "mode": "scalar",
+        "columns": [
+          {
+            "name": "updated_date"
+          }
+        ],
+        "parameters": {
+          "serialBook": {
+            "binding": "serialBook"
+          },
+          "targetCollection": {
+            "binding": "targetCollection"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": -1,
+          "iosBefore": -1,
+          "androidAfter": 0,
+          "iosAfter": 0
+        }
+      },
+      {
+        "name": "direct-dao-duplicate-relation-count",
+        "description": "无唯一约束时 DAO 可写入的同书同书单有效关系数",
+        "sql": "SELECT COUNT(*) AS active_count FROM collection_book WHERE book_id = :duplicateProbeBook AND collection_id = :targetCollection AND is_deleted = 0",
+        "mode": "scalar",
+        "columns": [
+          {
+            "name": "active_count"
+          }
+        ],
+        "parameters": {
+          "duplicateProbeBook": {
+            "binding": "duplicateProbeBook"
+          },
+          "targetCollection": {
+            "binding": "targetCollection"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": 0,
+          "iosBefore": 0,
+          "androidAfter": 1,
+          "iosAfter": 1
+        }
+      },
+      {
+        "name": "collection-relation-unique-schema-count",
+        "description": "collection_book 表或索引中包含 UNIQUE 声明的对象数量",
+        "sql": "SELECT COUNT(*) AS unique_guard_count FROM sqlite_schema WHERE tbl_name = 'collection_book' AND UPPER(COALESCE(sql, '')) LIKE '%UNIQUE%'",
+        "mode": "scalar",
+        "columns": [
+          {
+            "name": "unique_guard_count"
+          }
+        ],
+        "parameters": {},
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": 0,
+          "iosBefore": 0,
+          "androidAfter": 1,
+          "iosAfter": 1
+        }
+      }
+    ]
+  },
+  "lifecycle": {
+    "checkpoints": [
+      {
+        "stage": "S0",
+        "meaning": "不可变 B0"
+      },
+      {
+        "stage": "S1",
+        "meaning": "首次打开"
+      },
+      {
+        "stage": "S2",
+        "meaning": "Repository 与 DAO 写入前"
+      },
+      {
+        "stage": "S3",
+        "meaning": "Repository 一条、DAO 探针两条写入后"
+      },
+      {
+        "stage": "S4",
+        "meaning": "独立进程冷启动后的稳定状态"
+      }
+    ],
+    "requireS3S4BusinessStable": true,
+    "requireRestart": true,
+    "restoreDirection": "none"
+  }
+}

@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 SwiftUI/UIKit 按钮、图标、搜索输入、InteractionMetrics 与动画能力
- * [OUTPUT]: 对外提供书架编辑态顶部 chrome、统一搜索 surface、整理态双态上下文检索入口、选择态封面/行遮罩与管理模式转场参数
- * [POS]: Book 模块页面私有编辑态与搜索组件集合，服务默认书架与二级书籍列表的整理模式选择、检索和顶部批量命令
+ * [OUTPUT]: 对外提供书架编辑态顶部 chrome、统一搜索 surface、整理态双态上下文检索入口、选择态封面/行遮罩与可打断管理模式转场参数
+ * [POS]: Book 模块页面私有编辑态与搜索组件集合，服务默认书架与二级书籍列表的整理模式选择、检索和完成出口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -30,7 +30,7 @@ private enum BookshelfEditingTypography {
 enum BookshelfManagementMotion {
     static let modeTransition: Animation = .smooth(duration: 0.26)
     static let editBarRevealTransitionAnimation: Animation = .smooth(duration: 0.26)
-    static let editBarExitTransitionAnimation: Animation = .smooth(duration: 0.20)
+    static let editBarExitTransitionAnimation: Animation = .smooth(duration: 0.18)
     static let restoreTransition: Animation = .smooth(duration: 0.22)
     static let bookListSearchDrawerDuration: TimeInterval = 0.28
     static let bookListSearchSurfaceDuration: TimeInterval = 0.18
@@ -62,6 +62,11 @@ enum BookshelfManagementMotion {
 
     static func editBarExitAnimation(reduceMotion: Bool) -> Animation {
         reduceMotion ? .easeInOut(duration: 0.10) : editBarExitTransitionAnimation
+    }
+
+    /// 底部 accessory 退场比顶部恢复稍快，Reduce Motion 下只保留短透明度过渡。
+    static func accessoryExitAnimation(reduceMotion: Bool) -> Animation {
+        reduceMotion ? .easeInOut(duration: 0.14) : editBarExitTransitionAnimation
     }
 
     static func topChromeTransition(reduceMotion: Bool) -> AnyTransition {
@@ -100,20 +105,6 @@ enum BookshelfManagementMotion {
             .combined(with: .offset(y: -4))
     }
 
-    /// 系统 TabBar 隐藏后，到编辑工具栏抬起之间的短延迟。
-    static func editBarRevealDelay(reduceMotion: Bool) -> Duration {
-        reduceMotion ? .milliseconds(16) : .milliseconds(70)
-    }
-
-    /// 编辑工具栏退出后，到系统 TabBar 恢复之间的延迟。
-    static func editExitRestoreDelay(reduceMotion: Bool) -> Duration {
-        reduceMotion ? .milliseconds(40) : .milliseconds(200)
-    }
-
-    /// 系统 TabBar 恢复后释放编辑底栏滚动避让的延迟。
-    static func editBottomInsetReleaseDelay(reduceMotion: Bool) -> Duration {
-        reduceMotion ? .milliseconds(40) : .milliseconds(100)
-    }
 }
 
 /// 为书架一级页与二级页提供一致的搜索 drawer 展示尺寸。
@@ -570,7 +561,7 @@ final class BookshelfSearchSurfaceView: UIView, UITextFieldDelegate {
 /// 书架整理态顶部 chrome 的统一高度，保证一级书架与二级列表拥有同一顶部节奏。
 enum BookshelfEditChromeMetrics {
     static let topBarHeight: CGFloat = 56
-    static let accessibilityTopBarHeight: CGFloat = 60
+    static let accessibilityTopBarHeight: CGFloat = 96
     static let sideSlotWidth: CGFloat = 112
     static let accessibilitySideSlotWidth: CGFloat = 128
     static let searchContextHeight: CGFloat = 52
@@ -615,10 +606,11 @@ enum BookshelfEditChromeSearchState: Equatable {
     }
 }
 
-/// 书架编辑态顶部 chrome，复用浏览态顶部高度表达当前批量管理上下文与批量命令。
-struct BookshelfEditChrome<BatchActions: View>: View {
+/// 书架编辑态顶部 chrome，复用浏览态顶部高度表达当前批量管理上下文与完成出口。
+struct BookshelfEditChrome: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let title: String
     let selectedBookCount: Int
     let selectedGroupCount: Int
     let selectionScope: BookshelfEditChromeSelectionScope
@@ -630,10 +622,10 @@ struct BookshelfEditChrome<BatchActions: View>: View {
     let showsBottomDivider: Bool
     let onToggleSelectAll: () -> Void
     let onCancel: () -> Void
-    let batchActions: BatchActions
 
     /// 创建整理态顶部 chrome，并按使用场景决定选择摘要是否包含分组。
     init(
+        title: String = "选择书籍",
         selectedBookCount: Int,
         selectedGroupCount: Int = 0,
         selectionScope: BookshelfEditChromeSelectionScope = .booksAndGroups,
@@ -644,9 +636,9 @@ struct BookshelfEditChrome<BatchActions: View>: View {
         drawsSurfaceBackground: Bool = true,
         showsBottomDivider: Bool = true,
         onToggleSelectAll: @escaping () -> Void,
-        onCancel: @escaping () -> Void,
-        @ViewBuilder batchActions: () -> BatchActions
+        onCancel: @escaping () -> Void
     ) {
+        self.title = title
         self.selectedBookCount = selectedBookCount
         self.selectedGroupCount = selectedGroupCount
         self.selectionScope = selectionScope
@@ -658,46 +650,15 @@ struct BookshelfEditChrome<BatchActions: View>: View {
         self.showsBottomDivider = showsBottomDivider
         self.onToggleSelectAll = onToggleSelectAll
         self.onCancel = onCancel
-        self.batchActions = batchActions()
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: Spacing.base) {
-            Button(selectionToggleTitle, action: onToggleSelectAll)
-                .font(AppTypography.body)
-                .foregroundStyle(selectionToggleForegroundStyle)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(width: sideSlotWidth, alignment: .leading)
-                .frame(minHeight: InteractionMetrics.minimumTouchTarget)
-                .accessibilityLabel(selectionToggleTitle)
-                .disabled(!effectiveSelectionToggleEnabled)
-
-            Spacer(minLength: Spacing.compact)
-
-            VStack(spacing: Spacing.tiny) {
-                Text("选择书籍")
-                    .font(AppTypography.bodyMedium)
-                    .foregroundStyle(Color.textPrimary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-
-                Text(effectiveStatusText)
-                    .font(AppTypography.caption)
-                    .foregroundStyle(Color.textSecondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .contentTransition(.numericText(value: selectionSummaryNumericValue))
-                    .animation(selectionSummaryAnimation, value: selectionSummaryNumericValue)
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                accessibilityContent
+            } else {
+                standardContent
             }
-            .frame(maxWidth: .infinity)
-            .accessibilityElement(children: .combine)
-
-            Spacer(minLength: Spacing.compact)
-
-            rightActions
-                .frame(width: sideSlotWidth, alignment: .trailing)
-                .frame(minHeight: InteractionMetrics.minimumTouchTarget)
         }
         .padding(.horizontal, Spacing.screenEdge)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
@@ -714,6 +675,83 @@ struct BookshelfEditChrome<BatchActions: View>: View {
             }
         }
         .accessibilityElement(children: .contain)
+    }
+
+    /// 常规字号保持三段式对称结构，选择摘要始终位于屏幕视觉中心。
+    private var standardContent: some View {
+        HStack(alignment: .center, spacing: Spacing.base) {
+            selectionToggleButton
+                .frame(width: sideSlotWidth, alignment: .leading)
+
+            Spacer(minLength: Spacing.compact)
+
+            standardSelectionSummary
+                .frame(maxWidth: .infinity)
+
+            Spacer(minLength: Spacing.compact)
+
+            rightActions
+                .frame(width: sideSlotWidth, alignment: .trailing)
+        }
+    }
+
+    /// 无障碍字号改为两行响应式布局，避免左右长按钮把中央摘要挤成省略号。
+    private var accessibilityContent: some View {
+        VStack(spacing: Spacing.none) {
+            HStack(spacing: Spacing.base) {
+                selectionToggleButton
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                rightActions
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+
+            HStack(spacing: Spacing.half) {
+                Text(title)
+                    .font(AppTypography.bodyMedium)
+                    .foregroundStyle(Color.textPrimary)
+
+                Text(effectiveStatusText)
+                    .font(AppTypography.body)
+                    .foregroundStyle(Color.textSecondary)
+                    .contentTransition(.numericText(value: selectionSummaryNumericValue))
+                    .animation(selectionSummaryAnimation, value: selectionSummaryNumericValue)
+            }
+            .lineLimit(1)
+            .minimumScaleFactor(0.82)
+            .frame(maxWidth: .infinity, minHeight: InteractionMetrics.minimumTouchTarget)
+            .accessibilityElement(children: .combine)
+        }
+    }
+
+    private var selectionToggleButton: some View {
+        Button(selectionToggleTitle, action: onToggleSelectAll)
+            .font(AppTypography.body)
+            .foregroundStyle(selectionToggleForegroundStyle)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .frame(minHeight: InteractionMetrics.minimumTouchTarget)
+            .accessibilityLabel(selectionToggleTitle)
+            .disabled(!effectiveSelectionToggleEnabled)
+    }
+
+    private var standardSelectionSummary: some View {
+        VStack(spacing: Spacing.tiny) {
+            Text(title)
+                .font(AppTypography.bodyMedium)
+                .foregroundStyle(Color.textPrimary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+
+            Text(effectiveStatusText)
+                .font(AppTypography.caption)
+                .foregroundStyle(Color.textSecondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .contentTransition(.numericText(value: selectionSummaryNumericValue))
+                .animation(selectionSummaryAnimation, value: selectionSummaryNumericValue)
+        }
+        .accessibilityElement(children: .combine)
     }
 
     private var sideSlotWidth: CGFloat {
@@ -737,21 +775,17 @@ struct BookshelfEditChrome<BatchActions: View>: View {
     }
 
     private var rightActions: some View {
-        HStack(spacing: Spacing.half) {
-            batchActions
-
-            Button("完成", action: onCancel)
-                .font(AppTypography.body)
-                .foregroundStyle(Color.textPrimary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(
-                    minWidth: 50,
-                    minHeight: InteractionMetrics.minimumTouchTarget,
-                    alignment: .trailing
-                )
-                .accessibilityLabel("退出整理模式")
-        }
+        Button("完成", action: onCancel)
+            .font(AppTypography.body)
+            .foregroundStyle(Color.textPrimary)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .frame(
+                minWidth: 50,
+                minHeight: InteractionMetrics.minimumTouchTarget,
+                alignment: .trailing
+            )
+            .accessibilityLabel("退出整理模式")
     }
 
     private var effectiveStatusText: String {
@@ -776,7 +810,7 @@ struct BookshelfEditChrome<BatchActions: View>: View {
             if searchState.isFiltering {
                 baseText = selectedBookCount == 0 ? "未选择" : "已选 \(selectedBookCount) 本"
             } else {
-                baseText = selectedBookCount == 0 ? "未选择书籍" : "已选 \(selectedBookCount) 本"
+                baseText = selectedBookCount == 0 ? "未选择" : "已选 \(selectedBookCount) 本"
             }
         case .booksAndGroups:
             if searchState.isFiltering {
@@ -981,9 +1015,16 @@ struct BookshelfEditSearchContextBar: View {
     }
 }
 
-/// 书架网格封面的选中遮罩，用中性复合层表达稳定选择态。
+/// 书架封面的选中覆盖层，以轻量中性蒙版和品牌细框兼顾状态辨识与封面可读性。
 struct BookshelfSelectionCoverOverlay: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private enum VisualStyle {
+        static let maskOpacity = 0.20
+        static let accentStrokeOpacity = 0.64
+        static let innerStrokeOpacity = 0.26
+        static let accentStrokeWidth: CGFloat = 1.25
+    }
 
     let isSelected: Bool
     let cornerRadius: CGFloat
@@ -993,28 +1034,36 @@ struct BookshelfSelectionCoverOverlay: View {
 
         ZStack {
             shape
-                .fill(Color.black.opacity(0.34))
-                .opacity(isSelected ? 1 : 0)
-                .animation(maskAnimation, value: isSelected)
+                .fill(Color.black.opacity(VisualStyle.maskOpacity))
 
             shape
-                .strokeBorder(Color.white.opacity(0.22), lineWidth: StrokeWidth.hairline)
-                .opacity(isSelected ? 1 : 0)
-                .animation(maskAnimation, value: isSelected)
+                .inset(by: VisualStyle.accentStrokeWidth)
+                .strokeBorder(
+                    Color.white.opacity(VisualStyle.innerStrokeOpacity),
+                    lineWidth: StrokeWidth.hairline
+                )
+
+            shape
+                .strokeBorder(
+                    Color.selectionAccent.opacity(VisualStyle.accentStrokeOpacity),
+                    lineWidth: VisualStyle.accentStrokeWidth
+                )
         }
+        .opacity(isSelected ? 1 : 0)
+        .animation(selectionAnimation, value: isSelected)
         .compositingGroup()
         .clipShape(shape)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
 
-    private var maskAnimation: Animation? {
+    private var selectionAnimation: Animation? {
         if reduceMotion {
-            return .easeInOut(duration: 0.14)
+            return .easeInOut(duration: 0.12)
         }
         return isSelected
-            ? .smooth(duration: 0.24).delay(0.04)
-            : .smooth(duration: 0.22).delay(0.04)
+            ? .smooth(duration: 0.18)
+            : .smooth(duration: 0.16)
     }
 }
 

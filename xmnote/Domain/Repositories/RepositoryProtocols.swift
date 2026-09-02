@@ -5,7 +5,14 @@ import Foundation
  * [OUTPUT]: 对外提供 Book/Note/Content/GlobalSearch/Backup/S3/AI/图片额度/标签选择布局偏好/TagManagement/BookGroupManagement/SourceManagement/ExternalAppIntegration/Statistics/ReadCalendar/封面主题/Timeline/ReadingDashboard/ReadingTimer 及书籍搜索录入协议
  * [POS]: Domain 层仓储契约，定义 Presentation 获取本地/网络数据的唯一入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
- */
+*/
+
+/// 书籍标签关系的显式变更模式，避免由选择数量隐式推断替换、追加或移除语义。
+enum BookTagMutationMode: String, Hashable, Sendable {
+    case replace
+    case add
+    case remove
+}
 
 /// 书籍封面样例数据访问契约，供调试预览读取真实书籍封面。
 protocol BookCoverSampleRepositoryProtocol {
@@ -39,8 +46,8 @@ protocol BookshelfRepositoryProtocol {
     func moveBooksInGroupToEnd(_ bookIDs: [Int64], groupID: Int64, currentItems: [BookshelfBookListOrderItem]) async throws
     /// 读取二级列表批量编辑所需选项；单本选择时同时返回该书当前标签、来源、阅读状态、状态时间与评分。
     func fetchBookshelfBatchEditOptions(bookIDs: [Int64]) async throws -> BookshelfBatchEditOptions
-    /// 批量设置书籍标签：单本替换全部标签，多本仅追加缺失标签。
-    func batchSetBooksTags(bookIDs: [Int64], tagIDs: [Int64]) async throws
+    /// 按显式模式批量变更书籍标签，禁止由选择数量推断业务语义。
+    func mutateBooksTags(bookIDs: [Int64], tagIDs: [Int64], mode: BookTagMutationMode) async throws
     /// 批量设置书籍来源，按 Android DAO 语义仅通过 id 定位目标书籍。
     func batchSetBooksSource(bookIDs: [Int64], sourceID: Int64) async throws
     /// 新建书籍分组，供批量移组 Sheet 面板内直接创建并返回新选项。
@@ -105,8 +112,8 @@ protocol BookshelfRepositoryProtocol {
     func moveBookshelfItemsToEnd(_ ids: [BookshelfItemID], in currentItems: [BookshelfOrderItem]) async throws
     /// 删除默认书架顶层 Book/Group，分组删除时按传入位置安置组内书籍。
     func deleteBookshelfItems(_ ids: [BookshelfItemID], groupBooksPlacement: GroupBooksPlacement) async throws
-    /// 将指定书籍移动到目标分组，取消置顶并重建唯一有效分组关系。
-    func moveBooks(_ bookIDs: [Int64], toGroup targetGroupID: Int64) async throws
+    /// 将指定书籍从用户操作时的原分组移动到目标分组，取消置顶并重建唯一有效分组关系。
+    func moveBooks(_ bookIDs: [Int64], fromGroup currentGroupID: Int64, toGroup targetGroupID: Int64) async throws
     /// 物理删除指定书籍及其关联数据；仍被书单/相关关系引用时保留最小业务占位书。
     func deleteBooks(_ bookIDs: [Int64]) async throws
     /// 删除分组并按位置语义把组内书籍安置回默认书架。
@@ -123,10 +130,14 @@ protocol BookshelfRepositoryProtocol {
     func deleteSource(sourceID: Int64) async throws
     /// 重命名作者，并同步更新使用旧作者名的书籍。
     func renameAuthor(oldName: String, newName: String) async throws
+    /// 批量修改多个作者维度下的有效书籍作者字段，不写作者资料表。
+    func batchModifyBooksAuthor(sourceNames: [String], newName: String) async throws
     /// 删除作者维度下的书籍，并按 Android 作者管理语义移除作者记录。
     func deleteAuthor(name: String) async throws
     /// 重命名出版社，并同步更新使用旧出版社名的书籍。
     func renamePress(oldName: String, newName: String) async throws
+    /// 批量修改多个出版社维度下的有效书籍出版社字段，不写出版社资料表。
+    func batchModifyBooksPress(sourceNames: [String], newName: String) async throws
     /// 删除出版社维度下的书籍，并按 Android 出版社管理语义移除出版社记录。
     func deletePress(name: String) async throws
     /// 读取按维度和作用域持久化的书架显示设置。
@@ -329,7 +340,7 @@ protocol TagManagementRepositoryProtocol {
     func createTag(named name: String, scope: TagManagementScope) async throws
     /// 编辑指定标签名称，按 Android TagManage 的 @Update 全列语义提交。
     func updateTag(tagID: Int64, name: String, scope: TagManagementScope) async throws
-    /// 物理删除指定范围下的标签及其关系；批量删除时每个标签保持独立事务。
+    /// 在单一事务内物理删除指定范围下的标签及其关系；任一项失败时整批回滚。
     func deleteTags(tagIDs: [Int64], scope: TagManagementScope) async throws
     /// 按当前展示顺序写入 tag_order，并更新 updated_date。
     func updateTagOrder(tagIDs: [Int64], scope: TagManagementScope) async throws
@@ -343,7 +354,7 @@ protocol BookGroupManagementRepositoryProtocol {
     func createGroup(named name: String) async throws
     /// 编辑指定分组名称，按 Android GroupDao.updateName 语义提交。
     func updateGroup(groupID: Int64, name: String) async throws
-    /// 删除指定分组；含书分组先按用户选择把书籍移回默认书架开头或末尾。
+    /// 在单一事务内删除指定分组；含书分组先按用户选择把书籍移回默认书架开头或末尾，任一项失败时整批回滚。
     func deleteGroups(groupIDs: [Int64], placement: GroupBooksPlacement) async throws
     /// 按当前展示顺序写入 group_order，并更新 updated_date。
     func updateGroupOrder(groupIDs: [Int64]) async throws

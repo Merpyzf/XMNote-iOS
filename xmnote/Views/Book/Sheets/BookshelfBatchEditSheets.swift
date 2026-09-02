@@ -407,6 +407,7 @@ struct BookshelfBookCollectionSheet: View {
 struct BookshelfBatchTagsSheet: View {
     @Environment(RepositoryContainer.self) private var repositories
 
+    let mode: BookTagMutationMode
     let options: [BookEditorNamedOption]
     let initialSelectedIDs: [Int64]
     let selectedCount: Int
@@ -416,8 +417,9 @@ struct BookshelfBatchTagsSheet: View {
     let onCreate: @MainActor @Sendable (String) async throws -> BookEditorNamedOption
     let onSave: @MainActor @Sendable ([Int64]) async -> Bool
 
-    /// 构建批量标签 Sheet；支持面板内新增标签，提交语义由 Repository 区分单本替换与多本追加。
+    /// 构建标签关系 Sheet；支持面板内新增标签，提交语义由用户选定的显式模式决定。
     init(
+        mode: BookTagMutationMode,
         options: [BookEditorNamedOption],
         selectedCount: Int,
         initialSelectedIDs: [Int64],
@@ -427,6 +429,7 @@ struct BookshelfBatchTagsSheet: View {
         onCreate: @escaping @MainActor @Sendable (String) async throws -> BookEditorNamedOption,
         onSave: @escaping @MainActor @Sendable ([Int64]) async -> Bool
     ) {
+        self.mode = mode
         self.options = options
         self.initialSelectedIDs = initialSelectedIDs
         self.selectedCount = selectedCount
@@ -439,7 +442,7 @@ struct BookshelfBatchTagsSheet: View {
 
     var body: some View {
         XMTagSelectionSheet(
-            title: "设置标签",
+            title: title,
             contextText: selectedCount > 1 ? "\(selectedCount) 本书" : nil,
             items: options.map { XMTagSelectionItem(id: $0.id, title: $0.title) },
             initialSelectedIDs: Set(initialSelectedIDs),
@@ -462,6 +465,17 @@ struct BookshelfBatchTagsSheet: View {
         )
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
+    }
+
+    private var title: String {
+        switch mode {
+        case .replace:
+            return "设置标签"
+        case .add:
+            return "添加标签"
+        case .remove:
+            return "移除标签"
+        }
     }
 }
 

@@ -122,7 +122,8 @@ def load_rules(
 
 
 def open_read_only(path: pathlib.Path) -> sqlite3.Connection:
-    connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    uri = f"{path.resolve().as_uri()}?mode=ro&immutable=1"
+    connection = sqlite3.connect(uri, uri=True)
     connection.row_factory = sqlite3.Row
     return connection
 

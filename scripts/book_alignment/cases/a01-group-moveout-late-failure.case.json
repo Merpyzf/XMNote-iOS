@@ -1,0 +1,297 @@
+{
+  "schemaVersion": 1,
+  "caseId": "a01.group-moveout.late-failure",
+  "title": "A-01 同组批量移出第二本关系写入晚失败",
+  "status": "exact-current",
+  "baseline": {
+    "sha256": "${B0_SHA256}",
+    "userVersion": 47,
+    "roomIdentityHash": "4e076c66571412594ff567eae85b68fc",
+    "schemaFingerprint": "${SCHEMA_FINGERPRINT}"
+  },
+  "targetDatabase": {
+    "userVersion": 48,
+    "roomIdentityHash": "cda5a591da1f57aca266af36255e5df7",
+    "schemaFingerprint": "055724e3c2ec28094f771961e2df1cf807efc99ac26f87e9d7308377d9b8eab2"
+  },
+  "runtimeProfile": {
+    "sha256": "${RUNTIME_PROFILE_SHA256}",
+    "requiredSettings": [
+      "bookSortMode",
+      "newBookPosition"
+    ]
+  },
+  "aliases": [
+    {
+      "name": "sourceGroup",
+      "entity": "group",
+      "description": "包含两本目标书且保持有效的来源分组",
+      "requirements": [
+        "is_deleted=0",
+        "S2 时恰有 firstBook 与 secondBook 两条目标有效关系"
+      ],
+      "selector": "active-non-empty-group"
+    },
+    {
+      "name": "firstBook",
+      "entity": "book",
+      "description": "循环中先完成移出的有效书",
+      "requirements": [
+        "is_deleted=0",
+        "S2 时属于 sourceGroup",
+        "输入顺序早于 secondBook"
+      ],
+      "selector": "active-book"
+    },
+    {
+      "name": "secondBook",
+      "entity": "book",
+      "description": "取消置顶后在关系物理删除语句触发失败的第二本有效书",
+      "requirements": [
+        "is_deleted=0",
+        "S2 时属于 sourceGroup",
+        "输入顺序晚于 firstBook"
+      ],
+      "selector": "active-book"
+    }
+  ],
+  "intent": {
+    "summary": "将同一非空分组内两本书移动到默认书架末尾，并在第二本 group_book 物理删除处注入晚失败",
+    "selectionScope": "batch",
+    "confirmation": "required",
+    "outcome": "failed",
+    "repeatTrigger": "once",
+    "selectedAliases": [
+      "firstBook",
+      "secondBook"
+    ]
+  },
+  "adapters": {
+    "android": {
+      "entry": "分组书籍页批量移出入口",
+      "steps": [
+        {
+          "action": "打开分组并稳定读取",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "构造同组两本置顶书并安装第二本关系删除失败注入",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "触发确定性晚失败，验证本次业务命令完整回滚",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "关闭并重开 Room 后重新读取",
+          "checkpoint": "S4"
+        }
+      ]
+    },
+    "ios": {
+      "entry": "原生分组书籍批量移出入口",
+      "steps": [
+        {
+          "action": "打开分组并稳定读取",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "构造等价两本书并在第二条关系物理删除处注入失败",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "触发确定性晚失败，验证本次业务命令完整回滚",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "终止 App 后以同一副本冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    }
+  },
+  "database": {
+    "allowedWrites": [],
+    "forbiddenWrites": [],
+    "platformInternalTables": [
+      {
+        "table": "grdb_migrations",
+        "platform": "ios",
+        "reason": "GRDB 平台内部迁移记录"
+      }
+    ],
+    "timeColumns": [],
+    "strictExceptions": []
+  },
+  "setup": {
+    "mode": "none"
+  },
+  "oracle": {
+    "currentOracle": "同一次批量移出必须使用共同事务；关系移除继续遵循 iOS 已批准的物理 DELETE，任一关系失败时不得留下取消置顶或排序前缀。",
+    "desiredSemantics": "同一次批量移出必须使用共同事务；关系移除继续遵循 iOS 已批准的物理 DELETE，任一关系失败时不得留下取消置顶或排序前缀。",
+    "semanticProjections": [
+      {
+        "name": "active-source-group-relations",
+        "description": "比较来源组内仍有效的目标关系",
+        "sql": "SELECT book_id FROM group_book WHERE group_id = :sourceGroup AND book_id IN (:firstBook, :secondBook) AND is_deleted = 0 ORDER BY book_id",
+        "mode": "ordered-rows",
+        "columns": [
+          {
+            "name": "book_id",
+            "aliasEntity": "book"
+          }
+        ],
+        "parameters": {
+          "sourceGroup": {
+            "binding": "sourceGroup"
+          },
+          "firstBook": {
+            "binding": "firstBook"
+          },
+          "secondBook": {
+            "binding": "secondBook"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": [
+            {
+              "book_id": "firstBook"
+            },
+            {
+              "book_id": "secondBook"
+            }
+          ],
+          "iosBefore": [
+            {
+              "book_id": "firstBook"
+            },
+            {
+              "book_id": "secondBook"
+            }
+          ],
+          "androidAfter": [
+            {
+              "book_id": "firstBook"
+            },
+            {
+              "book_id": "secondBook"
+            }
+          ],
+          "iosAfter": [
+            {
+              "book_id": "firstBook"
+            },
+            {
+              "book_id": "secondBook"
+            }
+          ]
+        }
+      },
+      {
+        "name": "selected-book-pin-state",
+        "description": "确认晚失败后两本书的置顶状态均完整回滚",
+        "sql": "SELECT id AS book_id, pinned, pin_order FROM book WHERE id IN (:firstBook, :secondBook) ORDER BY id",
+        "mode": "ordered-rows",
+        "columns": [
+          {
+            "name": "book_id",
+            "aliasEntity": "book"
+          },
+          {
+            "name": "pinned"
+          },
+          {
+            "name": "pin_order"
+          }
+        ],
+        "parameters": {
+          "firstBook": {
+            "binding": "firstBook"
+          },
+          "secondBook": {
+            "binding": "secondBook"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": [
+            {
+              "book_id": "firstBook",
+              "pinned": 1,
+              "pin_order": 1
+            },
+            {
+              "book_id": "secondBook",
+              "pinned": 1,
+              "pin_order": 2
+            }
+          ],
+          "iosBefore": [
+            {
+              "book_id": "firstBook",
+              "pinned": 1,
+              "pin_order": 1
+            },
+            {
+              "book_id": "secondBook",
+              "pinned": 1,
+              "pin_order": 2
+            }
+          ],
+          "androidAfter": [
+            {
+              "book_id": "firstBook",
+              "pinned": 1,
+              "pin_order": 1
+            },
+            {
+              "book_id": "secondBook",
+              "pinned": 1,
+              "pin_order": 2
+            }
+          ],
+          "iosAfter": [
+            {
+              "book_id": "firstBook",
+              "pinned": 1,
+              "pin_order": 1
+            },
+            {
+              "book_id": "secondBook",
+              "pinned": 1,
+              "pin_order": 2
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "lifecycle": {
+    "checkpoints": [
+      {
+        "stage": "S0",
+        "meaning": "不可变 B0"
+      },
+      {
+        "stage": "S1",
+        "meaning": "Room 首次打开"
+      },
+      {
+        "stage": "S2",
+        "meaning": "同组两本书移出前"
+      },
+      {
+        "stage": "S3",
+        "meaning": "第二本关系物理删除失败后"
+      },
+      {
+        "stage": "S4",
+        "meaning": "关闭并重开 Room 冷启动后的稳定状态"
+      }
+    ],
+    "requireS3S4BusinessStable": true,
+    "requireRestart": true,
+    "restoreDirection": "none"
+  }
+}

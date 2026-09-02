@@ -15,6 +15,7 @@ nonisolated struct BookshelfBookAggregateRow {
     let pubDateText: String
     let readStatusOrder: Int64
     let sourceOrder: Int64
+    let sourceBookshelfOrder: Int64
     let sourceIsHidden: Bool
     let pinned: Bool
     let pinOrder: Int64
@@ -105,6 +106,7 @@ nonisolated enum BookshelfBookAggregateQuery {
                    b.source_id,
                    COALESCE(s.name, '') AS source_name,
                    COALESCE(s.source_order, 999999) AS source_order,
+                   COALESCE(s.bookshelf_order, 999999) AS source_bookshelf_order,
                    COALESCE(s.is_hide, 1) AS source_is_hide,
                    b.score, b.pinned, b.pin_order, b.book_order,
                    b.created_date, b.updated_date, b.read_status_changed_date, b.book_mark_modified_time,
@@ -177,6 +179,7 @@ nonisolated enum BookshelfBookAggregateQuery {
                 pubDateText: BookshelfBookPresentationFormatter.normalizedPubDateText(from: rawPubDate),
                 readStatusOrder: row["read_status_order"] ?? 999999,
                 sourceOrder: row["source_order"] ?? 999999,
+                sourceBookshelfOrder: row["source_bookshelf_order"] ?? 999999,
                 sourceIsHidden: (row["source_is_hide"] as Int64? ?? 1) != 0,
                 pinned: (row["pinned"] as Int64? ?? 0) != 0,
                 pinOrder: row["pin_order"] ?? 0,

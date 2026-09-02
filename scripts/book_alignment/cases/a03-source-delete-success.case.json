@@ -1,0 +1,317 @@
+{
+  "schemaVersion": 1,
+  "caseId": "a03.source-delete.success",
+  "title": "A-03 删除来源成功时的引用迁移与实体删除",
+  "status": "exact-current",
+  "baseline": {
+    "sha256": "${B0_SHA256}",
+    "userVersion": 47,
+    "roomIdentityHash": "4e076c66571412594ff567eae85b68fc",
+    "schemaFingerprint": "${SCHEMA_FINGERPRINT}"
+  },
+  "targetDatabase": {
+    "userVersion": 48,
+    "roomIdentityHash": "cda5a591da1f57aca266af36255e5df7",
+    "schemaFingerprint": "055724e3c2ec28094f771961e2df1cf807efc99ac26f87e9d7308377d9b8eab2"
+  },
+  "runtimeProfile": {
+    "sha256": "${RUNTIME_PROFILE_SHA256}",
+    "requiredSettings": []
+  },
+  "aliases": [
+    {
+      "name": "firstBook",
+      "entity": "book",
+      "description": "操作前指向 targetSource 的第一本有效书",
+      "requirements": [
+        "is_deleted=0",
+        "source_id=targetSource",
+        "id 小于 secondBook"
+      ],
+      "selector": "active-book"
+    },
+    {
+      "name": "secondBook",
+      "entity": "book",
+      "description": "操作前指向 targetSource 的第二本有效书",
+      "requirements": [
+        "is_deleted=0",
+        "source_id=targetSource",
+        "id 大于 firstBook"
+      ],
+      "selector": "active-book"
+    },
+    {
+      "name": "targetSource",
+      "entity": "source",
+      "description": "用户确认删除的有效来源",
+      "requirements": [
+        "is_deleted=0",
+        "id!=defaultSource"
+      ]
+    },
+    {
+      "name": "defaultSource",
+      "entity": "source",
+      "description": "接收原引用的系统默认来源",
+      "requirements": [
+        "系统根来源",
+        "id!=targetSource"
+      ]
+    }
+  ],
+  "intent": {
+    "summary": "删除被两本书引用的来源并把引用迁移到系统默认来源",
+    "selectionScope": "single",
+    "confirmation": "destructive-required",
+    "outcome": "committed",
+    "repeatTrigger": "single-commit",
+    "selectedAliases": [
+      "targetSource"
+    ]
+  },
+  "adapters": {
+    "android": {
+      "entry": "来源管理页单项删除入口",
+      "steps": [
+        {
+          "action": "打开来源管理并稳定读取",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "选择被两本书引用的来源",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "确认删除",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host force-stop 后冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    },
+    "ios": {
+      "entry": "原生来源管理单项删除入口",
+      "steps": [
+        {
+          "action": "打开来源管理并稳定读取",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "选择被两本书引用的来源",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "确认删除",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host 终止 App 后冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    }
+  },
+  "database": {
+    "allowedWrites": [
+      {
+        "table": "book",
+        "operations": [
+          "update"
+        ],
+        "columns": [
+          "source_id",
+          "updated_date"
+        ],
+        "platforms": [
+          "android",
+          "ios"
+        ],
+        "reason": "全部有效引用迁移到系统默认来源并更新时间"
+      },
+      {
+        "table": "source",
+        "operations": [
+          "delete"
+        ],
+        "platforms": [
+          "android",
+          "ios"
+        ],
+        "reason": "引用迁移成功后物理删除目标来源"
+      }
+    ],
+    "forbiddenWrites": [],
+    "platformInternalTables": [
+      {
+        "table": "grdb_migrations",
+        "platform": "ios",
+        "reason": "GRDB 平台内部迁移记录"
+      }
+    ],
+    "timeColumns": [
+      {
+        "table": "book",
+        "column": "updated_date",
+        "unit": "epoch-millis",
+        "monotonic": true,
+        "allowZeroOnInsert": false,
+        "requireOperationWindow": true,
+        "toleranceMillis": 1000,
+        "reason": "来源引用迁移的业务更新时间"
+      }
+    ],
+    "strictExceptions": []
+  },
+  "setup": {
+    "mode": "none"
+  },
+  "oracle": {
+    "currentOracle": "全部有效书引用在同一事务内迁移到系统默认来源，随后物理删除目标来源；失败时完整回滚。",
+    "desiredSemantics": "全部有效书引用在同一事务内迁移到系统默认来源，随后物理删除目标来源；失败时完整回滚。",
+    "semanticProjections": [
+      {
+        "name": "selected-book-sources-after-delete",
+        "description": "两本书最终都引用系统默认来源",
+        "sql": "SELECT id AS book_id, source_id FROM book WHERE id IN (:firstBook, :secondBook) ORDER BY id",
+        "mode": "ordered-rows",
+        "columns": [
+          {
+            "name": "book_id",
+            "aliasEntity": "book"
+          },
+          {
+            "name": "source_id",
+            "aliasEntity": "source"
+          }
+        ],
+        "parameters": {
+          "firstBook": {
+            "binding": "firstBook"
+          },
+          "secondBook": {
+            "binding": "secondBook"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": [
+            {
+              "book_id": "firstBook",
+              "source_id": "targetSource"
+            },
+            {
+              "book_id": "secondBook",
+              "source_id": "targetSource"
+            }
+          ],
+          "iosBefore": [
+            {
+              "book_id": "firstBook",
+              "source_id": "targetSource"
+            },
+            {
+              "book_id": "secondBook",
+              "source_id": "targetSource"
+            }
+          ],
+          "androidAfter": [
+            {
+              "book_id": "firstBook",
+              "source_id": "defaultSource"
+            },
+            {
+              "book_id": "secondBook",
+              "source_id": "defaultSource"
+            }
+          ],
+          "iosAfter": [
+            {
+              "book_id": "firstBook",
+              "source_id": "defaultSource"
+            },
+            {
+              "book_id": "secondBook",
+              "source_id": "defaultSource"
+            }
+          ]
+        }
+      },
+      {
+        "name": "target-source-physical-row-count",
+        "description": "两端均物理删除目标来源",
+        "sql": "SELECT COUNT(*) AS row_count FROM source WHERE id = :targetSource",
+        "mode": "scalar",
+        "columns": [
+          {
+            "name": "row_count"
+          }
+        ],
+        "parameters": {
+          "targetSource": {
+            "binding": "targetSource"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": 1,
+          "iosBefore": 1,
+          "androidAfter": 0,
+          "iosAfter": 0
+        }
+      },
+      {
+        "name": "target-source-active-count",
+        "description": "两端有效来源投影均不再包含目标来源",
+        "sql": "SELECT COUNT(*) AS active_count FROM source WHERE id = :targetSource AND is_deleted = 0",
+        "mode": "scalar",
+        "columns": [
+          {
+            "name": "active_count"
+          }
+        ],
+        "parameters": {
+          "targetSource": {
+            "binding": "targetSource"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": 1,
+          "iosBefore": 1,
+          "androidAfter": 0,
+          "iosAfter": 0
+        }
+      }
+    ]
+  },
+  "lifecycle": {
+    "checkpoints": [
+      {
+        "stage": "S0",
+        "meaning": "不可变 B0"
+      },
+      {
+        "stage": "S1",
+        "meaning": "首次打开"
+      },
+      {
+        "stage": "S2",
+        "meaning": "删除确认前"
+      },
+      {
+        "stage": "S3",
+        "meaning": "来源删除成功后"
+      },
+      {
+        "stage": "S4",
+        "meaning": "独立进程冷启动后的稳定状态"
+      }
+    ],
+    "requireS3S4BusinessStable": true,
+    "requireRestart": true,
+    "restoreDirection": "none"
+  }
+}

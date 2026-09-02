@@ -46,6 +46,7 @@ final class BookshelfBookListViewModel {
         set { writeActionState.error = newValue }
     }
     var activeBatchSheet: BookshelfBatchEditSheet?
+    var activeBatchTagModeConfirmation: BookshelfBatchTagModeConfirmation?
     var activeMoveOutConfirmation: BookshelfMoveOutPlacementConfirmation?
     var activeDeleteConfirmation: BookshelfBookListDeleteConfirmation?
     var activeNameEdit: BookshelfBookListNameEdit?
@@ -201,6 +202,7 @@ final class BookshelfBookListViewModel {
         isEditing = false
         selectedBookIDs.removeAll()
         activeBatchSheet = nil
+        activeBatchTagModeConfirmation = nil
         activeMoveOutConfirmation = nil
         activeDeleteConfirmation = nil
         activeNameEdit = nil
@@ -296,7 +298,9 @@ final class BookshelfBookListViewModel {
             performPlaceholderAction(action)
         case .moveOut:
             presentMoveOutConfirmation()
-        case .setTag, .setSource, .setReadStatus:
+        case .setTag:
+            presentTagMutationFlow()
+        case .setSource, .setReadStatus:
             presentBatchSheet(for: action)
         case .renameGroup, .renameTag, .renameSource:
             presentNameEdit(for: action)
@@ -311,10 +315,15 @@ final class BookshelfBookListViewModel {
         }
     }
 
-    /// 提交批量标签写入；任务由标签 Sheet 等待，单本替换与多本追加仍由 Repository 对齐 Android 语义。
-    func submitBatchTags(tagIDs: [Int64]) async -> Bool {
-        let bookIDs = selectedBookIDs
-        guard !bookIDs.isEmpty, activeWriteAction == nil else { return false }
+    /// 提交显式标签命令；任务由标签 Sheet 等待，Repository 在一个事务内完成全部关系变更。
+    func submitTagMutation(
+        bookIDs: [Int64],
+        tagIDs: [Int64],
+        mode: BookTagMutationMode
+    ) async -> Bool {
+        guard !bookIDs.isEmpty,
+              selectedBookIDs == bookIDs,
+              activeWriteAction == nil else { return false }
         batchOptionsTask?.cancel()
         isLoadingBatchOptions = false
         activeWriteAction = .setTag
@@ -322,7 +331,7 @@ final class BookshelfBookListViewModel {
         actionFeedback = nil
 
         do {
-            try await repository.batchSetBooksTags(bookIDs: bookIDs, tagIDs: tagIDs)
+            try await repository.mutateBooksTags(bookIDs: bookIDs, tagIDs: tagIDs, mode: mode)
             try Task.checkCancellation()
             selectedBookIDs.removeAll()
             activeWriteAction = nil
@@ -366,9 +375,14 @@ final class BookshelfBookListViewModel {
     /// 提交批量移入分组，成功后由观察流刷新当前列表与默认书架。
     func submitMoveToGroup(groupID: Int64) {
         let bookIDs = selectedBookIDs
+        let currentGroupID = defaultGroupID ?? 0
         activeBatchSheet = nil
         runWriteAction(.moveToGroup, successMessage: "已移入分组") {
-            try await self.repository.moveBooks(bookIDs, toGroup: groupID)
+            try await self.repository.moveBooks(
+                bookIDs,
+                fromGroup: currentGroupID,
+                toGroup: groupID
+            )
         }
     }
 
@@ -603,10 +617,6 @@ final class BookshelfBookListViewModel {
     private func presentBatchSheet(for action: BookshelfBookListEditAction) {
         guard activeWriteAction == nil, !isLoadingBatchOptions, !selectedBookIDs.isEmpty else { return }
         let bookIDs = selectedBookIDs
-        if action == .setTag {
-            presentBatchTagsSheet(bookIDs: bookIDs)
-            return
-        }
         isLoadingBatchOptions = true
         actionNotice = "正在加载\(action.title)选项…"
         writeError = nil
@@ -635,17 +645,39 @@ final class BookshelfBookListViewModel {
         }
     }
 
+    /// 按当前选择范围决定单本替换或多本显式添加/移除入口，确认前不读取也不写入数据库。
+    private func presentTagMutationFlow() {
+        guard activeWriteAction == nil, !isLoadingBatchOptions, !selectedBookIDs.isEmpty else { return }
+        let bookIDs = selectedBookIDs
+        if bookIDs.count == 1 {
+            presentBatchTagsSheet(bookIDs: bookIDs, mode: .replace)
+        } else {
+            activeBatchTagModeConfirmation = BookshelfBatchTagModeConfirmation(bookIDs: bookIDs)
+            actionNotice = nil
+            writeError = nil
+        }
+    }
+
+    /// 确认多本书标签变更模式；只有选择范围仍与确认弹窗快照一致时才打开标签 Sheet。
+    func confirmBatchTagMode(_ mode: BookTagMutationMode, bookIDs: [Int64]) {
+        guard mode != .replace, selectedBookIDs == bookIDs else { return }
+        activeBatchTagModeConfirmation = nil
+        presentBatchTagsSheet(bookIDs: bookIDs, mode: mode)
+    }
+
     /// 立即打开标签 Sheet，并在 Sheet 内容区异步刷新候选项，避免底部操作栏闪出读取文案。
     /// - Note: Repository 读取任务可被新请求取消；成功或失败后只在原 Sheet 仍存在且选择集合未变化时回写 MainActor 状态。
-    private func presentBatchTagsSheet(bookIDs: [Int64]) {
+    private func presentBatchTagsSheet(bookIDs: [Int64], mode: BookTagMutationMode) {
         batchOptionsTask?.cancel()
         isLoadingBatchOptions = false
         actionNotice = nil
         writeError = nil
         activeBatchSheet = .tags(
+            mode: mode,
+            bookIDs: bookIDs,
             options: [],
             initialSelectedIDs: [],
-            allowsEmptySelection: bookIDs.count == 1,
+            allowsEmptySelection: mode == .replace,
             isLoading: true,
             errorMessage: nil
         )
@@ -659,11 +691,13 @@ final class BookshelfBookListViewModel {
                         self.actionNotice = nil
                         return
                     }
-                    guard self.activeBatchSheet?.id == "tags" else { return }
+                    guard self.activeBatchSheet?.id == "tags-\(mode.rawValue)" else { return }
                     self.activeBatchSheet = .tags(
+                        mode: mode,
+                        bookIDs: bookIDs,
                         options: options.tags,
-                        initialSelectedIDs: bookIDs.count == 1 ? options.initialTagIDs : [],
-                        allowsEmptySelection: bookIDs.count == 1,
+                        initialSelectedIDs: mode == .replace ? options.initialTagIDs : [],
+                        allowsEmptySelection: mode == .replace,
                         isLoading: false,
                         errorMessage: nil
                     )
@@ -677,11 +711,13 @@ final class BookshelfBookListViewModel {
                         self.actionNotice = nil
                         return
                     }
-                    guard self.activeBatchSheet?.id == "tags" else { return }
+                    guard self.activeBatchSheet?.id == "tags-\(mode.rawValue)" else { return }
                     self.activeBatchSheet = .tags(
+                        mode: mode,
+                        bookIDs: bookIDs,
                         options: [],
                         initialSelectedIDs: [],
-                        allowsEmptySelection: bookIDs.count == 1,
+                        allowsEmptySelection: mode == .replace,
                         isLoading: false,
                         errorMessage: error.localizedDescription
                     )
@@ -867,14 +903,7 @@ final class BookshelfBookListViewModel {
     ) {
         switch action {
         case .setTag:
-            activeBatchSheet = .tags(
-                options: options.tags,
-                initialSelectedIDs: bookIDs.count == 1 ? options.initialTagIDs : [],
-                allowsEmptySelection: bookIDs.count == 1,
-                isLoading: false,
-                errorMessage: nil
-            )
-            actionNotice = nil
+            return
         case .setSource:
             guard !options.sources.isEmpty else {
                 actionNotice = "暂无可用来源"

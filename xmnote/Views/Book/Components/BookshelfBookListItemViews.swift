@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 BookshelfBookListItem、BookshelfBookListEditAction、BookshelfBookContextAction 与 XMBookCover 渲染书籍条目
- * [OUTPUT]: 对外提供 BookshelfBookListGridItemView 与 BookshelfBookListRowView，供二级书籍列表 collection 单元格复用
+ * [INPUT]: 依赖 BookshelfBookListItem、BookshelfBookListEditAction、BookshelfBookContextAction、Reicon 菜单图标与 XMBookCover 渲染书籍条目
+ * [OUTPUT]: 对外提供带 Reicon 整理/删除菜单的 BookshelfBookListGridItemView 与 BookshelfBookListRowView，供二级书籍列表 collection 单元格复用
  * [POS]: Book 模块二级书籍列表页面私有条目子视图，隔离封面、长按菜单与可访问性描述
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -9,7 +9,7 @@ import SwiftUI
 
 /// 二级列表整理态书籍视觉参数，避免未选项被误读为禁用内容。
 private enum BookshelfBookListSelectionVisualStyle {
-    static let unselectedEditingOpacity = 0.94
+    static let editingContentOpacity = 0.92
 }
 
 /// 仅在浏览态挂载书籍长按菜单，避免整理/排序态的空菜单手势拦截 collection 原生拖拽。
@@ -88,9 +88,8 @@ struct BookshelfBookListGridItemView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .opacity(isEditing ? (isSelected ? 1 : BookshelfBookListSelectionVisualStyle.unselectedEditingOpacity) : 1)
+        .opacity(isEditing ? BookshelfBookListSelectionVisualStyle.editingContentOpacity : 1)
         .animation(BookshelfManagementMotion.modeAnimation(reduceMotion: reduceMotion), value: isEditing)
-        .animation(BookshelfManagementMotion.modeAnimation(reduceMotion: reduceMotion), value: isSelected)
         .contentShape(RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
@@ -171,13 +170,17 @@ struct BookshelfBookListGridItemView: View {
         Button {
             onContextAction(.organizeBooks, book.id)
         } label: {
-            XMMenuLabel("整理书籍", systemImage: "checklist")
+            BookshelfEditingMenuLabel(title: "整理书籍", icon: .checklist)
         }
 
         Button(role: .destructive) {
             onContextAction(.delete, book.id)
         } label: {
-            Label("删除书籍", systemImage: "trash")
+            BookshelfEditingMenuLabel(
+                title: "删除书籍",
+                icon: .trash,
+                foregroundColor: .feedbackError
+            )
         }
         .disabled(activeWriteAction != nil)
     }
@@ -256,14 +259,13 @@ struct BookshelfBookListRowView: View {
             searchKeyword: searchKeyword,
             showsChevron: !isEditing
         )
-        .opacity(isEditing ? (isSelected ? 1 : BookshelfBookListSelectionVisualStyle.unselectedEditingOpacity) : 1)
+        .opacity(isEditing ? BookshelfBookListSelectionVisualStyle.editingContentOpacity : 1)
         .overlay {
             if isEditing {
                 BookshelfSelectionRowOverlay(isSelected: isSelected)
             }
         }
         .animation(BookshelfManagementMotion.modeAnimation(reduceMotion: reduceMotion), value: isEditing)
-        .animation(BookshelfManagementMotion.modeAnimation(reduceMotion: reduceMotion), value: isSelected)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityAddTraits(.isButton)
@@ -309,13 +311,17 @@ struct BookshelfBookListRowView: View {
         Button {
             onContextAction(.organizeBooks, book.id)
         } label: {
-            XMMenuLabel("整理书籍", systemImage: "checklist")
+            BookshelfEditingMenuLabel(title: "整理书籍", icon: .checklist)
         }
 
         Button(role: .destructive) {
             onContextAction(.delete, book.id)
         } label: {
-            Label("删除书籍", systemImage: "trash")
+            BookshelfEditingMenuLabel(
+                title: "删除书籍",
+                icon: .trash,
+                foregroundColor: .feedbackError
+            )
         }
         .disabled(activeWriteAction != nil)
     }

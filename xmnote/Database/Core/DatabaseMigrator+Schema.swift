@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 GRDB DatabaseMigrator、RoomCanonicalSchemaV40...V47、RoomCanonicalSchemaCompatibility 与 DatabaseSchema+Seed
+ * [INPUT]: 依赖 GRDB DatabaseMigrator、RoomCanonicalSchemaV40...V48、RoomCanonicalSchemaCompatibility 与 DatabaseSchema+Seed
  * [OUTPUT]: 对外提供 AppDatabase.migrator 与 Room canonical 迁移标识
  * [POS]: Database/Core 的迁移入口，被 AppDatabase.init 调用执行 Schema 创建
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -8,8 +8,8 @@
 import Foundation
 import GRDB
 
-// MARK: - Room canonical v47 迁移
-// iOS 新库先创建 Android Room v40 canonical schema，再逐步执行 Android 40→41→42→43→44→45→46→47 等价补丁，保证旧库与新库共用同一升级路径。
+// MARK: - Room canonical v48 迁移
+// iOS 新库先创建 Android Room v40 canonical schema，再逐步执行 Android 40→41→42→43→44→45→46→47→48 等价补丁，保证旧库与新库共用同一升级路径。
 
 extension AppDatabase {
     nonisolated static let roomSchemaMigrationIdentifier = "room-v40-schema"
@@ -21,6 +21,7 @@ extension AppDatabase {
     nonisolated static let roomV45MigrationIdentifier = "room-v45-notion-sync-schema"
     nonisolated static let roomV46MigrationIdentifier = "room-v46-readest-source-data"
     nonisolated static let roomV47MigrationIdentifier = "room-v47-book-notes-chapter-sort-data"
+    nonisolated static let roomV48MigrationIdentifier = "room-v48-book-relation-uniqueness"
 
     nonisolated static var migrator: DatabaseMigrator {
         var migrator = DatabaseMigrator()
@@ -59,6 +60,10 @@ extension AppDatabase {
 
         migrator.registerMigration(roomV47MigrationIdentifier) { db in
             try RoomCanonicalSchemaV47.migrateFromV46(db)
+        }
+
+        migrator.registerMigration(roomV48MigrationIdentifier) { db in
+            try RoomCanonicalSchemaV48.migrateFromV47(db)
         }
 
         return migrator
@@ -104,6 +109,9 @@ extension AppDatabase {
         }
         if userVersion >= RoomCanonicalSchemaV47.databaseVersion {
             try markMigration(roomV47MigrationIdentifier, in: db)
+        }
+        if userVersion >= RoomCanonicalSchemaV48.databaseVersion {
+            try markMigration(roomV48MigrationIdentifier, in: db)
         }
     }
 

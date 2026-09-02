@@ -1,0 +1,338 @@
+{
+  "schemaVersion": 1,
+  "caseId": "a-07-merge-updates-deleted-books",
+  "title": "A-07 作者与出版社合并仅处理有效书籍",
+  "status": "exact-current",
+  "baseline": {
+    "sha256": "${B0_SHA256}",
+    "userVersion": 47,
+    "roomIdentityHash": "4e076c66571412594ff567eae85b68fc",
+    "schemaFingerprint": "${SCHEMA_FINGERPRINT}"
+  },
+  "targetDatabase": {
+    "userVersion": 48,
+    "roomIdentityHash": "cda5a591da1f57aca266af36255e5df7",
+    "schemaFingerprint": "055724e3c2ec28094f771961e2df1cf807efc99ac26f87e9d7308377d9b8eab2"
+  },
+  "runtimeProfile": {
+    "sha256": "${RUNTIME_PROFILE_SHA256}",
+    "requiredSettings": []
+  },
+  "aliases": [
+    {
+      "name": "activeBook",
+      "entity": "book",
+      "description": "同时使用旧作者名与旧出版社名的有效书",
+      "requirements": [
+        "is_deleted=0",
+        "author=oldAuthor.name",
+        "press=oldPublisher.name",
+        "id 小于 deletedBook"
+      ],
+      "selector": "active-book"
+    },
+    {
+      "name": "deletedBook",
+      "entity": "book",
+      "description": "仍保留旧作者名与旧出版社名的历史 tombstone 书",
+      "requirements": [
+        "is_deleted!=0",
+        "author=oldAuthor.name",
+        "press=oldPublisher.name",
+        "id 大于 activeBook"
+      ]
+    },
+    {
+      "name": "oldAuthor",
+      "entity": "author",
+      "description": "被合并的旧作者记录",
+      "requirements": [
+        "is_deleted=0",
+        "name!=targetAuthor.name"
+      ]
+    },
+    {
+      "name": "targetAuthor",
+      "entity": "author",
+      "description": "合并后的目标作者记录",
+      "requirements": [
+        "is_deleted=0",
+        "name!=oldAuthor.name"
+      ]
+    },
+    {
+      "name": "oldPublisher",
+      "entity": "publisher",
+      "description": "被合并的旧出版社记录",
+      "requirements": [
+        "is_deleted=0",
+        "name!=targetPublisher.name"
+      ]
+    },
+    {
+      "name": "targetPublisher",
+      "entity": "publisher",
+      "description": "合并后的目标出版社记录",
+      "requirements": [
+        "is_deleted=0",
+        "name!=oldPublisher.name"
+      ]
+    }
+  ],
+  "intent": {
+    "summary": "把 oldAuthor 合并到 targetAuthor，再把 oldPublisher 合并到 targetPublisher",
+    "selectionScope": "batch",
+    "confirmation": "required",
+    "outcome": "committed",
+    "repeatTrigger": "once",
+    "selectedAliases": [
+      "oldAuthor",
+      "oldPublisher"
+    ]
+  },
+  "adapters": {
+    "android": {
+      "entry": "作者管理与出版社管理的合并入口",
+      "steps": [
+        {
+          "action": "打开管理页并稳定读取",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "选择旧记录与目标记录",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "依次确认作者合并与出版社合并",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host force-stop .uitest 后以 resume 模式冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    },
+    "ios": {
+      "entry": "Repository 合同适配器；当前无等价多选管理入口",
+      "steps": [
+        {
+          "action": "创建等价 Repository 读取上下文",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "绑定旧记录与目标记录",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "依次执行作者名与出版社名合并命令",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host 终止 App 后以同一副本冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    }
+  },
+  "database": {
+    "allowedWrites": [
+      {
+        "table": "book",
+        "operations": [
+          "update"
+        ],
+        "columns": [
+          "author",
+          "press",
+          "updated_date"
+        ],
+        "platforms": [
+          "android",
+          "ios"
+        ],
+        "reason": "只把有效书籍的旧名称迁移到目标名称并更新时间"
+      }
+    ],
+    "forbiddenWrites": [
+      {
+        "table": "author",
+        "operations": [
+          "insert",
+          "update",
+          "delete"
+        ],
+        "columns": [
+          "*"
+        ],
+        "platforms": [
+          "android",
+          "ios"
+        ],
+        "reason": "本合同只验证书籍文本迁移，不删除管理记录"
+      },
+      {
+        "table": "press",
+        "operations": [
+          "insert",
+          "update",
+          "delete"
+        ],
+        "columns": [
+          "*"
+        ],
+        "platforms": [
+          "android",
+          "ios"
+        ],
+        "reason": "本合同只验证书籍文本迁移，不删除管理记录"
+      }
+    ],
+    "platformInternalTables": [
+      {
+        "table": "grdb_migrations",
+        "platform": "ios",
+        "reason": "GRDB 平台内部迁移记录"
+      }
+    ],
+    "timeColumns": [
+      {
+        "table": "book",
+        "column": "updated_date",
+        "unit": "epoch-millis",
+        "monotonic": true,
+        "allowZeroOnInsert": false,
+        "requireOperationWindow": true,
+        "toleranceMillis": 1000,
+        "reason": "有效书名称迁移的业务更新时间"
+      }
+    ],
+    "strictExceptions": []
+  },
+  "setup": {
+    "mode": "none"
+  },
+  "oracle": {
+    "currentOracle": "作者与出版社合并在事务内只更新有效书籍；历史已删除书籍保持原作者和出版社文本不变。",
+    "desiredSemantics": "作者与出版社合并在事务内只更新有效书籍；历史已删除书籍保持原作者和出版社文本不变。",
+    "semanticProjections": [
+      {
+        "name": "merged-book-name-owners",
+        "description": "通过管理表名称反查，把书籍文本规范化成作者和出版社逻辑 ID",
+        "sql": "SELECT b.id AS book_id, CASE WHEN b.author = (SELECT name FROM author WHERE id = :targetAuthor) THEN :targetAuthor WHEN b.author = (SELECT name FROM author WHERE id = :oldAuthor) THEN :oldAuthor END AS author_id, CASE WHEN b.press = (SELECT name FROM press WHERE id = :targetPublisher) THEN :targetPublisher WHEN b.press = (SELECT name FROM press WHERE id = :oldPublisher) THEN :oldPublisher END AS publisher_id FROM book AS b WHERE b.id IN (:activeBook, :deletedBook) ORDER BY b.id",
+        "mode": "ordered-rows",
+        "columns": [
+          {
+            "name": "book_id",
+            "aliasEntity": "book"
+          },
+          {
+            "name": "author_id",
+            "aliasEntity": "author"
+          },
+          {
+            "name": "publisher_id",
+            "aliasEntity": "publisher"
+          }
+        ],
+        "parameters": {
+          "activeBook": {
+            "binding": "activeBook"
+          },
+          "deletedBook": {
+            "binding": "deletedBook"
+          },
+          "oldAuthor": {
+            "binding": "oldAuthor"
+          },
+          "targetAuthor": {
+            "binding": "targetAuthor"
+          },
+          "oldPublisher": {
+            "binding": "oldPublisher"
+          },
+          "targetPublisher": {
+            "binding": "targetPublisher"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": [
+            {
+              "book_id": "activeBook",
+              "author_id": "oldAuthor",
+              "publisher_id": "oldPublisher"
+            },
+            {
+              "book_id": "deletedBook",
+              "author_id": "oldAuthor",
+              "publisher_id": "oldPublisher"
+            }
+          ],
+          "iosBefore": [
+            {
+              "book_id": "activeBook",
+              "author_id": "oldAuthor",
+              "publisher_id": "oldPublisher"
+            },
+            {
+              "book_id": "deletedBook",
+              "author_id": "oldAuthor",
+              "publisher_id": "oldPublisher"
+            }
+          ],
+          "androidAfter": [
+            {
+              "book_id": "activeBook",
+              "author_id": "targetAuthor",
+              "publisher_id": "targetPublisher"
+            },
+            {
+              "book_id": "deletedBook",
+              "author_id": "oldAuthor",
+              "publisher_id": "oldPublisher"
+            }
+          ],
+          "iosAfter": [
+            {
+              "book_id": "activeBook",
+              "author_id": "targetAuthor",
+              "publisher_id": "targetPublisher"
+            },
+            {
+              "book_id": "deletedBook",
+              "author_id": "oldAuthor",
+              "publisher_id": "oldPublisher"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "lifecycle": {
+    "checkpoints": [
+      {
+        "stage": "S0",
+        "meaning": "不可变 B0"
+      },
+      {
+        "stage": "S1",
+        "meaning": "首次打开管理上下文"
+      },
+      {
+        "stage": "S2",
+        "meaning": "合并确认前"
+      },
+      {
+        "stage": "S3",
+        "meaning": "两项合并提交后"
+      },
+      {
+        "stage": "S4",
+        "meaning": "独立进程冷启动后的稳定状态"
+      }
+    ],
+    "requireS3S4BusinessStable": true,
+    "requireRestart": true,
+    "restoreDirection": "none"
+  }
+}

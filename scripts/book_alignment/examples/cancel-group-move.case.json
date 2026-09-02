@@ -1,0 +1,145 @@
+{
+  "schemaVersion": 1,
+  "caseId": "cancel-group-move",
+  "title": "取消将单本书移动到另一分组",
+  "status": "exact-current",
+  "baseline": {
+    "sha256": "${B0_SHA256}",
+    "userVersion": 47,
+    "roomIdentityHash": "4e076c66571412594ff567eae85b68fc",
+    "schemaFingerprint": "${SCHEMA_FINGERPRINT}"
+  },
+  "runtimeProfile": {
+    "sha256": "${RUNTIME_PROFILE_SHA256}",
+    "requiredSettings": [
+      "bookSortMode",
+      "bookGroupingMode",
+      "newBookPosition"
+    ]
+  },
+  "aliases": [
+    {
+      "name": "ungroupedBookA",
+      "entity": "book",
+      "description": "基准中可被移动且当前有效的单本书",
+      "requirements": ["is_deleted=0", "不存在指向有效分组的有效 group_book 关系"],
+      "selector": "active-ungrouped-book"
+    },
+    {
+      "name": "nonEmptyGroupA",
+      "entity": "group",
+      "description": "基准中当前有效的非空目标分组",
+      "requirements": ["is_deleted=0", "至少包含一本其他有效书籍"],
+      "selector": "active-non-empty-group"
+    }
+  ],
+  "intent": {
+    "summary": "用户选择单本书并打开移动分组确认界面，随后取消",
+    "selectionScope": "single",
+    "confirmation": "cancellable",
+    "outcome": "cancelled",
+    "repeatTrigger": "once",
+    "selectedAliases": ["ungroupedBookA"]
+  },
+  "adapters": {
+    "android": {
+      "entry": "从书籍列表进入选择模式",
+      "steps": [
+        { "action": "打开页面并完成首次稳定读取", "checkpoint": "S1" },
+        { "action": "选择目标书并打开移动分组确认界面", "targetAlias": "ungroupedBookA", "checkpoint": "S2" },
+        { "action": "选择目标分组后取消", "targetAlias": "nonEmptyGroupA", "checkpoint": "S3" },
+        { "action": "返回并杀进程重启", "checkpoint": "S4" }
+      ]
+    },
+    "ios": {
+      "entry": "从原生书籍列表进入编辑选择状态",
+      "steps": [
+        { "action": "打开页面并完成首次稳定读取", "checkpoint": "S1" },
+        { "action": "选择目标书并呈现移动分组 Sheet", "targetAlias": "ungroupedBookA", "checkpoint": "S2" },
+        { "action": "保持目标分组选择并下拉取消", "targetAlias": "nonEmptyGroupA", "checkpoint": "S3" },
+        { "action": "返回并杀进程重启", "checkpoint": "S4" }
+      ]
+    }
+  },
+  "database": {
+    "allowedWrites": [],
+    "forbiddenWrites": [
+      {
+        "table": "group_book",
+        "operations": ["insert", "update", "delete"],
+        "columns": ["*"],
+        "platforms": ["android", "ios"],
+        "reason": "取消必须保持关系表零变化"
+      }
+    ],
+    "platformInternalTables": [
+      {
+        "table": "grdb_migrations",
+        "platform": "ios",
+        "reason": "iOS 的 GRDB 迁移元数据表允许作为稳定的平台内部表存在"
+      }
+    ],
+    "timeColumns": [
+      {
+        "table": "group_book",
+        "column": "created_date",
+        "unit": "epoch-millis",
+        "monotonic": true,
+        "allowZeroOnInsert": false,
+        "requireOperationWindow": true,
+        "toleranceMillis": 1000,
+        "reason": "若误写关系，创建时间也必须被显式检查而不能整体忽略"
+      },
+      {
+        "table": "group_book",
+        "column": "updated_date",
+        "unit": "epoch-millis",
+        "monotonic": true,
+        "allowZeroOnInsert": false,
+        "requireOperationWindow": true,
+        "toleranceMillis": 1000,
+        "reason": "若误写关系，更新时间也必须被显式检查而不能整体忽略"
+      }
+    ],
+    "strictExceptions": []
+  },
+  "setup": { "mode": "none" },
+  "oracle": {
+    "currentOracle": "Android 当前取消路径不提交关系命令，S2 与 S3 的业务数据库完全相同。",
+    "desiredSemantics": "双端取消均零写入；返回与重启后关系投影保持稳定。",
+    "semanticProjections": [
+      {
+        "name": "active-groups-for-selected-book",
+        "description": "读取目标书全部有效分组关系，并以逻辑别名比较有序结果",
+        "sql": "SELECT book_id, group_id FROM group_book WHERE book_id = :bookId AND is_deleted = 0 ORDER BY group_id, id",
+        "mode": "ordered-rows",
+        "columns": [
+          { "name": "book_id", "aliasEntity": "book" },
+          { "name": "group_id", "aliasEntity": "group" }
+        ],
+        "parameters": {
+          "bookId": { "binding": "ungroupedBookA" }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": [],
+          "iosBefore": [],
+          "androidAfter": [],
+          "iosAfter": []
+        }
+      }
+    ]
+  },
+  "lifecycle": {
+    "checkpoints": [
+      { "stage": "S0", "meaning": "不可变 B0" },
+      { "stage": "S1", "meaning": "平台首次打开后" },
+      { "stage": "S2", "meaning": "确认界面取消前" },
+      { "stage": "S3", "meaning": "取消后" },
+      { "stage": "S4", "meaning": "刷新、返回与杀进程重启后" }
+    ],
+    "requireS3S4BusinessStable": true,
+    "requireRestart": true,
+    "restoreDirection": "none"
+  }
+}

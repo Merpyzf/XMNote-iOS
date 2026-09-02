@@ -1,7 +1,7 @@
 /**
- * [INPUT]: 依赖 DesktopWebBookRepository、V44 书籍/章节/状态/年度书单及关系表和可注入毫秒时钟
- * [OUTPUT]: 提供 Android BookService 单书创建、局部更新及其状态/目录/关系副作用
- * [POS]: Data 层网页书籍录入扩展；Package 只经能力端口传递无数据库输入
+ * [INPUT]: 依赖 DesktopWebBookRepository、Room v48 书籍/章节/状态/年度书单及关系表和可注入毫秒时钟
+ * [OUTPUT]: 提供 Android BookService 单书创建、原子更新及其状态/目录/关系副作用
+ * [POS]: Data 层网页书籍录入扩展；统一关系物理删除与幂等插入，不让 Package 反向持有数据库
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -113,28 +113,20 @@ nonisolated extension DesktopWebBookRepository {
             }
 
             for tagID in normalizedTagIDs {
-                var relation = TagBookRecord(
-                    id: nil,
-                    bookId: bookID,
-                    tagId: tagID,
-                    createdDate: now,
-                    updatedDate: 0,
-                    lastSyncDate: 0,
-                    isDeleted: 0
+                try BookRelationWriter.insertTag(
+                    db,
+                    bookID: bookID,
+                    tagID: tagID,
+                    createdAt: now
                 )
-                try relation.insert(db)
             }
             if groupID > 0 {
-                var relation = GroupBookRecord(
-                    id: nil,
-                    groupId: groupID,
-                    bookId: bookID,
-                    createdDate: now,
-                    updatedDate: 0,
-                    lastSyncDate: 0,
-                    isDeleted: 0
+                try BookRelationWriter.insertGroup(
+                    db,
+                    groupID: groupID,
+                    bookID: bookID,
+                    createdAt: now
                 )
-                try relation.insert(db)
             }
             return book
         }
@@ -144,7 +136,7 @@ nonisolated extension DesktopWebBookRepository {
         return snapshot
     }
 
-    /// 按 Android Web 非事务步骤局部更新书籍；任何后续失败都保留此前已提交副作用。
+    /// 在单一事务中更新书籍主表、状态、标签和分组，任一步失败均完整回滚。
     func updateBook(
         id: Int64,
         input: DesktopWebBookUpdateInput
@@ -695,16 +687,13 @@ nonisolated extension DesktopWebBookRepository {
             arguments: [book.id]
         ).map { (id: $0["id"] as Int64, year: Int($0["year"] as Int64)) }
         for item in linked where !years.contains(item.year) {
-            // SQL 目的：移除不再属于读完年份的年度书单关系。
+            // SQL 目的：物理移除不再属于读完年份的年度书单关系。
             // 涉及表：collection_book。
-            // 关键过滤：book_id、collection_id 且有效；updated_date 使用独立当前毫秒。
-            // 副作用用途：对齐 WebBookDao.softDeleteCollectionBook。
+            // 关键过滤：book_id、collection_id；同时清理历史失效行。
+            // 副作用用途：满足全局关系硬删除语义，并为 v48 唯一业务键释放空间。
             try db.execute(
-                sql: """
-                    UPDATE collection_book SET is_deleted = 1, updated_date = ?
-                    WHERE book_id = ? AND collection_id = ? AND is_deleted = 0
-                    """,
-                arguments: [currentTimeMillis(), book.id, item.id]
+                sql: "DELETE FROM collection_book WHERE book_id = ? AND collection_id = ?",
+                arguments: [book.id, item.id]
             )
         }
         let linkedYears = Set(linked.map(\.year))
@@ -769,30 +758,12 @@ nonisolated extension DesktopWebBookRepository {
             collectionID = collection.id ?? db.lastInsertedRowID
         }
         guard let collectionID else { return }
-        // SQL 目的：判断当前年度书单有效关系是否已存在。
-        // 涉及表：collection_book。
-        // 关键过滤：book_id、collection_id 且有效。
-        // 返回字段用途：避免重复插入。
-        let exists = (try Int.fetchOne(
+        try BookRelationWriter.insertCollectionBook(
             db,
-            sql: """
-                SELECT COUNT(*) FROM collection_book
-                WHERE book_id = ? AND collection_id = ? AND is_deleted = 0
-                """,
-            arguments: [bookID, collectionID]
-        ) ?? 0) > 0
-        if !exists {
-            var relation = CollectionBookRecord(
-                id: nil,
-                collectionId: collectionID,
-                bookId: bookID,
-                createdDate: currentTimeMillis(),
-                updatedDate: 0,
-                lastSyncDate: 0,
-                isDeleted: 0
-            )
-            try relation.insert(db)
-        }
+            collectionID: collectionID,
+            bookID: bookID,
+            createdAt: currentTimeMillis()
+        )
     }
 
     /// 把 WebBookDao.updateBook 包装为一次独立提交。
@@ -802,7 +773,7 @@ nonisolated extension DesktopWebBookRepository {
         }
     }
 
-    /// 非事务同步状态历史、主表读完进度与年度书单；每个 DAO 级写入独立提交。
+    /// 兼容旧调用入口，同步状态历史、主表读完进度与年度书单。
     func syncReadStatusSideEffectsNontransactional(
         book: inout BookRecord,
         changedTime: Int64
@@ -868,7 +839,7 @@ nonisolated extension DesktopWebBookRepository {
         try await syncAnnualCollectionsNontransactional(book: book)
     }
 
-    /// 按 Android 多 DAO 顺序非事务同步年度书单关系。
+    /// 兼容旧调用入口逐项同步年度书单关系；关系移除始终使用物理删除。
     func syncAnnualCollectionsNontransactional(book: BookRecord) async throws {
         let years = try await database.dbPool.read { db in try webReadDoneYears(db, book: book) }
         let linked = try await database.dbPool.read { db -> [(Int64, Int)] in
@@ -891,18 +862,14 @@ nonisolated extension DesktopWebBookRepository {
             ).map { ($0["id"], Int($0["year"] as Int64)) }
         }
         for item in linked where !years.contains(item.1) {
-            let updatedAt = currentTimeMillis()
             try await database.dbPool.write { db in
-                // SQL 目的：独立软删除不再匹配的年度书单关系。
+                // SQL 目的：物理删除不再匹配的年度书单关系。
                 // 涉及表：collection_book。
-                // 关键过滤：book_id、collection_id 且有效；updated_date 为独立毫秒。
-                // 副作用用途：后续年度创建失败不会回滚本删除。
+                // 关键过滤：book_id、collection_id；同时清理历史失效行。
+                // 副作用用途：满足全局关系硬删除语义，并为 v48 唯一业务键释放空间。
                 try db.execute(
-                    sql: """
-                        UPDATE collection_book SET is_deleted = 1, updated_date = ?
-                        WHERE book_id = ? AND collection_id = ? AND is_deleted = 0
-                        """,
-                    arguments: [updatedAt, book.id, item.0]
+                    sql: "DELETE FROM collection_book WHERE book_id = ? AND collection_id = ?",
+                    arguments: [book.id, item.0]
                 )
             }
         }
@@ -945,34 +912,14 @@ nonisolated extension DesktopWebBookRepository {
             }
         }
         guard let collectionID else { return }
-        let exists = try await database.dbPool.read { db in
-            // SQL 目的：查询目标书单关系是否已有效存在。
-            // 涉及表：collection_book。
-            // 关键过滤：book_id、collection_id 且有效。
-            // 返回字段用途：决定是否独立插入。
-            (try Int.fetchOne(
+        let now = currentTimeMillis()
+        try await database.dbPool.write { db in
+            try BookRelationWriter.insertCollectionBook(
                 db,
-                sql: """
-                    SELECT COUNT(*) FROM collection_book
-                    WHERE book_id = ? AND collection_id = ? AND is_deleted = 0
-                    """,
-                arguments: [bookID, collectionID]
-            ) ?? 0) > 0
-        }
-        if !exists {
-            let now = currentTimeMillis()
-            try await database.dbPool.write { db in
-                var relation = CollectionBookRecord(
-                    id: nil,
-                    collectionId: collectionID,
-                    bookId: bookID,
-                    createdDate: now,
-                    updatedDate: 0,
-                    lastSyncDate: 0,
-                    isDeleted: 0
-                )
-                try relation.insert(db)
-            }
+                collectionID: collectionID,
+                bookID: bookID,
+                createdAt: now
+            )
         }
     }
 
@@ -983,28 +930,22 @@ nonisolated extension DesktopWebBookRepository {
         tagIDs: [Int64],
         createdAt: Int64
     ) throws {
-        // SQL 目的：清空书籍当前全部有效标签关系，为同事务内的最终集合重建腾出空间。
-        // 涉及表：tag_book；关键过滤：book_id 与 is_deleted=0。
-        // 时间字段：updated_date 使用本次书籍更新的统一毫秒值。
+        // SQL 目的：物理清空书籍全部标签关系，为同事务内的最终集合重建腾出空间。
+        // 涉及表：tag_book；关键过滤：book_id，同时清理历史失效行。
+        // 时间字段：删除不写时间；新关系使用本次书籍更新的统一毫秒值。
         // 副作用用途：任一关系插入失败时由外层事务整体回滚。
         try db.execute(
-            sql: """
-                UPDATE tag_book SET is_deleted = 1, updated_date = ?
-                WHERE book_id = ? AND is_deleted = 0
-                """,
-            arguments: [createdAt, bookID]
+            sql: "DELETE FROM tag_book WHERE book_id = ?",
+            arguments: [bookID]
         )
         for tagID in tagIDs {
-            var relation = TagBookRecord(
-                id: nil,
-                bookId: bookID,
-                tagId: tagID,
-                createdDate: createdAt,
-                updatedDate: createdAt,
-                lastSyncDate: 0,
-                isDeleted: 0
+            try BookRelationWriter.insertTag(
+                db,
+                bookID: bookID,
+                tagID: tagID,
+                createdAt: createdAt,
+                updatedAt: createdAt
             )
-            try relation.insert(db)
         }
     }
 
@@ -1035,74 +976,58 @@ nonisolated extension DesktopWebBookRepository {
             relations.first { $0.groupId == requestedGroupID }
         }
         if let keepID = keep?.id {
-            // SQL 目的：仅保留选中的有效主关系。
-            // 涉及表：group_book；关键过滤：同书、排除 keepID、仅有效关系。
-            // 时间字段：updated_date 使用书籍更新时刻；副作用与主表写入同事务。
+            // SQL 目的：物理删除选中主关系之外的全部分组关系。
+            // 涉及表：group_book；关键过滤：同书、排除 keepID，同时清理历史失效行。
+            // 时间字段：删除不写时间；副作用与主表写入同事务。
             try db.execute(
-                sql: """
-                    UPDATE group_book SET is_deleted = 1, updated_date = ?
-                    WHERE book_id = ? AND id != ? AND is_deleted = 0
-                    """,
-                arguments: [now, bookID, keepID]
+                sql: "DELETE FROM group_book WHERE book_id = ? AND id != ?",
+                arguments: [bookID, keepID]
             )
         } else {
-            // SQL 目的：移除书籍全部现有有效分组关系。
-            // 涉及表：group_book；关键过滤：book_id、is_deleted=0。
-            // 时间字段：updated_date 使用书籍更新时刻。
+            // SQL 目的：物理移除书籍全部现有分组关系。
+            // 涉及表：group_book；关键过滤：book_id，同时清理历史失效行。
+            // 时间字段：删除不写时间。
             try db.execute(
-                sql: """
-                    UPDATE group_book SET is_deleted = 1, updated_date = ?
-                    WHERE book_id = ? AND is_deleted = 0
-                    """,
-                arguments: [now, bookID]
+                sql: "DELETE FROM group_book WHERE book_id = ?",
+                arguments: [bookID]
             )
             if let requestedGroupID, requestedGroupID > 0 {
-                var relation = GroupBookRecord(
-                    id: nil,
-                    groupId: requestedGroupID,
-                    bookId: bookID,
-                    createdDate: now,
-                    updatedDate: now,
-                    lastSyncDate: 0,
-                    isDeleted: 0
+                try BookRelationWriter.insertGroup(
+                    db,
+                    groupID: requestedGroupID,
+                    bookID: bookID,
+                    createdAt: now,
+                    updatedAt: now
                 )
-                try relation.insert(db)
             }
         }
     }
 
-    /// 先独立软删除全部有效标签关系，再按请求原序逐条独立插入。
+    /// 兼容旧调用入口：先物理删除全部标签关系，再按请求原序幂等插入。
     func replaceBookTagsNontransactional(
         bookID: Int64,
         tagIDs: [Int64],
         createdAt: Int64
     ) async throws {
-        let deletedAt = currentTimeMillis()
         try await database.dbPool.write { db in
-            // SQL 目的：按 WebBookDao.softDeleteTagBooksByBookId 清空当前有效标签关系。
+            // SQL 目的：物理清空当前全部标签关系。
             // 涉及表：tag_book。
-            // 关键过滤：book_id 且 is_deleted = 0；更新时间独立于主表 now。
-            // 副作用用途：每个后续插入都不与本删除共享事务。
+            // 关键过滤：book_id，同时清理历史失效行。
+            // 副作用用途：为 v48 唯一业务键释放空间。
             try db.execute(
-                sql: """
-                    UPDATE tag_book SET is_deleted = 1, updated_date = ?
-                    WHERE book_id = ? AND is_deleted = 0
-                    """,
-                arguments: [deletedAt, bookID]
+                sql: "DELETE FROM tag_book WHERE book_id = ?",
+                arguments: [bookID]
             )
         }
         for tagID in tagIDs {
             try await database.dbPool.write { db in
-                var relation = TagBookRecord(
-                    id: nil,
-                    bookId: bookID,
-                    tagId: tagID,
-                    createdDate: createdAt,
-                    updatedDate: createdAt,
-                    lastSyncDate: 0,
-                    isDeleted: 0
+                try BookRelationWriter.insertTag(
+                    db,
+                    bookID: bookID,
+                    tagID: tagID,
+                    createdAt: createdAt,
+                    updatedAt: createdAt
                 )
-                try relation.insert(db)
             }
         }
     }
@@ -1137,50 +1062,41 @@ nonisolated extension DesktopWebBookRepository {
         }
         if let keep, let keepID = keep.id {
             try await database.dbPool.write { db in
-                // SQL 目的：保留主关系并软删除该书其余有效分组关系。
+                // SQL 目的：保留主关系并物理删除该书其余分组关系。
                 // 涉及表：group_book。
-                // 关键过滤：book_id、id != keep 且有效；使用主流程 now。
+                // 关键过滤：book_id、id != keep，同时清理历史失效行。
                 // 副作用用途：省略 groupId 时也会把多关系归一化为首关系。
                 try db.execute(
-                    sql: """
-                        UPDATE group_book SET is_deleted = 1, updated_date = ?
-                        WHERE book_id = ? AND id != ? AND is_deleted = 0
-                        """,
-                    arguments: [now, bookID, keepID]
+                    sql: "DELETE FROM group_book WHERE book_id = ? AND id != ?",
+                    arguments: [bookID, keepID]
                 )
             }
         } else if let requestedGroupID, requestedGroupID > 0 {
-            try await softDeleteAllGroupRelations(bookID: bookID, now: now)
+            try await hardDeleteAllGroupRelations(bookID: bookID)
             try await database.dbPool.write { db in
-                var relation = GroupBookRecord(
-                    id: nil,
-                    groupId: requestedGroupID,
-                    bookId: bookID,
-                    createdDate: now,
-                    updatedDate: now,
-                    lastSyncDate: 0,
-                    isDeleted: 0
+                try BookRelationWriter.insertGroup(
+                    db,
+                    groupID: requestedGroupID,
+                    bookID: bookID,
+                    createdAt: now,
+                    updatedAt: now
                 )
-                try relation.insert(db)
             }
         } else {
-            try await softDeleteAllGroupRelations(bookID: bookID, now: now)
+            try await hardDeleteAllGroupRelations(bookID: bookID)
         }
     }
 
-    /// 以独立提交软删除书籍全部有效分组关系。
-    func softDeleteAllGroupRelations(bookID: Int64, now: Int64) async throws {
+    /// 以独立提交物理删除书籍全部分组关系。
+    func hardDeleteAllGroupRelations(bookID: Int64) async throws {
         try await database.dbPool.write { db in
-            // SQL 目的：软删除书籍全部有效分组关系。
+            // SQL 目的：物理删除书籍全部分组关系。
             // 涉及表：group_book。
-            // 关键过滤：book_id 且 is_deleted = 0；时间复用主流程 now。
+            // 关键过滤：book_id，同时清理历史失效行。
             // 副作用用途：新分组插入失败时该删除不会回滚。
             try db.execute(
-                sql: """
-                    UPDATE group_book SET is_deleted = 1, updated_date = ?
-                    WHERE book_id = ? AND is_deleted = 0
-                    """,
-                arguments: [now, bookID]
+                sql: "DELETE FROM group_book WHERE book_id = ?",
+                arguments: [bookID]
             )
         }
     }

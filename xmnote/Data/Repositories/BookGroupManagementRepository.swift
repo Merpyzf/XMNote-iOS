@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 DatabaseManager、GRDB、ObservationStream、GroupRecord 与 BookRepository 书架对齐 helper，按 Android GroupRepository/GroupDao 语义执行书籍分组管理读写
- * [OUTPUT]: 对外提供 BookGroupManagementRepository（BookGroupManagementRepositoryProtocol 的 GRDB 实现）
+ * [OUTPUT]: 对外提供 BookGroupManagementRepository（BookGroupManagementRepositoryProtocol 的 GRDB 实现，批量分组写入保持事务原子性）
  * [POS]: Data 层书籍分组管理仓储实现，统一封装“我的 > 书籍分组”的分组列表、增改删与排序写入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -63,13 +63,13 @@ struct BookGroupManagementRepository: BookGroupManagementRepositoryProtocol {
         }
     }
 
-    /// 批量删除分组；每个分组独立写事务，保持 Android 批量删除逐项处理的失败边界。
+    /// 在单一事务内批量删除分组；任一分组失败时回滚整批，避免复制 Android 的部分提交缺陷。
     func deleteGroups(groupIDs: [Int64], placement: GroupBooksPlacement) async throws {
         let uniqueIDs = uniquePositiveIDs(groupIDs)
         guard !uniqueIDs.isEmpty else { throw BookGroupManagementRepositoryError.emptySelection }
 
-        for groupID in uniqueIDs {
-            try await databaseManager.database.dbPool.write { db in
+        try await databaseManager.database.dbPool.write { db in
+            for groupID in uniqueIDs {
                 do {
                     try bookshelfHelper.deleteGroup(db, groupID: groupID, placement: placement)
                 } catch BookRepository.BookshelfBatchWriteError.invalidGroup {

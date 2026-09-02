@@ -1,0 +1,258 @@
+{
+  "schemaVersion": 1,
+  "caseId": "a03.source-delete.late-failure",
+  "title": "A-03 删除来源时实体物理删除晚失败",
+  "status": "exact-current",
+  "baseline": {
+    "sha256": "${B0_SHA256}",
+    "userVersion": 47,
+    "roomIdentityHash": "4e076c66571412594ff567eae85b68fc",
+    "schemaFingerprint": "${SCHEMA_FINGERPRINT}"
+  },
+  "targetDatabase": {
+    "userVersion": 48,
+    "roomIdentityHash": "cda5a591da1f57aca266af36255e5df7",
+    "schemaFingerprint": "055724e3c2ec28094f771961e2df1cf807efc99ac26f87e9d7308377d9b8eab2"
+  },
+  "runtimeProfile": {
+    "sha256": "${RUNTIME_PROFILE_SHA256}",
+    "requiredSettings": []
+  },
+  "aliases": [
+    {
+      "name": "firstBook",
+      "entity": "book",
+      "description": "操作前指向 targetSource 的第一本有效书",
+      "requirements": [
+        "is_deleted=0",
+        "source_id=targetSource",
+        "id 小于 secondBook"
+      ],
+      "selector": "active-book"
+    },
+    {
+      "name": "secondBook",
+      "entity": "book",
+      "description": "操作前指向 targetSource 的第二本有效书",
+      "requirements": [
+        "is_deleted=0",
+        "source_id=targetSource",
+        "id 大于 firstBook"
+      ],
+      "selector": "active-book"
+    },
+    {
+      "name": "targetSource",
+      "entity": "source",
+      "description": "用户确认删除且物理 DELETE 被注入失败的有效来源",
+      "requirements": [
+        "is_deleted=0",
+        "id!=defaultSource"
+      ]
+    },
+    {
+      "name": "defaultSource",
+      "entity": "source",
+      "description": "Android UNKNOW 系统来源记录",
+      "requirements": [
+        "系统根来源",
+        "id!=targetSource"
+      ]
+    }
+  ],
+  "intent": {
+    "summary": "删除被两本书引用的来源，在来源实体 DELETE 注入 test-only 晚失败",
+    "selectionScope": "single",
+    "confirmation": "destructive-required",
+    "outcome": "failed",
+    "repeatTrigger": "once",
+    "selectedAliases": [
+      "targetSource"
+    ]
+  },
+  "adapters": {
+    "android": {
+      "entry": "来源管理页单项删除入口",
+      "steps": [
+        {
+          "action": "打开来源管理并稳定读取",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "选择来源并安装实体物理删除失败注入",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "触发确定性晚失败，验证本次业务命令完整回滚",
+          "targetAlias": "targetSource",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host force-stop、创建 resume marker 后冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    },
+    "ios": {
+      "entry": "原生来源管理单项删除入口",
+      "steps": [
+        {
+          "action": "打开来源管理并稳定读取",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "选择来源并安装实体删除失败注入",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "触发确定性晚失败，验证本次业务命令完整回滚",
+          "targetAlias": "targetSource",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host 终止 App 后以同一副本冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    }
+  },
+  "database": {
+    "allowedWrites": [],
+    "forbiddenWrites": [],
+    "platformInternalTables": [
+      {
+        "table": "grdb_migrations",
+        "platform": "ios",
+        "reason": "GRDB 平台内部迁移记录"
+      }
+    ],
+    "timeColumns": [],
+    "strictExceptions": []
+  },
+  "setup": {
+    "mode": "none"
+  },
+  "oracle": {
+    "currentOracle": "来源引用迁移与来源删除必须共用事务；删除失败时来源及全部书籍引用保持 S2。",
+    "desiredSemantics": "来源引用迁移与来源删除必须共用事务；删除失败时来源及全部书籍引用保持 S2。",
+    "semanticProjections": [
+      {
+        "name": "selected-book-sources-after-delete-failure",
+        "description": "两本书的来源关系",
+        "sql": "SELECT id AS book_id, source_id FROM book WHERE id IN (:firstBook, :secondBook) ORDER BY id",
+        "mode": "ordered-rows",
+        "columns": [
+          {
+            "name": "book_id",
+            "aliasEntity": "book"
+          },
+          {
+            "name": "source_id",
+            "aliasEntity": "source"
+          }
+        ],
+        "parameters": {
+          "firstBook": {
+            "binding": "firstBook"
+          },
+          "secondBook": {
+            "binding": "secondBook"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": [
+            {
+              "book_id": "firstBook",
+              "source_id": "targetSource"
+            },
+            {
+              "book_id": "secondBook",
+              "source_id": "targetSource"
+            }
+          ],
+          "iosBefore": [
+            {
+              "book_id": "firstBook",
+              "source_id": "targetSource"
+            },
+            {
+              "book_id": "secondBook",
+              "source_id": "targetSource"
+            }
+          ],
+          "androidAfter": [
+            {
+              "book_id": "firstBook",
+              "source_id": "targetSource"
+            },
+            {
+              "book_id": "secondBook",
+              "source_id": "targetSource"
+            }
+          ],
+          "iosAfter": [
+            {
+              "book_id": "firstBook",
+              "source_id": "targetSource"
+            },
+            {
+              "book_id": "secondBook",
+              "source_id": "targetSource"
+            }
+          ]
+        }
+      },
+      {
+        "name": "target-source-delete-state",
+        "description": "来源实体物理删除因 trigger 失败而保持存在",
+        "sql": "SELECT is_deleted FROM source WHERE id = :targetSource",
+        "mode": "scalar",
+        "columns": [
+          {
+            "name": "is_deleted"
+          }
+        ],
+        "parameters": {
+          "targetSource": {
+            "binding": "targetSource"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": 0,
+          "iosBefore": 0,
+          "androidAfter": 0,
+          "iosAfter": 0
+        }
+      }
+    ]
+  },
+  "lifecycle": {
+    "checkpoints": [
+      {
+        "stage": "S0",
+        "meaning": "不可变 B0"
+      },
+      {
+        "stage": "S1",
+        "meaning": "首次打开"
+      },
+      {
+        "stage": "S2",
+        "meaning": "删除确认前"
+      },
+      {
+        "stage": "S3",
+        "meaning": "来源实体物理删除晚失败后"
+      },
+      {
+        "stage": "S4",
+        "meaning": "独立进程冷启动后的稳定状态"
+      }
+    ],
+    "requireS3S4BusinessStable": true,
+    "requireRestart": true,
+    "restoreDirection": "none"
+  }
+}

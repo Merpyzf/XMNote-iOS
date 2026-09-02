@@ -1,0 +1,298 @@
+{
+  "schemaVersion": 1,
+  "caseId": "a-06-move-out-start-reverses-order",
+  "title": "A-06 批量移出分组到书架开头时保持输入顺序",
+  "status": "exact-current",
+  "baseline": {
+    "sha256": "${B0_SHA256}",
+    "userVersion": 47,
+    "roomIdentityHash": "4e076c66571412594ff567eae85b68fc",
+    "schemaFingerprint": "${SCHEMA_FINGERPRINT}"
+  },
+  "targetDatabase": {
+    "userVersion": 48,
+    "roomIdentityHash": "cda5a591da1f57aca266af36255e5df7",
+    "schemaFingerprint": "055724e3c2ec28094f771961e2df1cf807efc99ac26f87e9d7308377d9b8eab2"
+  },
+  "runtimeProfile": {
+    "sha256": "${RUNTIME_PROFILE_SHA256}",
+    "requiredSettings": [
+      "bookSortMode",
+      "newBookPosition"
+    ]
+  },
+  "aliases": [
+    {
+      "name": "sourceGroup",
+      "entity": "group",
+      "description": "包含三本目标书的有效分组",
+      "requirements": [
+        "is_deleted=0",
+        "至少包含三条目标有效关系"
+      ],
+      "selector": "active-non-empty-group"
+    },
+    {
+      "name": "inputBookA",
+      "entity": "book",
+      "description": "输入集合中的第一本有效书",
+      "requirements": [
+        "is_deleted=0",
+        "有效关系指向 sourceGroup",
+        "id 小于 inputBookB"
+      ]
+    },
+    {
+      "name": "inputBookB",
+      "entity": "book",
+      "description": "输入集合中的第二本有效书",
+      "requirements": [
+        "is_deleted=0",
+        "有效关系指向 sourceGroup",
+        "id 介于 A 与 C"
+      ]
+    },
+    {
+      "name": "inputBookC",
+      "entity": "book",
+      "description": "输入集合中的第三本有效书",
+      "requirements": [
+        "is_deleted=0",
+        "有效关系指向 sourceGroup",
+        "id 大于 inputBookB"
+      ]
+    }
+  ],
+  "intent": {
+    "summary": "按 A、B、C 的选择顺序批量移出 sourceGroup，并选择放到默认书架开头",
+    "selectionScope": "batch",
+    "confirmation": "required",
+    "outcome": "committed",
+    "repeatTrigger": "once",
+    "selectedAliases": [
+      "inputBookA",
+      "inputBookB",
+      "inputBookC"
+    ]
+  },
+  "adapters": {
+    "android": {
+      "entry": "分组书籍页批量移出入口",
+      "steps": [
+        {
+          "action": "打开 sourceGroup 并稳定读取",
+          "targetAlias": "sourceGroup",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "按 A、B、C 选择三本书并选择放到开头",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "确认移出",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host force-stop .uitest 后以 resume 模式冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    },
+    "ios": {
+      "entry": "原生分组书籍列表编辑 accessory 的移出入口",
+      "steps": [
+        {
+          "action": "打开 sourceGroup 并稳定读取",
+          "targetAlias": "sourceGroup",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "按 A、B、C 选择三本书并选择放到开头",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "确认移出",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host 终止 App 后以同一副本冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    }
+  },
+  "database": {
+    "allowedWrites": [
+      {
+        "table": "book",
+        "operations": [
+          "update"
+        ],
+        "columns": [
+          "pinned",
+          "pin_order",
+          "book_order"
+        ],
+        "platforms": [
+          "android",
+          "ios"
+        ],
+        "reason": "移出时取消置顶并按输入顺序重排默认书架"
+      },
+      {
+        "table": "group_book",
+        "operations": [
+          "delete"
+        ],
+        "platforms": [
+          "android",
+          "ios"
+        ],
+        "reason": "两端物理删除分组关系"
+      }
+    ],
+    "forbiddenWrites": [
+      {
+        "table": "group",
+        "operations": [
+          "insert",
+          "update",
+          "delete"
+        ],
+        "columns": [
+          "*"
+        ],
+        "platforms": [
+          "android",
+          "ios"
+        ],
+        "reason": "移出书籍不得修改分组实体"
+      }
+    ],
+    "platformInternalTables": [
+      {
+        "table": "grdb_migrations",
+        "platform": "ios",
+        "reason": "GRDB 平台内部迁移记录"
+      }
+    ],
+    "timeColumns": [],
+    "strictExceptions": []
+  },
+  "setup": {
+    "mode": "none"
+  },
+  "oracle": {
+    "currentOracle": "输入 A、B、C 批量移到默认书架开头后仍保持 A、B、C 的相对顺序；分组关系在同一事务内物理删除。",
+    "desiredSemantics": "输入 A、B、C 批量移到默认书架开头后仍保持 A、B、C 的相对顺序；分组关系在同一事务内物理删除。",
+    "semanticProjections": [
+      {
+        "name": "selected-default-order",
+        "description": "只比较三本目标书按 book_order 读取的相对顺序",
+        "sql": "SELECT id AS book_id FROM book WHERE id IN (:bookA, :bookB, :bookC) AND is_deleted = 0 ORDER BY book_order, id",
+        "mode": "ordered-rows",
+        "columns": [
+          {
+            "name": "book_id",
+            "aliasEntity": "book"
+          }
+        ],
+        "parameters": {
+          "bookA": {
+            "binding": "inputBookA"
+          },
+          "bookB": {
+            "binding": "inputBookB"
+          },
+          "bookC": {
+            "binding": "inputBookC"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidAfter": [
+            {
+              "book_id": "inputBookA"
+            },
+            {
+              "book_id": "inputBookB"
+            },
+            {
+              "book_id": "inputBookC"
+            }
+          ],
+          "iosAfter": [
+            {
+              "book_id": "inputBookA"
+            },
+            {
+              "book_id": "inputBookB"
+            },
+            {
+              "book_id": "inputBookC"
+            }
+          ]
+        }
+      },
+      {
+        "name": "active-source-relations",
+        "description": "提交后三本书均无 sourceGroup 有效关系",
+        "sql": "SELECT COUNT(*) AS active_count FROM group_book WHERE group_id = :sourceGroup AND book_id IN (:bookA, :bookB, :bookC) AND is_deleted = 0",
+        "mode": "scalar",
+        "columns": [
+          {
+            "name": "active_count"
+          }
+        ],
+        "parameters": {
+          "sourceGroup": {
+            "binding": "sourceGroup"
+          },
+          "bookA": {
+            "binding": "inputBookA"
+          },
+          "bookB": {
+            "binding": "inputBookB"
+          },
+          "bookC": {
+            "binding": "inputBookC"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": 3,
+          "iosBefore": 3,
+          "androidAfter": 0,
+          "iosAfter": 0
+        }
+      }
+    ]
+  },
+  "lifecycle": {
+    "checkpoints": [
+      {
+        "stage": "S0",
+        "meaning": "不可变 B0"
+      },
+      {
+        "stage": "S1",
+        "meaning": "首次打开分组"
+      },
+      {
+        "stage": "S2",
+        "meaning": "移出确认前"
+      },
+      {
+        "stage": "S3",
+        "meaning": "移出提交后"
+      },
+      {
+        "stage": "S4",
+        "meaning": "独立进程冷启动后的稳定状态"
+      }
+    ],
+    "requireS3S4BusinessStable": true,
+    "requireRestart": true,
+    "restoreDirection": "none"
+  }
+}
