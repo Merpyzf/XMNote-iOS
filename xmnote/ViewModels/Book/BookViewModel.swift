@@ -113,6 +113,30 @@ private enum BookshelfSearchDebouncePolicy {
     static let delayNanoseconds: UInt64 = 200_000_000
 }
 
+/// 将默认书架的 Book/Group 混合选择展开成稳定、去重的书籍范围，供书单与导出入口共享。
+nonisolated enum BookshelfSelectionScope {
+    /// 按选择顺序展开分组成员；同一本书多次出现时只保留第一次，空分组不会产生目标。
+    static func expandedBookIDs(
+        selectedIDs: [BookshelfItemID],
+        items: [BookshelfItem]
+    ) -> [Int64] {
+        let itemsByID = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
+        var seen = Set<Int64>()
+        return selectedIDs.reduce(into: [Int64]()) { result, id in
+            switch id {
+            case .book(let bookID):
+                guard bookID > 0, seen.insert(bookID).inserted else { return }
+                result.append(bookID)
+            case .group:
+                guard let item = itemsByID[id], case .group(let payload) = item.content else { return }
+                for book in payload.books where book.id > 0 && seen.insert(book.id).inserted {
+                    result.append(book.id)
+                }
+            }
+        }
+    }
+}
+
 // MARK: - BookViewModel
 
 /// BookViewModel 负责书架快照订阅，把 Repository 多维度结果和编辑态选择映射成界面可消费的数据集；所有 UI 状态均在主线程更新。
@@ -167,6 +191,7 @@ final class BookViewModel {
         set { writeActionState.notice = newValue }
     }
     var activeBatchSheet: BookshelfBatchEditSheet?
+    var activeBatchTagModeConfirmation: BookshelfBatchTagModeConfirmation?
     var activeDeleteConfirmation: BookshelfDefaultDeleteConfirmation?
     var activeContributorNameEdit: BookContributorNameEdit?
     var activeContributorDeleteConfirmation: BookContributorDeleteConfirmation?
@@ -213,19 +238,10 @@ final class BookViewModel {
     }
 
     var selectedBookIDsIncludingGroupBooks: [Int64] {
-        let itemsByID = Dictionary(uniqueKeysWithValues: currentDefaultItems.map { ($0.id, $0) })
-        return selectedIDs.reduce(into: [Int64]()) { result, id in
-            switch id {
-            case .book(let bookID):
-                guard !result.contains(bookID) else { return }
-                result.append(bookID)
-            case .group:
-                guard let item = itemsByID[id], case .group(let payload) = item.content else { return }
-                for book in payload.books where !result.contains(book.id) {
-                    result.append(book.id)
-                }
-            }
-        }
+        BookshelfSelectionScope.expandedBookIDs(
+            selectedIDs: selectedIDs,
+            items: currentDefaultItems
+        )
     }
 
     var selectedGroupCount: Int {
@@ -603,6 +619,7 @@ final class BookViewModel {
         writeError = nil
         actionNotice = nil
         activeBatchSheet = nil
+        activeBatchTagModeConfirmation = nil
         activeDeleteConfirmation = nil
         activeContributorNameEdit = nil
         activeContributorDeleteConfirmation = nil
@@ -731,7 +748,9 @@ final class BookViewModel {
             presentMoveGroupSheet()
         case .addToBookList:
             presentBookCollectionSheet()
-        case .setTag, .setSource, .setReadStatus:
+        case .setTag:
+            presentTagMutationFlow()
+        case .setSource, .setReadStatus:
             presentBatchSheet(for: action)
         case .exportNote:
             presentPlaceholderAction(action)
@@ -867,22 +886,25 @@ final class BookViewModel {
         }
     }
 
-    /// 提交默认书架批量标签写入；任务由标签 Sheet 等待，成功前保持页面，失败沿用书架错误反馈并返回 false。
-    func submitBatchTags(tagIDs: [Int64]) async -> Bool {
-        let bookIDs = selectedBookIDs
+    /// 提交默认书架显式标签命令；任务由标签 Sheet 等待，成功前保持页面。
+    func submitTagMutation(
+        bookIDs: [Int64],
+        tagIDs: [Int64],
+        mode: BookTagMutationMode
+    ) async -> Bool {
         guard !bookIDs.isEmpty else {
             actionNotice = "分组不支持设置标签，请选择书籍"
             return false
         }
 
-        guard activeWriteAction == nil else { return false }
+        guard selectedBookIDs == bookIDs, activeWriteAction == nil else { return false }
         cancelBatchOptionsLoading()
         activeWriteAction = .setTag
         writeError = nil
         actionFeedback = nil
 
         do {
-            try await repository.batchSetBooksTags(bookIDs: bookIDs, tagIDs: tagIDs)
+            try await repository.mutateBooksTags(bookIDs: bookIDs, tagIDs: tagIDs, mode: mode)
             try Task.checkCancellation()
             selectedIDs.removeAll()
             activeWriteAction = nil
@@ -898,6 +920,13 @@ final class BookViewModel {
             restartObservation()
             return false
         }
+    }
+
+    /// 确认多本书标签变更模式；只有选择范围仍与确认弹窗快照一致时才打开标签 Sheet。
+    func confirmBatchTagMode(_ mode: BookTagMutationMode, bookIDs: [Int64]) {
+        guard mode != .replace, selectedBookIDs == bookIDs else { return }
+        activeBatchTagModeConfirmation = nil
+        presentBatchTagsSheet(bookIDs: bookIDs, mode: mode)
     }
 
     /// 提交默认书架批量来源写入；仅作用于选中的 Book。
@@ -940,7 +969,7 @@ final class BookViewModel {
             return
         }
         runWriteAction(.moveToGroup, successMessage: "已移入分组") {
-            try await self.repository.moveBooks(bookIDs, toGroup: groupID)
+            try await self.repository.moveBooks(bookIDs, fromGroup: 0, toGroup: groupID)
         }
     }
 
@@ -1162,10 +1191,6 @@ private extension BookViewModel {
             actionNotice = "分组不支持\(action.title)，请至少选择一本书"
             return
         }
-        if action == .setTag {
-            presentBatchTagsSheet(bookIDs: bookIDs)
-            return
-        }
         isLoadingBatchOptions = true
         actionNotice = "正在加载\(action.title)选项…"
         writeError = nil
@@ -1194,17 +1219,36 @@ private extension BookViewModel {
         }
     }
 
+    /// 按当前选择范围决定单本替换或多本显式添加/移除入口，确认前不读取也不写入数据库。
+    private func presentTagMutationFlow() {
+        guard activeWriteAction == nil, !isLoadingBatchOptions else { return }
+        let bookIDs = selectedBookIDs
+        guard !bookIDs.isEmpty else {
+            actionNotice = "分组不支持设置标签，请选择书籍"
+            return
+        }
+        if bookIDs.count == 1 {
+            presentBatchTagsSheet(bookIDs: bookIDs, mode: .replace)
+        } else {
+            activeBatchTagModeConfirmation = BookshelfBatchTagModeConfirmation(bookIDs: bookIDs)
+            actionNotice = nil
+            writeError = nil
+        }
+    }
+
     /// 立即打开标签 Sheet，并在 Sheet 内容区异步刷新候选项，避免底部操作栏闪出读取文案。
     /// - Note: Repository 读取任务可被新请求取消；成功或失败后只在原 Sheet 仍存在且选择集合未变化时回写 MainActor 状态。
-    private func presentBatchTagsSheet(bookIDs: [Int64]) {
+    private func presentBatchTagsSheet(bookIDs: [Int64], mode: BookTagMutationMode) {
         batchOptionsTask?.cancel()
         isLoadingBatchOptions = false
         actionNotice = nil
         writeError = nil
         activeBatchSheet = .tags(
+            mode: mode,
+            bookIDs: bookIDs,
             options: [],
             initialSelectedIDs: [],
-            allowsEmptySelection: bookIDs.count == 1,
+            allowsEmptySelection: mode == .replace,
             isLoading: true,
             errorMessage: nil
         )
@@ -1218,11 +1262,13 @@ private extension BookViewModel {
                         self.actionNotice = nil
                         return
                     }
-                    guard self.activeBatchSheet?.id == "tags" else { return }
+                    guard self.activeBatchSheet?.id == "tags-\(mode.rawValue)" else { return }
                     self.activeBatchSheet = .tags(
+                        mode: mode,
+                        bookIDs: bookIDs,
                         options: options.tags,
-                        initialSelectedIDs: bookIDs.count == 1 ? options.initialTagIDs : [],
-                        allowsEmptySelection: bookIDs.count == 1,
+                        initialSelectedIDs: mode == .replace ? options.initialTagIDs : [],
+                        allowsEmptySelection: mode == .replace,
                         isLoading: false,
                         errorMessage: nil
                     )
@@ -1236,11 +1282,13 @@ private extension BookViewModel {
                         self.actionNotice = nil
                         return
                     }
-                    guard self.activeBatchSheet?.id == "tags" else { return }
+                    guard self.activeBatchSheet?.id == "tags-\(mode.rawValue)" else { return }
                     self.activeBatchSheet = .tags(
+                        mode: mode,
+                        bookIDs: bookIDs,
                         options: [],
                         initialSelectedIDs: [],
-                        allowsEmptySelection: bookIDs.count == 1,
+                        allowsEmptySelection: mode == .replace,
                         isLoading: false,
                         errorMessage: error.localizedDescription
                     )
@@ -1313,7 +1361,7 @@ private extension BookViewModel {
     }
 
     /// 拉取默认书架可加入的手动书单，并打开加入书单 Sheet。
-    /// - Note: 只经 Repository 获取书单选项；选中的 Group 会先在 ViewModel 内展开为书籍 ID 快照，避免 Sheet 回填时选择已变化。
+    /// - Note: 选中的 Group 会展开为去重的书籍 ID 快照；仅选择空分组时不进入下游写入。
     func presentBookCollectionSheet() {
         guard activeWriteAction == nil, !isLoadingBatchOptions else { return }
         let bookIDs = selectedBookIDsIncludingGroupBooks
@@ -1381,14 +1429,7 @@ private extension BookViewModel {
     ) {
         switch action {
         case .setTag:
-            activeBatchSheet = .tags(
-                options: options.tags,
-                initialSelectedIDs: bookIDs.count == 1 ? options.initialTagIDs : [],
-                allowsEmptySelection: bookIDs.count == 1,
-                isLoading: false,
-                errorMessage: nil
-            )
-            actionNotice = nil
+            return
         case .setSource:
             guard !options.sources.isEmpty else {
                 actionNotice = "暂无可用来源"

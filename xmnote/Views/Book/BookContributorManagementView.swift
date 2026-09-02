@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入 BookRepositoryProtocol，依赖 BookContributorManagementViewModel、XMMenuStyle 与 xmMinimumHitTarget 提供管理行交互
- * [OUTPUT]: 对外提供 BookContributorManagementView，承接“作者管理/出版社管理”入口的真实管理页
+ * [INPUT]: 依赖 RepositoryContainer 注入 BookRepositoryProtocol，依赖 BookContributorManagementViewModel、XMSystemAlert 与原生 Toolbar/安全区操作栏提供单项和批量管理交互
+ * [OUTPUT]: 对外提供 BookContributorManagementView，承接作者/出版社资料编辑、删除及书籍字段批量修改入口
  * [POS]: Book 模块作者/出版社管理页面壳层，被个人页路由与书籍 Tab 导航消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -44,6 +44,7 @@ struct BookContributorManagementView: View {
 /// 作者/出版社管理内容区，负责绑定弹窗状态与渲染列表。
 private struct BookContributorManagementContentView: View {
     @Bindable var viewModel: BookContributorManagementViewModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var readLoadingGate = LoadingGate()
 
     var body: some View {
@@ -68,6 +69,33 @@ private struct BookContributorManagementContentView: View {
         }
         .xmSystemAlert(item: $viewModel.activeDeleteConfirmation) { confirmation in
             deleteDescriptor(for: confirmation)
+        }
+        .xmSystemAlert(item: $viewModel.activeBatchNameEdit) { edit in
+            batchNameEditDescriptor(for: edit)
+        }
+        .xmSystemAlert(item: $viewModel.activeBatchConfirmation) { confirmation in
+            batchConfirmationDescriptor(for: confirmation)
+        }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(viewModel.isSelectionMode ? "取消" : "选择") {
+                    withAnimation(reduceMotion ? nil : .snappy(duration: 0.18)) {
+                        if viewModel.isSelectionMode {
+                            viewModel.cancelSelectionMode()
+                        } else {
+                            viewModel.enterSelectionMode()
+                        }
+                    }
+                }
+                .disabled(viewModel.activeWriteAction != nil || viewModel.groups.isEmpty)
+                .accessibilityLabel(viewModel.isSelectionMode ? "退出选择" : "选择多个\(viewModel.kind.itemTitle)")
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if viewModel.isSelectionMode {
+                selectionBar
+                    .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
+            }
         }
         .onAppear {
             syncLoadingGate()
@@ -110,7 +138,10 @@ private struct BookContributorManagementContentView: View {
                         BookContributorManagementRow(
                             kind: viewModel.kind,
                             group: group,
+                            isSelectionMode: viewModel.isSelectionMode,
+                            isSelected: viewModel.selectedNames.contains(group.title),
                             isDisabled: viewModel.activeWriteAction != nil,
+                            onToggleSelection: { viewModel.toggleSelection(for: group) },
                             onEdit: { viewModel.presentNameEdit(for: group) },
                             onDelete: { viewModel.presentDeleteConfirmation(for: group) }
                         )
@@ -134,6 +165,32 @@ private struct BookContributorManagementContentView: View {
             .padding(.top, Spacing.tight)
             .transition(.opacity)
             .zIndex(2)
+    }
+
+    private var selectionBar: some View {
+        HStack(spacing: Spacing.base) {
+            Text("已选 \(viewModel.selectionCount) 项 · \(viewModel.selectedBookCount) 本书")
+                .font(AppTypography.caption)
+                .foregroundStyle(Color.textSecondary)
+                .lineLimit(1)
+
+            Spacer(minLength: Spacing.cozy)
+
+            Button(viewModel.batchActionTitle, systemImage: "pencil") {
+                viewModel.presentBatchNameEdit()
+            }
+            .font(AppTypography.callout)
+            .buttonStyle(.borderedProminent)
+            .tint(Color.primaryActionFill)
+            .disabled(viewModel.selectedNames.isEmpty || viewModel.activeWriteAction != nil)
+            .accessibilityValue("已选择 \(viewModel.selectionCount) 个\(viewModel.kind.itemTitle)，共 \(viewModel.selectedBookCount) 本书")
+        }
+        .padding(.horizontal, Spacing.screenEdge)
+        .frame(minHeight: 56)
+        .background(.bar)
+        .overlay(alignment: .top) {
+            Divider().overlay(Color.surfaceBorderSubtle)
+        }
     }
 
     private func nameEditDescriptor(for nameEdit: BookContributorNameEdit) -> XMSystemAlertDescriptor {
@@ -172,17 +229,85 @@ private struct BookContributorManagementContentView: View {
             preferredActionID: nil
         )
     }
+
+    private func batchNameEditDescriptor(for edit: BookContributorBatchNameEdit) -> XMSystemAlertDescriptor {
+        XMSystemAlertDescriptor(
+            title: viewModel.batchActionTitle,
+            message: "将修改所选 \(edit.sourceNames.count) 个\(edit.kind.itemTitle)维度下的 \(edit.bookCount) 本有效书籍，资料记录不会改变。",
+            actions: [
+                XMSystemAlertAction(title: "取消", role: .cancel) { },
+                XMSystemAlertAction(title: "下一步") {
+                    viewModel.confirmBatchNameInput()
+                }
+            ],
+            textFields: [
+                XMSystemAlertTextField(
+                    text: Binding(
+                        get: { viewModel.batchNameText },
+                        set: { viewModel.batchNameText = $0 }
+                    ),
+                    placeholder: "新的\(edit.kind.itemTitle)名称",
+                    autocorrectionDisabled: true
+                )
+            ]
+        )
+    }
+
+    private func batchConfirmationDescriptor(
+        for confirmation: BookContributorBatchConfirmation
+    ) -> XMSystemAlertDescriptor {
+        XMSystemAlertDescriptor(
+            title: "确认修改书籍\(confirmation.kind.itemTitle)",
+            message: "将把 \(confirmation.bookCount) 本有效书籍的\(confirmation.kind.itemTitle)改为“\(confirmation.targetName)”。作者或出版社资料记录不会合并，此操作确认后立即生效。",
+            actions: [
+                XMSystemAlertAction(title: "取消", role: .cancel) { },
+                XMSystemAlertAction(title: "确认修改") {
+                    viewModel.submitBatchModification()
+                }
+            ]
+        )
+    }
 }
 
 /// 作者/出版社管理行，提供与 Android 聚合卡一致的编辑、删除菜单。
 private struct BookContributorManagementRow: View {
     let kind: BookContributorKind
     let group: BookshelfAggregateGroup
+    let isSelectionMode: Bool
+    let isSelected: Bool
     let isDisabled: Bool
+    let onToggleSelection: () -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
 
+    @ViewBuilder
     var body: some View {
+        if isSelectionMode {
+            Button(action: onToggleSelection) {
+                rowContent
+            }
+            .buttonStyle(.plain)
+            .disabled(isDisabled)
+            .accessibilityLabel("\(group.title)，\(group.subtitle)")
+            .accessibilityValue(isSelected ? "已选择" : "未选择")
+            .accessibilityAddTraits(isSelected ? .isSelected : [])
+        } else {
+            rowContent
+                .contextMenu {
+                    Button(action: onEdit) {
+                        XMMenuLabel("编辑", systemImage: "pencil")
+                    }
+                    Button(role: .destructive, action: onDelete) {
+                        Label("删除", systemImage: "trash")
+                    }
+                }
+                .xmMenuNeutralTint()
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("\(group.title)，\(group.subtitle)")
+        }
+    }
+
+    private var rowContent: some View {
         HStack(spacing: Spacing.base) {
             BookshelfGridGroupCoverView(
                 covers: group.representativeCovers,
@@ -203,23 +328,34 @@ private struct BookContributorManagementRow: View {
 
             Spacer(minLength: Spacing.compact)
 
-            Menu {
-                Button(action: onEdit) {
-                    XMMenuLabel("编辑", systemImage: "pencil")
+            if isSelectionMode {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(isSelected ? Color.primaryActionFill : Color.textHint)
+                    .frame(
+                        width: InteractionMetrics.minimumTouchTarget,
+                        height: InteractionMetrics.minimumTouchTarget
+                    )
+                    .accessibilityHidden(true)
+            } else {
+                Menu {
+                    Button(action: onEdit) {
+                        XMMenuLabel("编辑", systemImage: "pencil")
+                    }
+                    Button(role: .destructive, action: onDelete) {
+                        Label("删除", systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(AppTypography.bodyMedium)
+                        .foregroundStyle(Color.textSecondary)
+                        .frame(width: 36, height: 36)
+                        .xmMinimumHitTarget()
                 }
-                Button(role: .destructive, action: onDelete) {
-                    Label("删除", systemImage: "trash")
-                }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(AppTypography.bodyMedium)
-                    .foregroundStyle(Color.textSecondary)
-                    .frame(width: 36, height: 36)
-                    .xmMinimumHitTarget()
+                .disabled(isDisabled)
+                .xmMenuNeutralTint()
+                .accessibilityLabel("\(kind.itemTitle)操作")
             }
-            .disabled(isDisabled)
-            .xmMenuNeutralTint()
-            .accessibilityLabel("\(kind.itemTitle)操作")
         }
         .padding(Spacing.base)
         .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
@@ -227,17 +363,6 @@ private struct BookContributorManagementRow: View {
             RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
                 .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
         }
-        .contextMenu {
-            Button(action: onEdit) {
-                XMMenuLabel("编辑", systemImage: "pencil")
-            }
-            Button(role: .destructive, action: onDelete) {
-                Label("删除", systemImage: "trash")
-            }
-        }
-        .xmMenuNeutralTint()
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(group.title)，\(group.subtitle)")
     }
 }
 

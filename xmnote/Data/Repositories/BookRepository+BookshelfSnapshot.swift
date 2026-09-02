@@ -700,7 +700,7 @@ extension BookRepository {
             } else {
                 sourceBooks[book.payload.sourceId, default: []].append(book)
                 sourceTitles[book.payload.sourceId] = sourceName
-                sourceOrders[book.payload.sourceId] = book.sourceOrder
+                sourceOrders[book.payload.sourceId] = book.sourceBookshelfOrder
             }
         }
 

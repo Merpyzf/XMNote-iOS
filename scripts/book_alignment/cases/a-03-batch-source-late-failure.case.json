@@ -1,0 +1,238 @@
+{
+  "schemaVersion": 1,
+  "caseId": "a-03-batch-source-late-failure",
+  "title": "A-03 批量设置来源时的晚失败",
+  "status": "exact-current",
+  "baseline": {
+    "sha256": "${B0_SHA256}",
+    "userVersion": 47,
+    "roomIdentityHash": "4e076c66571412594ff567eae85b68fc",
+    "schemaFingerprint": "${SCHEMA_FINGERPRINT}"
+  },
+  "targetDatabase": {
+    "userVersion": 48,
+    "roomIdentityHash": "cda5a591da1f57aca266af36255e5df7",
+    "schemaFingerprint": "055724e3c2ec28094f771961e2df1cf807efc99ac26f87e9d7308377d9b8eab2"
+  },
+  "runtimeProfile": {
+    "sha256": "${RUNTIME_PROFILE_SHA256}",
+    "requiredSettings": [
+      "bookGroupingMode"
+    ]
+  },
+  "aliases": [
+    {
+      "name": "firstBook",
+      "entity": "book",
+      "description": "批量命令中先处理的有效书",
+      "requirements": [
+        "is_deleted=0",
+        "source_id=originalSource",
+        "id 小于 secondBook"
+      ],
+      "selector": "active-book"
+    },
+    {
+      "name": "secondBook",
+      "entity": "book",
+      "description": "注入来源更新失败的第二本有效书",
+      "requirements": [
+        "is_deleted=0",
+        "source_id=originalSource",
+        "id 大于 firstBook"
+      ],
+      "selector": "active-book"
+    },
+    {
+      "name": "originalSource",
+      "entity": "source",
+      "description": "两本书操作前共同的有效来源",
+      "requirements": [
+        "is_deleted=0",
+        "id!=targetSource"
+      ]
+    },
+    {
+      "name": "targetSource",
+      "entity": "source",
+      "description": "用户批量选择的新有效来源",
+      "requirements": [
+        "is_deleted=0",
+        "id!=originalSource"
+      ]
+    }
+  ],
+  "intent": {
+    "summary": "批量把两本书改为目标来源，在第二本 UPDATE 处注入 test-only 晚失败",
+    "selectionScope": "batch",
+    "confirmation": "required",
+    "outcome": "failed",
+    "repeatTrigger": "once",
+    "selectedAliases": [
+      "firstBook",
+      "secondBook"
+    ]
+  },
+  "adapters": {
+    "android": {
+      "entry": "书籍批量整理的来源选择入口",
+      "steps": [
+        {
+          "action": "打开页面并稳定读取",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "选择两本书和目标来源并安装第二本失败注入",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "触发确定性晚失败，验证本次业务命令完整回滚",
+          "targetAlias": "targetSource",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host force-stop .uitest 后以 resume 模式冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    },
+    "ios": {
+      "entry": "原生书籍编辑 accessory 的来源整理入口",
+      "steps": [
+        {
+          "action": "打开页面并稳定读取",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "选择两本书和目标来源并安装第二本失败注入",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "触发确定性晚失败，验证本次业务命令完整回滚",
+          "targetAlias": "targetSource",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host 终止 App 后以同一副本冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    }
+  },
+  "database": {
+    "allowedWrites": [],
+    "forbiddenWrites": [],
+    "platformInternalTables": [
+      {
+        "table": "grdb_migrations",
+        "platform": "ios",
+        "reason": "GRDB 平台内部迁移记录"
+      }
+    ],
+    "timeColumns": [],
+    "strictExceptions": []
+  },
+  "setup": {
+    "mode": "none"
+  },
+  "oracle": {
+    "currentOracle": "同一次批量来源命令要么全部提交并统一更新时间，要么全部保持原状。",
+    "desiredSemantics": "同一次批量来源命令要么全部提交并统一更新时间，要么全部保持原状。",
+    "semanticProjections": [
+      {
+        "name": "selected-book-sources",
+        "description": "把 source_id 规范化为逻辑来源别名后比较",
+        "sql": "SELECT id AS book_id, source_id FROM book WHERE id IN (:firstBook, :secondBook) ORDER BY id",
+        "mode": "ordered-rows",
+        "columns": [
+          {
+            "name": "book_id",
+            "aliasEntity": "book"
+          },
+          {
+            "name": "source_id",
+            "aliasEntity": "source"
+          }
+        ],
+        "parameters": {
+          "firstBook": {
+            "binding": "firstBook"
+          },
+          "secondBook": {
+            "binding": "secondBook"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": [
+            {
+              "book_id": "firstBook",
+              "source_id": "originalSource"
+            },
+            {
+              "book_id": "secondBook",
+              "source_id": "originalSource"
+            }
+          ],
+          "iosBefore": [
+            {
+              "book_id": "firstBook",
+              "source_id": "originalSource"
+            },
+            {
+              "book_id": "secondBook",
+              "source_id": "originalSource"
+            }
+          ],
+          "androidAfter": [
+            {
+              "book_id": "firstBook",
+              "source_id": "originalSource"
+            },
+            {
+              "book_id": "secondBook",
+              "source_id": "originalSource"
+            }
+          ],
+          "iosAfter": [
+            {
+              "book_id": "firstBook",
+              "source_id": "originalSource"
+            },
+            {
+              "book_id": "secondBook",
+              "source_id": "originalSource"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "lifecycle": {
+    "checkpoints": [
+      {
+        "stage": "S0",
+        "meaning": "不可变 B0"
+      },
+      {
+        "stage": "S1",
+        "meaning": "首次打开"
+      },
+      {
+        "stage": "S2",
+        "meaning": "提交前"
+      },
+      {
+        "stage": "S3",
+        "meaning": "晚失败后"
+      },
+      {
+        "stage": "S4",
+        "meaning": "独立进程冷启动后的稳定状态"
+      }
+    ],
+    "requireS3S4BusinessStable": true,
+    "requireRestart": true,
+    "restoreDirection": "none"
+  }
+}

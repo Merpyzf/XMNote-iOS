@@ -1,0 +1,317 @@
+{
+  "schemaVersion": 1,
+  "caseId": "a05.group-suspend-sort.late-failure",
+  "title": "A-05 组内 suspend 书籍排序晚失败",
+  "status": "exact-current",
+  "baseline": {
+    "sha256": "${B0_SHA256}",
+    "userVersion": 47,
+    "roomIdentityHash": "4e076c66571412594ff567eae85b68fc",
+    "schemaFingerprint": "${SCHEMA_FINGERPRINT}"
+  },
+  "targetDatabase": {
+    "userVersion": 48,
+    "roomIdentityHash": "cda5a591da1f57aca266af36255e5df7",
+    "schemaFingerprint": "055724e3c2ec28094f771961e2df1cf807efc99ac26f87e9d7308377d9b8eab2"
+  },
+  "runtimeProfile": {
+    "sha256": "${RUNTIME_PROFILE_SHA256}",
+    "requiredSettings": []
+  },
+  "aliases": [
+    {
+      "name": "targetGroup",
+      "entity": "group",
+      "description": "承载四本待排序书籍的有效分组",
+      "requirements": [
+        "is_deleted=0",
+        "S2 时包含四条有效 group_book 关系"
+      ]
+    },
+    {
+      "name": "prefixBookA",
+      "entity": "book",
+      "description": "第一条成功写入 book_order 的有效书",
+      "requirements": [
+        "is_deleted=0",
+        "S2 时 book_order=110",
+        "属于 targetGroup"
+      ]
+    },
+    {
+      "name": "prefixBookB",
+      "entity": "book",
+      "description": "第二条成功写入 book_order 的有效书",
+      "requirements": [
+        "is_deleted=0",
+        "S2 时 book_order=111",
+        "属于 targetGroup"
+      ]
+    },
+    {
+      "name": "failingBook",
+      "entity": "book",
+      "description": "第三条 book_order UPDATE 被 test-only trigger 中止的有效书",
+      "requirements": [
+        "is_deleted=0",
+        "S2 时 book_order=112",
+        "属于 targetGroup"
+      ]
+    },
+    {
+      "name": "suffixBook",
+      "entity": "book",
+      "description": "失败后未被循环处理的第四本有效书",
+      "requirements": [
+        "is_deleted=0",
+        "S2 时 book_order=113",
+        "属于 targetGroup"
+      ]
+    }
+  ],
+  "intent": {
+    "summary": "通过生产 BookRepository.updateBookListOrder 提交组内四本书的新顺序，并在第三项注入晚失败",
+    "selectionScope": "all-visible",
+    "confirmation": "immediate",
+    "outcome": "committed",
+    "repeatTrigger": "once",
+    "selectedAliases": [
+      "prefixBookA",
+      "prefixBookB",
+      "failingBook",
+      "suffixBook"
+    ]
+  },
+  "adapters": {
+    "android": {
+      "entry": "组内书籍拖拽排序的 suspend Repository owner",
+      "steps": [
+        {
+          "action": "打开隔离基准并稳定读取",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "准备四本组内书及第三项失败 trigger",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "触发确定性晚失败，验证本次业务命令完整回滚",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host force-stop、创建 resume marker 后冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    },
+    "ios": {
+      "entry": "原生组内书籍排序入口",
+      "steps": [
+        {
+          "action": "打开隔离基准并稳定读取",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "准备等价四本组内书及第三项失败注入",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "触发确定性晚失败，验证本次业务命令完整回滚",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host 终止 App 后以同一副本冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    }
+  },
+  "database": {
+    "allowedWrites": [],
+    "forbiddenWrites": [],
+    "platformInternalTables": [
+      {
+        "table": "grdb_migrations",
+        "platform": "ios",
+        "reason": "GRDB 平台内部迁移记录"
+      }
+    ],
+    "timeColumns": [],
+    "strictExceptions": []
+  },
+  "setup": {
+    "mode": "none"
+  },
+  "oracle": {
+    "currentOracle": "组内排序应在共同事务内写入；任一项失败时全量回滚并向调用层报告失败。",
+    "desiredSemantics": "组内排序应在共同事务内写入；任一项失败时全量回滚并向调用层报告失败。",
+    "semanticProjections": [
+      {
+        "name": "group-suspend-book-orders",
+        "description": "按固定目标序列比较四本书的最终顺序",
+        "sql": "SELECT id AS book_id, book_order FROM book WHERE id IN (:prefixBookA, :prefixBookB, :failingBook, :suffixBook) ORDER BY id",
+        "mode": "ordered-rows",
+        "columns": [
+          {
+            "name": "book_id",
+            "aliasEntity": "book"
+          },
+          {
+            "name": "book_order"
+          }
+        ],
+        "parameters": {
+          "prefixBookA": {
+            "binding": "prefixBookA"
+          },
+          "prefixBookB": {
+            "binding": "prefixBookB"
+          },
+          "failingBook": {
+            "binding": "failingBook"
+          },
+          "suffixBook": {
+            "binding": "suffixBook"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": [
+            {
+              "book_id": "prefixBookA",
+              "book_order": 110
+            },
+            {
+              "book_id": "prefixBookB",
+              "book_order": 111
+            },
+            {
+              "book_id": "failingBook",
+              "book_order": 112
+            },
+            {
+              "book_id": "suffixBook",
+              "book_order": 113
+            }
+          ],
+          "iosBefore": [
+            {
+              "book_id": "prefixBookA",
+              "book_order": 110
+            },
+            {
+              "book_id": "prefixBookB",
+              "book_order": 111
+            },
+            {
+              "book_id": "failingBook",
+              "book_order": 112
+            },
+            {
+              "book_id": "suffixBook",
+              "book_order": 113
+            }
+          ],
+          "androidAfter": [
+            {
+              "book_id": "prefixBookA",
+              "book_order": 110
+            },
+            {
+              "book_id": "prefixBookB",
+              "book_order": 111
+            },
+            {
+              "book_id": "failingBook",
+              "book_order": 112
+            },
+            {
+              "book_id": "suffixBook",
+              "book_order": 113
+            }
+          ],
+          "iosAfter": [
+            {
+              "book_id": "prefixBookA",
+              "book_order": 110
+            },
+            {
+              "book_id": "prefixBookB",
+              "book_order": 111
+            },
+            {
+              "book_id": "failingBook",
+              "book_order": 112
+            },
+            {
+              "book_id": "suffixBook",
+              "book_order": 113
+            }
+          ]
+        }
+      },
+      {
+        "name": "group-suspend-membership-count",
+        "description": "四本书与目标分组的有效关系数量保持不变",
+        "sql": "SELECT COUNT(*) AS relation_count FROM group_book WHERE group_id = :targetGroup AND book_id IN (:prefixBookA, :prefixBookB, :failingBook, :suffixBook) AND is_deleted = 0",
+        "mode": "scalar",
+        "columns": [
+          {
+            "name": "relation_count"
+          }
+        ],
+        "parameters": {
+          "targetGroup": {
+            "binding": "targetGroup"
+          },
+          "prefixBookA": {
+            "binding": "prefixBookA"
+          },
+          "prefixBookB": {
+            "binding": "prefixBookB"
+          },
+          "failingBook": {
+            "binding": "failingBook"
+          },
+          "suffixBook": {
+            "binding": "suffixBook"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": 4,
+          "iosBefore": 4,
+          "androidAfter": 4,
+          "iosAfter": 4
+        }
+      }
+    ]
+  },
+  "lifecycle": {
+    "checkpoints": [
+      {
+        "stage": "S0",
+        "meaning": "不可变 B0"
+      },
+      {
+        "stage": "S1",
+        "meaning": "首次打开"
+      },
+      {
+        "stage": "S2",
+        "meaning": "组内排序提交前"
+      },
+      {
+        "stage": "S3",
+        "meaning": "第三项失败且 Repository 吞错后"
+      },
+      {
+        "stage": "S4",
+        "meaning": "独立进程冷启动后的稳定状态"
+      }
+    ],
+    "requireS3S4BusinessStable": true,
+    "requireRestart": true,
+    "restoreDirection": "none"
+  }
+}

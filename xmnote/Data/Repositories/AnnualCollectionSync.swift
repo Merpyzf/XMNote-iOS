@@ -3,7 +3,7 @@ import GRDB
 
 /**
  * [INPUT]: 依赖 GRDB Database、阅读状态历史、book 快照、collection 与 collection_book 表
- * [OUTPUT]: 对外提供 AnnualCollectionSync（读完年份重算、年度书单创建、年度书单关系增删）
+ * [OUTPUT]: 对外提供 AnnualCollectionSync（读完年份重算、年度书单创建、年度书单关系物理增删）
  * [POS]: Data 层年度书单同步协作者，封装阅读状态变更后的归档关系副作用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -16,7 +16,7 @@ nonisolated enum AnnualCollectionSync {
         let readDoneYears = try fetchCompletedReadDoneYears(db, bookID: bookID)
 
         for collection in linkedCollections where !readDoneYears.contains(collection.year) {
-            try softDeleteAnnualRelation(db, bookID: bookID, collectionID: collection.id)
+            try hardDeleteAnnualRelation(db, bookID: bookID, collectionID: collection.id)
         }
 
         let linkedYears = Set(linkedCollections.map(\.year))
@@ -99,8 +99,8 @@ nonisolated enum AnnualCollectionSync {
         return timestamps
     }
 
-    /// 软删除指定书籍与指定年度书单的关系，保持 Android 状态变更路径不更新时间戳的语义。
-    static func softDeleteAnnualRelation(
+    /// 物理删除指定书籍与指定年度书单的关系，不产生同步墓碑。
+    static func hardDeleteAnnualRelation(
         _ db: Database,
         bookID: Int64,
         collectionID: Int64
@@ -108,14 +108,11 @@ nonisolated enum AnnualCollectionSync {
         // SQL 目的：移除书籍不再属于的年度书单关系。
         // 涉及表：collection_book。
         // 关键过滤：book_id 与 collection_id 精确匹配，且关系仍有效。
-        // 时间字段：Android deleteByBookAndCollectionId 不更新 updated_date，iOS 保持一致。
-        // 副作用用途：当读完年份变化或取消读完时，年度书单不再显示该书。
+        // 时间字段：物理删除不写 updated_date；副作用用途：当读完年份变化或取消读完时，年度书单不再显示该书且不遗留 tombstone。
         let sql = """
-            UPDATE collection_book
-            SET is_deleted = 1
+            DELETE FROM collection_book
             WHERE book_id = ?
               AND collection_id = ?
-              AND is_deleted = 0
             """
         try db.execute(sql: sql, arguments: [bookID, collectionID])
     }
@@ -129,19 +126,22 @@ nonisolated enum AnnualCollectionSync {
         let collectionID = try fetchAnnualCollectionID(db, year: year) ?? createAnnualCollection(db, year: year)
         guard try !hasCollectionBookRelation(db, bookID: bookID, collectionID: collectionID) else { return }
 
-        let now = Int64(Date().timeIntervalSince1970 * 1000)
-        var relation = CollectionBookRecord(
-            id: nil,
-            collectionId: collectionID,
-            bookId: bookID,
-            recommend: "",
-            order: 0,
-            createdDate: now,
-            updatedDate: 0,
-            lastSyncDate: 0,
-            isDeleted: 0
+        // SQL 目的：重新建立年度关系前物理清理旧备份遗留的同键 tombstone，避免重试形成重复业务关系。
+        // 涉及表：collection_book。
+        // 关键过滤：book_id 与 collection_id 精确匹配；有效关系已由上方 guard 排除。
+        // 时间字段：物理删除不写时间字段；副作用用途：让后续插入成为该业务键唯一现存关系。
+        try db.execute(
+            sql: "DELETE FROM collection_book WHERE book_id = ? AND collection_id = ?",
+            arguments: [bookID, collectionID]
         )
-        try relation.insert(db)
+
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        try BookRelationWriter.insertCollectionBook(
+            db,
+            collectionID: collectionID,
+            bookID: bookID,
+            createdAt: now
+        )
     }
 
     /// 查询指定年份的有效年度书单 ID。

@@ -1,0 +1,305 @@
+{
+  "schemaVersion": 1,
+  "caseId": "a-09-soft-vs-hard-delete",
+  "title": "A-09 关联书籍及三类关系的事务物理删除",
+  "status": "exact-current",
+  "baseline": {
+    "sha256": "${B0_SHA256}",
+    "userVersion": 47,
+    "roomIdentityHash": "4e076c66571412594ff567eae85b68fc",
+    "schemaFingerprint": "${SCHEMA_FINGERPRINT}"
+  },
+  "targetDatabase": {
+    "userVersion": 48,
+    "roomIdentityHash": "cda5a591da1f57aca266af36255e5df7",
+    "schemaFingerprint": "055724e3c2ec28094f771961e2df1cf807efc99ac26f87e9d7308377d9b8eab2"
+  },
+  "runtimeProfile": {
+    "sha256": "${RUNTIME_PROFILE_SHA256}",
+    "requiredSettings": []
+  },
+  "aliases": [
+    {
+      "name": "relatedBook",
+      "entity": "book",
+      "description": "同时具有分组、标签和书单关系的有效普通书",
+      "requirements": [
+        "id!=0",
+        "is_deleted=0",
+        "不是引用占位书",
+        "S2 时三类关系各有一条有效记录"
+      ],
+      "selector": "active-book"
+    },
+    {
+      "name": "owningGroup",
+      "entity": "group",
+      "description": "通过一条有效 group_book 关联 relatedBook 的分组",
+      "requirements": [
+        "is_deleted=0",
+        "与 relatedBook 有且仅有一条目标关系"
+      ]
+    },
+    {
+      "name": "attachedTag",
+      "entity": "tag",
+      "description": "通过一条有效 tag_book 关联 relatedBook 的标签",
+      "requirements": [
+        "is_deleted=0",
+        "与 relatedBook 有且仅有一条目标关系"
+      ]
+    },
+    {
+      "name": "containingCollection",
+      "entity": "collection",
+      "description": "通过一条有效 collection_book 关联 relatedBook 的手动书单",
+      "requirements": [
+        "is_deleted=0",
+        "is_annual=0",
+        "与 relatedBook 有且仅有一条目标关系"
+      ]
+    }
+  ],
+  "intent": {
+    "summary": "确认删除一条预置 group_book、tag_book、collection_book 三类有效关系的普通书",
+    "selectionScope": "single",
+    "confirmation": "destructive-required",
+    "outcome": "committed",
+    "repeatTrigger": "single-commit",
+    "selectedAliases": [
+      "relatedBook"
+    ]
+  },
+  "adapters": {
+    "android": {
+      "entry": "书籍列表单本删除入口",
+      "steps": [
+        {
+          "action": "打开页面并稳定读取",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "选择 relatedBook 并确认三类关系均有效",
+          "targetAlias": "relatedBook",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "确认删除并由生产 deleteBook 事务提交",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host force-stop、创建 resume marker 后冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    },
+    "ios": {
+      "entry": "原生书籍列表编辑 accessory 的删除入口",
+      "steps": [
+        {
+          "action": "打开页面并稳定读取",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "选择 relatedBook 并确认三类关系均有效",
+          "targetAlias": "relatedBook",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "确认事务内物理删除书籍及三类关系",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host 终止 App 后以同一副本冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    }
+  },
+  "database": {
+    "allowedWrites": [
+      {
+        "table": "book",
+        "operations": [
+          "delete"
+        ],
+        "platforms": [
+          "android",
+          "ios"
+        ],
+        "reason": "两端事务内物理删除普通书主记录"
+      },
+      {
+        "table": "group_book",
+        "operations": [
+          "delete"
+        ],
+        "platforms": [
+          "android",
+          "ios"
+        ],
+        "reason": "两端在同一事务物理清理分组关系"
+      },
+      {
+        "table": "tag_book",
+        "operations": [
+          "delete"
+        ],
+        "platforms": [
+          "android",
+          "ios"
+        ],
+        "reason": "两端在同一事务物理清理标签关系"
+      },
+      {
+        "table": "collection_book",
+        "operations": [
+          "delete"
+        ],
+        "platforms": [
+          "android",
+          "ios"
+        ],
+        "reason": "两端在同一事务物理清理书单关系"
+      }
+    ],
+    "forbiddenWrites": [],
+    "platformInternalTables": [
+      {
+        "table": "grdb_migrations",
+        "platform": "ios",
+        "reason": "GRDB 平台内部迁移记录"
+      }
+    ],
+    "timeColumns": [],
+    "strictExceptions": []
+  },
+  "setup": {
+    "mode": "none"
+  },
+  "oracle": {
+    "currentOracle": "两端在同一事务中物理删除普通书及其 group_book、tag_book、collection_book 关系，最终四类目标行均不存在。",
+    "desiredSemantics": "保持两端事务内物理删除；远端删除事件由独立协议定义，不在本轮评估。",
+    "semanticProjections": [
+      {
+        "name": "physical-book-row-count",
+        "description": "不使用删除过滤，比较主记录是否仍存在",
+        "sql": "SELECT COUNT(*) AS row_count FROM book WHERE id = :relatedBook",
+        "mode": "scalar",
+        "columns": [
+          {
+            "name": "row_count"
+          }
+        ],
+        "parameters": {
+          "relatedBook": {
+            "binding": "relatedBook"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": 1,
+          "iosBefore": 1,
+          "androidAfter": 0,
+          "iosAfter": 0
+        }
+      },
+      {
+        "name": "active-book-row-count",
+        "description": "按有效书读取语义比较",
+        "sql": "SELECT COUNT(*) AS active_count FROM book WHERE id = :relatedBook AND is_deleted = 0",
+        "mode": "scalar",
+        "columns": [
+          {
+            "name": "active_count"
+          }
+        ],
+        "parameters": {
+          "relatedBook": {
+            "binding": "relatedBook"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": 1,
+          "iosBefore": 1,
+          "androidAfter": 0,
+          "iosAfter": 0
+        }
+      },
+      {
+        "name": "physical-relation-row-count",
+        "description": "三张关系表中仍存在的物理行总数",
+        "sql": "SELECT (SELECT COUNT(*) FROM group_book WHERE book_id = :relatedBook) + (SELECT COUNT(*) FROM tag_book WHERE book_id = :relatedBook) + (SELECT COUNT(*) FROM collection_book WHERE book_id = :relatedBook) AS row_count",
+        "mode": "scalar",
+        "columns": [
+          {
+            "name": "row_count"
+          }
+        ],
+        "parameters": {
+          "relatedBook": {
+            "binding": "relatedBook"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": 3,
+          "iosBefore": 3,
+          "androidAfter": 0,
+          "iosAfter": 0
+        }
+      },
+      {
+        "name": "active-relation-row-count",
+        "description": "三张关系表中的有效关系总数",
+        "sql": "SELECT (SELECT COUNT(*) FROM group_book WHERE book_id = :relatedBook AND is_deleted = 0) + (SELECT COUNT(*) FROM tag_book WHERE book_id = :relatedBook AND is_deleted = 0) + (SELECT COUNT(*) FROM collection_book WHERE book_id = :relatedBook AND is_deleted = 0) AS active_count",
+        "mode": "scalar",
+        "columns": [
+          {
+            "name": "active_count"
+          }
+        ],
+        "parameters": {
+          "relatedBook": {
+            "binding": "relatedBook"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": 3,
+          "iosBefore": 3,
+          "androidAfter": 0,
+          "iosAfter": 0
+        }
+      }
+    ]
+  },
+  "lifecycle": {
+    "checkpoints": [
+      {
+        "stage": "S0",
+        "meaning": "不可变 B0"
+      },
+      {
+        "stage": "S1",
+        "meaning": "首次打开"
+      },
+      {
+        "stage": "S2",
+        "meaning": "三类关系均有效的删除确认前"
+      },
+      {
+        "stage": "S3",
+        "meaning": "删除事务提交后"
+      },
+      {
+        "stage": "S4",
+        "meaning": "独立进程冷启动后的稳定状态"
+      }
+    ],
+    "requireS3S4BusinessStable": true,
+    "requireRestart": true,
+    "restoreDirection": "none"
+  }
+}

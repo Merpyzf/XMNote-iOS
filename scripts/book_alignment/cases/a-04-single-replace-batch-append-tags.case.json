@@ -1,0 +1,341 @@
+{
+  "schemaVersion": 1,
+  "caseId": "a-04-single-replace-batch-append-tags",
+  "title": "A-04 单本标签替换与批量标签追加的显式模式",
+  "status": "exact-current",
+  "baseline": {
+    "sha256": "${B0_SHA256}",
+    "userVersion": 47,
+    "roomIdentityHash": "4e076c66571412594ff567eae85b68fc",
+    "schemaFingerprint": "${SCHEMA_FINGERPRINT}"
+  },
+  "targetDatabase": {
+    "userVersion": 48,
+    "roomIdentityHash": "cda5a591da1f57aca266af36255e5df7",
+    "schemaFingerprint": "055724e3c2ec28094f771961e2df1cf807efc99ac26f87e9d7308377d9b8eab2"
+  },
+  "runtimeProfile": {
+    "sha256": "${RUNTIME_PROFILE_SHA256}",
+    "requiredSettings": [
+      "bookGroupingMode"
+    ]
+  },
+  "aliases": [
+    {
+      "name": "singleBook",
+      "entity": "book",
+      "description": "走单本标签替换分支的有效书",
+      "requirements": [
+        "is_deleted=0",
+        "仅有 singleExistingTag 这一条目标范围内有效关系"
+      ],
+      "selector": "active-book"
+    },
+    {
+      "name": "batchBookA",
+      "entity": "book",
+      "description": "走批量标签追加分支的第一本有效书",
+      "requirements": [
+        "is_deleted=0",
+        "已有 batchExistingTag"
+      ],
+      "selector": "active-book"
+    },
+    {
+      "name": "batchBookB",
+      "entity": "book",
+      "description": "走批量标签追加分支的第二本有效书",
+      "requirements": [
+        "is_deleted=0",
+        "已有 batchExistingTag"
+      ],
+      "selector": "active-book"
+    },
+    {
+      "name": "singleExistingTag",
+      "entity": "tag",
+      "description": "单本操作前已有的有效标签",
+      "requirements": [
+        "is_deleted=0",
+        "id!=selectedTag"
+      ]
+    },
+    {
+      "name": "batchExistingTag",
+      "entity": "tag",
+      "description": "两本批量目标操作前共同已有的有效标签",
+      "requirements": [
+        "is_deleted=0",
+        "id!=selectedTag"
+      ]
+    },
+    {
+      "name": "selectedTag",
+      "entity": "tag",
+      "description": "本次单本与批量操作共同选择的新标签",
+      "requirements": [
+        "is_deleted=0",
+        "操作前与三本书均无有效关系"
+      ]
+    }
+  ],
+  "intent": {
+    "summary": "先从单本入口以 REPLACE 模式设置 selectedTag，再从批量入口以 ADD 模式追加同一标签",
+    "selectionScope": "batch",
+    "confirmation": "required",
+    "outcome": "committed",
+    "repeatTrigger": "once",
+    "selectedAliases": [
+      "singleBook",
+      "batchBookA",
+      "batchBookB"
+    ]
+  },
+  "adapters": {
+    "android": {
+      "entry": "单本与批量整理的标签选择入口",
+      "steps": [
+        {
+          "action": "打开页面并稳定读取",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "确认三本书的既有标签关系",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "依次提交单本设置和多本设置",
+          "targetAlias": "selectedTag",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host force-stop .uitest 后以 resume 模式冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    },
+    "ios": {
+      "entry": "原生编辑 accessory 的标签整理入口",
+      "steps": [
+        {
+          "action": "打开页面并稳定读取",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "确认三本书的既有标签关系",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "依次提交单本设置和多本设置",
+          "targetAlias": "selectedTag",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host 终止 App 后以同一副本冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    }
+  },
+  "database": {
+    "allowedWrites": [
+      {
+        "table": "tag_book",
+        "operations": [
+          "insert",
+          "delete"
+        ],
+        "platforms": [
+          "android",
+          "ios"
+        ],
+        "reason": "单本 REPLACE 物理移除旧关系并新增目标关系；批量 ADD 仅新增缺失关系"
+      }
+    ],
+    "forbiddenWrites": [
+      {
+        "table": "tag",
+        "operations": [
+          "insert",
+          "update",
+          "delete"
+        ],
+        "columns": [
+          "*"
+        ],
+        "platforms": [
+          "android",
+          "ios"
+        ],
+        "reason": "选择既有标签不得修改标签实体"
+      }
+    ],
+    "platformInternalTables": [
+      {
+        "table": "grdb_migrations",
+        "platform": "ios",
+        "reason": "GRDB 平台内部迁移记录"
+      }
+    ],
+    "timeColumns": [
+      {
+        "table": "tag_book",
+        "column": "created_date",
+        "unit": "epoch-millis",
+        "monotonic": true,
+        "allowZeroOnInsert": false,
+        "requireOperationWindow": true,
+        "toleranceMillis": 1000,
+        "reason": "新增标签关系创建时间"
+      }
+    ],
+    "strictExceptions": []
+  },
+  "setup": {
+    "mode": "none"
+  },
+  "oracle": {
+    "currentOracle": "标签命令由用户入口显式指定模式：单本编辑使用 REPLACE，批量整理使用 ADD；模式不再由去重前的书籍数量推断，两端均物理移除被替换关系且不产生重复关系。",
+    "desiredSemantics": "标签命令由用户入口显式指定模式：单本编辑使用 REPLACE，批量整理使用 ADD；模式不再由去重前的书籍数量推断，两端均物理移除被替换关系且不产生重复关系。",
+    "semanticProjections": [
+      {
+        "name": "active-tag-relations",
+        "description": "比较三本书的有效标签关系图",
+        "sql": "SELECT book_id, tag_id FROM tag_book WHERE book_id IN (:singleBook, :batchBookA, :batchBookB) AND tag_id IN (:singleExistingTag, :batchExistingTag, :selectedTag) AND is_deleted = 0 ORDER BY book_id, tag_id",
+        "mode": "ordered-rows",
+        "columns": [
+          {
+            "name": "book_id",
+            "aliasEntity": "book"
+          },
+          {
+            "name": "tag_id",
+            "aliasEntity": "tag"
+          }
+        ],
+        "parameters": {
+          "singleBook": {
+            "binding": "singleBook"
+          },
+          "batchBookA": {
+            "binding": "batchBookA"
+          },
+          "batchBookB": {
+            "binding": "batchBookB"
+          },
+          "singleExistingTag": {
+            "binding": "singleExistingTag"
+          },
+          "batchExistingTag": {
+            "binding": "batchExistingTag"
+          },
+          "selectedTag": {
+            "binding": "selectedTag"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": [
+            {
+              "book_id": "singleBook",
+              "tag_id": "singleExistingTag"
+            },
+            {
+              "book_id": "batchBookA",
+              "tag_id": "batchExistingTag"
+            },
+            {
+              "book_id": "batchBookB",
+              "tag_id": "batchExistingTag"
+            }
+          ],
+          "iosBefore": [
+            {
+              "book_id": "singleBook",
+              "tag_id": "singleExistingTag"
+            },
+            {
+              "book_id": "batchBookA",
+              "tag_id": "batchExistingTag"
+            },
+            {
+              "book_id": "batchBookB",
+              "tag_id": "batchExistingTag"
+            }
+          ],
+          "androidAfter": [
+            {
+              "book_id": "singleBook",
+              "tag_id": "selectedTag"
+            },
+            {
+              "book_id": "batchBookA",
+              "tag_id": "batchExistingTag"
+            },
+            {
+              "book_id": "batchBookA",
+              "tag_id": "selectedTag"
+            },
+            {
+              "book_id": "batchBookB",
+              "tag_id": "batchExistingTag"
+            },
+            {
+              "book_id": "batchBookB",
+              "tag_id": "selectedTag"
+            }
+          ],
+          "iosAfter": [
+            {
+              "book_id": "singleBook",
+              "tag_id": "selectedTag"
+            },
+            {
+              "book_id": "batchBookA",
+              "tag_id": "batchExistingTag"
+            },
+            {
+              "book_id": "batchBookA",
+              "tag_id": "selectedTag"
+            },
+            {
+              "book_id": "batchBookB",
+              "tag_id": "batchExistingTag"
+            },
+            {
+              "book_id": "batchBookB",
+              "tag_id": "selectedTag"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "lifecycle": {
+    "checkpoints": [
+      {
+        "stage": "S0",
+        "meaning": "不可变 B0"
+      },
+      {
+        "stage": "S1",
+        "meaning": "首次打开"
+      },
+      {
+        "stage": "S2",
+        "meaning": "两次标签命令前"
+      },
+      {
+        "stage": "S3",
+        "meaning": "两次提交后"
+      },
+      {
+        "stage": "S4",
+        "meaning": "独立进程冷启动后的稳定状态"
+      }
+    ],
+    "requireS3S4BusinessStable": true,
+    "requireRestart": true,
+    "restoreDirection": "none"
+  }
+}

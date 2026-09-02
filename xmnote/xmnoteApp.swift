@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 SwiftUI App/WindowGroup 生命周期、GRDB Database、RepositoryContainer、ReadingTimerCoordinator、AppState、桌面网页会话、AliyunpanSDK 与 scene 级外部路由
- * [OUTPUT]: 对外提供 xmnoteApp 与 AppSceneRoot，原子发布应用运行时、注入全轴回弹，并为每个 window 隔离 SceneStateStore、书单导入和阅读计时深链
+ * [OUTPUT]: 对外提供 xmnoteApp 与 AppSceneRoot，原子发布应用运行时、注入全轴回弹，并为每个 window 隔离 SceneStateStore、书单导入、阅读计时深链与 DEBUG 对齐数据库/场景/自动回放路径
  * [POS]: 应用启动与多 scene 编排层；应用服务保持全局，导航恢复及外部页面请求下沉到各自场景
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -89,6 +89,14 @@ struct xmnoteApp: App {
                         let timerCoordinator = ReadingTimerCoordinator(
                             repository: repositoryContainer.readingTimerRepository
                         )
+                        #if DEBUG
+                        if try await BookAlignmentDebugReplayCoordinator.runIfRequested(
+                            database: database,
+                            repository: repositoryContainer.bookRepository
+                        ) {
+                            return
+                        }
+                        #endif
                         desktopWebSessionCoordinator.configure(
                             database: database,
                             repositories: repositoryContainer
@@ -276,9 +284,19 @@ final class BookCollectionImportRouter {
 }
 
 #if DEBUG
-/// DEBUG 测试启动配置，使用指定 V44 快照或内存夹具隔离 Web API 一致性验证与 UI Test。
+/// DEBUG 对齐启动缺少隔离数据库时的 fail-closed 错误，阻止测试参数落到日常数据库。
+enum UITestLaunchConfigurationError: Error {
+    case missingBookAlignmentDatabase
+}
+
+/// DEBUG 测试启动配置，使用指定数据库副本或内存夹具隔离对齐验证与 UI Test。
 enum UITestLaunchConfiguration {
+    nonisolated static let bookAlignmentDatabasePathEnvironment = "XMNOTE_BOOK_ALIGNMENT_DATABASE_PATH"
     nonisolated static let webAPIParityDatabasePathEnvironment = "XMNOTE_WEB_PARITY_DATABASE_PATH"
+    nonisolated static let bookAlignmentSceneArgument = "-XMNoteBookAlignmentScene"
+    nonisolated static let defaultBookshelfAlignmentScene = "bookshelf.default"
+    nonisolated static let bookAlignmentReplayCaseArgument = "-XMNoteBookAlignmentReplayCase"
+    nonisolated static let bookAlignmentReplayModeArgument = "-XMNoteBookAlignmentReplayMode"
     nonisolated static let seedBookListArgument = "-XMNoteUITestSeedBookshelfBookList"
     nonisolated static let openDefaultBookshelfArgument = "-XMNoteUITestOpenDefaultBookshelf"
     nonisolated static let openWantReadListArgument = "-XMNoteUITestOpenWantReadList"
@@ -291,12 +309,13 @@ enum UITestLaunchConfiguration {
     nonisolated static let annualCollectionID: Int64 = 9_102
     nonisolated static let annualFinishedBookID: Int64 = 4_001
 
-    /// 优先打开调用方提供的隔离 V44 快照，否则按 UI Test 参数创建夹具；返回 nil 时保持生产数据库路径。
+    /// 优先打开调用方提供的书籍对齐或 Web 一致性隔离快照，否则按 UI Test 参数创建夹具；返回 nil 时保持生产数据库路径。
     nonisolated static func makeDatabaseIfNeeded() throws -> AppDatabase? {
-        if let databasePath = ProcessInfo.processInfo.environment[webAPIParityDatabasePathEnvironment]?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-           !databasePath.isEmpty {
+        if let databasePath = resolvedDatabasePath(in: ProcessInfo.processInfo.environment) {
             return try AppDatabase(path: databasePath)
+        }
+        if isBookAlignmentSceneRequested(in: ProcessInfo.processInfo.arguments) {
+            throw UITestLaunchConfigurationError.missingBookAlignmentDatabase
         }
         guard shouldSeedBookshelfFixture else {
             return nil
@@ -306,9 +325,53 @@ enum UITestLaunchConfiguration {
         return database
     }
 
+    /// 解析 DEBUG 隔离数据库路径；书籍对齐专用变量优先，旧 Web 一致性变量继续兼容。
+    nonisolated static func resolvedDatabasePath(in environment: [String: String]) -> String? {
+        for key in [bookAlignmentDatabasePathEnvironment, webAPIParityDatabasePathEnvironment] {
+            let path = environment[key]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !path.isEmpty {
+                return path
+            }
+        }
+        return nil
+    }
+
     /// 一级书架 UI Test 直达书籍首页，不依赖用户真实 Tab 恢复状态。
     nonisolated static var shouldOpenDefaultBookshelf: Bool {
-        ProcessInfo.processInfo.arguments.contains(openDefaultBookshelfArgument)
+        let processInfo = ProcessInfo.processInfo
+        if processInfo.arguments.contains(openDefaultBookshelfArgument) {
+            return true
+        }
+        guard resolvedDatabasePath(in: processInfo.environment) != nil else { return false }
+        return argumentValue(after: bookAlignmentSceneArgument, in: processInfo.arguments)
+            == defaultBookshelfAlignmentScene
+    }
+
+    /// 读取成对 DEBUG 启动参数的值；缺值或空值均视为未请求，避免误用生产导航状态。
+    nonisolated static func argumentValue(after key: String, in arguments: [String]) -> String? {
+        guard let index = arguments.firstIndex(of: key), arguments.indices.contains(index + 1) else {
+            return nil
+        }
+        let value = arguments[index + 1].trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
+    }
+
+    /// 判断是否出现书籍对齐专用场景参数；调用方必须同时提供隔离数据库路径。
+    nonisolated static func isBookAlignmentSceneRequested(in arguments: [String]) -> Bool {
+        arguments.contains(bookAlignmentSceneArgument)
+    }
+
+    /// 解析书籍对齐自动回放请求；仅返回成对出现的 case/mode，具体 allowlist 由执行器收口。
+    nonisolated static func bookAlignmentReplayRequest(
+        in arguments: [String]
+    ) -> (caseID: String, mode: String)? {
+        guard
+            let caseID = argumentValue(after: bookAlignmentReplayCaseArgument, in: arguments),
+            let mode = argumentValue(after: bookAlignmentReplayModeArgument, in: arguments)
+        else {
+            return nil
+        }
+        return (caseID, mode)
     }
 
     /// 导航 UI Test 首次启动时忽略旧 SceneStorage，随后仍允许同一测试重启并验证新快照恢复。
@@ -444,6 +507,20 @@ enum UITestLaunchConfiguration {
         manual.updatedDate = now
         try manual.insert(db)
 
+        for offset in 0..<12 {
+            let order = Int64(offset + 2)
+            var additionalManual = CollectionRecord()
+            additionalManual.id = 9_110 + Int64(offset)
+            additionalManual.title = String(format: "UI测试手动书单 %02lld", order)
+            additionalManual.desc = "用于验证网格与排序列表切换时保持当前书单"
+            additionalManual.order = order
+            additionalManual.isAnnual = 0
+            additionalManual.year = 0
+            additionalManual.createdDate = now
+            additionalManual.updatedDate = now
+            try additionalManual.insert(db)
+        }
+
         var annual = CollectionRecord()
         annual.id = annualCollectionID
         annual.title = "2026 年阅读书单"
@@ -496,5 +573,153 @@ enum UITestLaunchConfiguration {
         book.updatedDate = now
         return book
     }
+}
+
+/// DEBUG-only 数据库回放执行器，只允许在隔离 S2 副本上执行已审计的生产 Repository 命令。
+@MainActor
+enum BookAlignmentDebugReplayCoordinator {
+    private static let supportedCaseID = "a-09-soft-vs-hard-delete"
+    private static let prepareMode = "prepare"
+    private static let operationMode = "operation"
+    private static let verifyMode = "verify"
+    nonisolated private static let targetBookID: Int64 = 9_090_001
+
+    /// 在主线程启动任务内串行执行或验证回放；取消及任一数据库错误均阻断 PASS marker，避免 host 读取中间态。
+    static func runIfRequested(
+        database: AppDatabase,
+        repository: any BookRepositoryProtocol
+    ) async throws -> Bool {
+        let arguments = ProcessInfo.processInfo.arguments
+        let hasReplayArgument = arguments.contains(
+            UITestLaunchConfiguration.bookAlignmentReplayCaseArgument
+        ) || arguments.contains(
+            UITestLaunchConfiguration.bookAlignmentReplayModeArgument
+        )
+        guard hasReplayArgument else {
+            return false
+        }
+        guard let request = UITestLaunchConfiguration.bookAlignmentReplayRequest(
+            in: arguments
+        ) else {
+            throw BookAlignmentDebugReplayError.invalidRequest
+        }
+        guard
+            request.caseID == supportedCaseID,
+            request.mode == prepareMode
+                || request.mode == operationMode
+                || request.mode == verifyMode,
+            let configuredPath = UITestLaunchConfiguration.resolvedDatabasePath(
+                in: ProcessInfo.processInfo.environment
+            ),
+            URL(fileURLWithPath: configuredPath).standardizedFileURL.path
+                == URL(fileURLWithPath: database.databasePath).standardizedFileURL.path
+        else {
+            throw BookAlignmentDebugReplayError.invalidRequest
+        }
+
+        let markerURL = markerURL(
+            databasePath: database.databasePath,
+            mode: request.mode
+        )
+        guard !FileManager.default.fileExists(atPath: markerURL.path) else {
+            throw BookAlignmentDebugReplayError.markerAlreadyExists
+        }
+
+        do {
+            try Task.checkCancellation()
+            switch request.mode {
+            case prepareMode:
+                try await requireTargetGraph(database: database, expectedPhysicalRowCount: 4)
+            case operationMode:
+                try await requireTargetGraph(database: database, expectedPhysicalRowCount: 4)
+                try await repository.deleteBooks([targetBookID])
+                try await requireTargetGraph(database: database, expectedPhysicalRowCount: 0)
+            case verifyMode:
+                try await requireTargetGraph(database: database, expectedPhysicalRowCount: 0)
+            default:
+                throw BookAlignmentDebugReplayError.invalidRequest
+            }
+            try database.checkpoint()
+            try writeMarker(
+                at: markerURL,
+                caseID: request.caseID,
+                mode: request.mode,
+                result: "PASS"
+            )
+        } catch {
+            try? writeMarker(
+                at: markerURL,
+                caseID: request.caseID,
+                mode: request.mode,
+                result: "FAIL"
+            )
+            throw error
+        }
+        return true
+    }
+
+    /// 只读取公开 test-only 主键对应的物理行计数，证明硬删除结果；不读取或输出真实书名与业务 ID。
+    private static func requireTargetGraph(
+        database: AppDatabase,
+        expectedPhysicalRowCount: Int
+    ) async throws {
+        let physicalRowCount = try await database.dbPool.read { db in
+            // SQL 目的：统计 A-09 确定性夹具书及三类关系的物理行，区分硬删除与 tombstone。
+            // 涉及表：book、group_book、tag_book、collection_book；关键过滤：仅匹配公开 test-only book_id。
+            // 时间字段：不参与；返回用途：操作前必须为四行，操作/冷启动后必须为零行。
+            try Int.fetchOne(
+                db,
+                sql: """
+                    SELECT
+                        (SELECT COUNT(*) FROM book WHERE id = ?) +
+                        (SELECT COUNT(*) FROM group_book WHERE book_id = ?) +
+                        (SELECT COUNT(*) FROM tag_book WHERE book_id = ?) +
+                        (SELECT COUNT(*) FROM collection_book WHERE book_id = ?)
+                    """,
+                arguments: [targetBookID, targetBookID, targetBookID, targetBookID]
+            ) ?? -1
+        }
+        guard physicalRowCount == expectedPhysicalRowCount else {
+            throw BookAlignmentDebugReplayError.unexpectedTargetGraph
+        }
+    }
+
+    /// 将结果 marker 固定写在隔离数据库同目录，host 不可通过启动参数指定任意写入路径。
+    private static func markerURL(databasePath: String, mode: String) -> URL {
+        URL(fileURLWithPath: databasePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("replay-\(mode).json", isDirectory: false)
+    }
+
+    /// 原子发布不含业务字段的回放结果；已有 marker 在调用前被拒绝，避免重复启动伪装为新证据。
+    private static func writeMarker(
+        at url: URL,
+        caseID: String,
+        mode: String,
+        result: String
+    ) throws {
+        let payload: [String: Any] = [
+            "schemaVersion": 1,
+            "caseId": caseID,
+            "mode": mode,
+            "result": result
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+        let temporaryURL = url
+            .deletingLastPathComponent()
+            .appendingPathComponent(".replay-marker-\(UUID().uuidString).tmp", isDirectory: false)
+        defer {
+            try? FileManager.default.removeItem(at: temporaryURL)
+        }
+        try data.write(to: temporaryURL, options: .atomic)
+        try FileManager.default.moveItem(at: temporaryURL, to: url)
+    }
+}
+
+/// DEBUG 自动回放只暴露结构化错误类型，避免 marker 或日志携带私有书籍字段。
+enum BookAlignmentDebugReplayError: Error {
+    case invalidRequest
+    case markerAlreadyExists
+    case unexpectedTargetGraph
 }
 #endif

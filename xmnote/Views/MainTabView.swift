@@ -8,8 +8,8 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖可选 AppRuntimeContext、已原子恢复的 AppSceneSnapshot、scene 级 AppNavigationCoordinator、阅读日历、外部导入/网页动作与各业务目的页
- * [OUTPUT]: 对外提供 MainTabView（五个类型安全浏览栈、首帧 Tab 稳定显现、回顾同构启动壳层、带根级退出控件的单一全屏任务栈、恢复表面门控、阅读计时 UIKit Zoom、底部计时条与退场后一次性回流）
+ * [INPUT]: 依赖可选 AppRuntimeContext、已原子恢复的 AppSceneSnapshot、scene 级 AppNavigationCoordinator、书架整理 accessory 协调器、阅读日历、外部导入/网页动作与各业务目的页
+ * [OUTPUT]: 对外提供 MainTabView（五个类型安全浏览栈、首帧 Tab 稳定显现、回顾同构启动壳层、单一全屏任务栈、恢复表面门控、书架整理稳定宿主/阅读计时交叉淡化底部 accessory 与退场后一次性回流）
  * [POS]: 应用根导航宿主，只消费协调器状态并使用系统 push/cover；恢复目的页提交前不暴露底层根页
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -161,6 +161,7 @@ struct MainTabView: View {
     @State private var pendingReadingTimerDismissal: ReadingTimerPendingDismissal?
     @State private var retainedReadingTimerTransitionSource: ReadingTimerSession?
     @State private var readingTimerZoomOwner = ReadingTimerZoomPresentationOwner()
+    @State private var bookshelfEditingAccessoryCoordinator = BookshelfEditingAccessoryCoordinator()
     @State private var pendingReadingTimerDeepLinkRequest: ReadingTimerPresentationRequest?
     @State private var searchQuery = ""
     @State private var searchSubmitRequest: GlobalSearchSubmitRequest?
@@ -443,9 +444,15 @@ struct MainTabView: View {
         }
     }
 
-    /// 为 Tab 树挂载底部计时条、系统搜索宿主与统一导航环境。
+    /// 为 Tab 树挂载书架整理优先的单一底部 accessory、系统搜索宿主与统一导航环境。
     private var configuredTabContent: some View {
-        tabContent
+        let hasBookshelfPresentation = bookshelfEditingAccessoryCoordinator.hasActivePresentation
+        let bookshelfPresentationID = bookshelfEditingAccessoryCoordinator.presentationID
+        let bookshelfPresentationPhase = bookshelfEditingAccessoryCoordinator.presentationPhase
+        let showsBookshelfAccessoryShell = hasBookshelfPresentation
+            && bookshelfPresentationPhase != .exiting
+
+        return tabContent
         .transaction { transaction in
             guard isInitialTabPresentationCovered else { return }
             transaction.animation = nil
@@ -455,40 +462,59 @@ struct MainTabView: View {
             navigationCoordinator.isTabChromeSuppressed ? .hidden : .automatic,
             for: .tabBar
         )
-        .tabBarMinimizeBehavior(.onScrollDown)
+        .tabBarMinimizeBehavior(
+            hasBookshelfPresentation ? .never : .onScrollDown
+        )
         .tabViewBottomAccessory(
-            isEnabled: isReadingTimerAccessoryEnabled && !navigationCoordinator.isTabChromeSuppressed
+            isEnabled: !navigationCoordinator.isTabChromeSuppressed
+                && (showsBookshelfAccessoryShell
+                    || isReadingTimerAccessoryEnabled)
         ) {
-            if let runtime, let session = readingTimerAccessorySession {
-                ReadingTimerAccessoryZoomSource(
-                    owner: readingTimerZoomOwner,
-                    session: session,
-                    repositories: runtime.repositories,
-                    timerSettings: readingTimerSettingsStore,
-                    isWriting: runtime.readingTimerCoordinator.isWriting,
-                    dismissalRequest: readingTimerZoomDismissalRequest,
-                    preparePresentation: {
-                        prepareReadingTimerAccessoryPresentation(
-                            session: session,
-                            runtime: runtime
-                        )
-                    },
-                    onDismissalRequested: { presentation, reason in
-                        requestReadingTimerDismissal(reason, for: presentation)
-                    },
-                    onDismissalCompleted: { presentation, reason in
-                        completeReadingTimerZoomDismissal(
-                            reason,
-                            for: presentation
-                        )
-                    },
-                    onTogglePlayback: { toggleGlobalReadingTimer(runtime: runtime) }
-                )
-                .environment(runtime.readingTimerCoordinator)
-                .environment(runtime.repositories)
-                .environment(readingTimerSettingsStore)
-                .allowsHitTesting(!isReadingTimerAccessoryInteractionSuppressed)
-                .accessibilityHidden(isReadingTimerAccessoryInteractionSuppressed)
+            ZStack {
+                if let runtime, let session = readingTimerAccessorySession {
+                    ReadingTimerAccessoryZoomSource(
+                        owner: readingTimerZoomOwner,
+                        session: session,
+                        repositories: runtime.repositories,
+                        timerSettings: readingTimerSettingsStore,
+                        isWriting: runtime.readingTimerCoordinator.isWriting,
+                        dismissalRequest: readingTimerZoomDismissalRequest,
+                        preparePresentation: {
+                            prepareReadingTimerAccessoryPresentation(
+                                session: session,
+                                runtime: runtime
+                            )
+                        },
+                        onDismissalRequested: { presentation, reason in
+                            requestReadingTimerDismissal(reason, for: presentation)
+                        },
+                        onDismissalCompleted: { presentation, reason in
+                            completeReadingTimerZoomDismissal(
+                                reason,
+                                for: presentation
+                            )
+                        },
+                        onTogglePlayback: { toggleGlobalReadingTimer(runtime: runtime) }
+                    )
+                    .environment(runtime.readingTimerCoordinator)
+                    .environment(runtime.repositories)
+                    .environment(readingTimerSettingsStore)
+                    .opacity(readingTimerAccessoryOpacity(for: bookshelfPresentationPhase))
+                    .allowsHitTesting(
+                        !hasBookshelfPresentation && !isReadingTimerAccessoryInteractionSuppressed
+                    )
+                    .accessibilityHidden(
+                        hasBookshelfPresentation || isReadingTimerAccessoryInteractionSuppressed
+                    )
+                }
+
+                if let bookshelfPresentationID {
+                    BookshelfEditingAccessoryHost(
+                        coordinator: bookshelfEditingAccessoryCoordinator,
+                        presentationID: bookshelfPresentationID
+                    )
+                    .id(bookshelfPresentationID)
+                }
             }
         }
         .mainTabSearchHost(
@@ -499,6 +525,19 @@ struct MainTabView: View {
         )
         .tabViewSearchActivation(.searchTabSelection)
         .environment(navigationCoordinator)
+        .environment(bookshelfEditingAccessoryCoordinator)
+    }
+
+    /// 在书架整理的进入、稳定和退出阶段之间交叉淡化计时条，不重建系统玻璃宿主。
+    private func readingTimerAccessoryOpacity(
+        for phase: BookshelfEditingAccessoryPresentationPhase
+    ) -> Double {
+        switch phase {
+        case .inactive, .entering, .exiting:
+            return 1
+        case .editing:
+            return 0
+        }
     }
 
     /// 监听可恢复浏览状态与跨进程事件；每个监听只把事件转交给对应 owner。

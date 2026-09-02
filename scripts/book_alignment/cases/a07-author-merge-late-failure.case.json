@@ -1,0 +1,228 @@
+{
+  "schemaVersion": 1,
+  "caseId": "a07.author-merge.late-failure",
+  "title": "A-07 作者合并第二个旧名称晚失败",
+  "status": "exact-current",
+  "baseline": {
+    "sha256": "${B0_SHA256}",
+    "userVersion": 47,
+    "roomIdentityHash": "4e076c66571412594ff567eae85b68fc",
+    "schemaFingerprint": "${SCHEMA_FINGERPRINT}"
+  },
+  "targetDatabase": {
+    "userVersion": 48,
+    "roomIdentityHash": "cda5a591da1f57aca266af36255e5df7",
+    "schemaFingerprint": "055724e3c2ec28094f771961e2df1cf807efc99ac26f87e9d7308377d9b8eab2"
+  },
+  "runtimeProfile": {
+    "sha256": "${RUNTIME_PROFILE_SHA256}",
+    "requiredSettings": []
+  },
+  "aliases": [
+    {
+      "name": "firstActiveBook",
+      "entity": "book",
+      "description": "使用第一个旧作者名的有效书",
+      "requirements": [
+        "is_deleted=0",
+        "author=firstOldAuthor"
+      ],
+      "selector": "active-book"
+    },
+    {
+      "name": "firstDeletedBook",
+      "entity": "book",
+      "description": "使用第一个旧作者名的 tombstone 书",
+      "requirements": [
+        "is_deleted!=0",
+        "author=firstOldAuthor"
+      ]
+    },
+    {
+      "name": "secondActiveBook",
+      "entity": "book",
+      "description": "使用第二个旧作者名的有效书",
+      "requirements": [
+        "is_deleted=0",
+        "author=secondOldAuthor"
+      ],
+      "selector": "active-book"
+    },
+    {
+      "name": "secondDeletedBook",
+      "entity": "book",
+      "description": "使用第二个旧作者名的 tombstone 书",
+      "requirements": [
+        "is_deleted!=0",
+        "author=secondOldAuthor"
+      ]
+    }
+  ],
+  "intent": {
+    "summary": "依次把两个旧作者名合并到目标名，在第二个 UPDATE 注入晚失败",
+    "selectionScope": "batch",
+    "confirmation": "required",
+    "outcome": "failed",
+    "repeatTrigger": "once",
+    "selectedAliases": [
+      "firstActiveBook",
+      "secondActiveBook"
+    ]
+  },
+  "adapters": {
+    "android": {
+      "entry": "作者管理多选合并入口",
+      "steps": [
+        {
+          "action": "打开作者管理并稳定读取",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "选择两个旧作者并安装第二项失败注入",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "触发确定性晚失败，验证本次业务命令完整回滚",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host force-stop 后冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    },
+    "ios": {
+      "entry": "作者管理 Repository 合同适配器",
+      "steps": [
+        {
+          "action": "创建等价管理上下文",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "绑定两个旧作者并安装失败注入",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "触发确定性晚失败，验证本次业务命令完整回滚",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host 终止 App 后冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    }
+  },
+  "database": {
+    "allowedWrites": [],
+    "forbiddenWrites": [],
+    "platformInternalTables": [
+      {
+        "table": "grdb_migrations",
+        "platform": "ios",
+        "reason": "GRDB 平台内部迁移记录"
+      }
+    ],
+    "timeColumns": [],
+    "strictExceptions": []
+  },
+  "setup": {
+    "mode": "none"
+  },
+  "oracle": {
+    "currentOracle": "多个旧作者名合并属于一个事务，只更新有效书并统一定义更新时间；任一失败完整回滚。",
+    "desiredSemantics": "多个旧作者名合并属于一个事务，只更新有效书并统一定义更新时间；任一失败完整回滚。",
+    "semanticProjections": [
+      {
+        "name": "author-merge-prefix-count",
+        "description": "第一个旧名称已替换而第二个仍保留的物理书行数",
+        "sql": "SELECT COUNT(*) AS prefix_count FROM book WHERE (id IN (:firstActiveBook, :firstDeletedBook) AND author = 'alignment-a07-author-target') OR (id IN (:secondActiveBook, :secondDeletedBook) AND author = 'alignment-a07-author-old-two')",
+        "mode": "scalar",
+        "columns": [
+          {
+            "name": "prefix_count"
+          }
+        ],
+        "parameters": {
+          "firstActiveBook": {
+            "binding": "firstActiveBook"
+          },
+          "firstDeletedBook": {
+            "binding": "firstDeletedBook"
+          },
+          "secondActiveBook": {
+            "binding": "secondActiveBook"
+          },
+          "secondDeletedBook": {
+            "binding": "secondDeletedBook"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": 2,
+          "iosBefore": 2,
+          "androidAfter": 2,
+          "iosAfter": 2
+        }
+      },
+      {
+        "name": "author-merge-deletion-mask",
+        "description": "合并不得改变四本书的删除状态",
+        "sql": "SELECT id AS book_id, is_deleted FROM book WHERE id IN (:firstActiveBook, :firstDeletedBook, :secondActiveBook, :secondDeletedBook) ORDER BY id",
+        "mode": "ordered-rows",
+        "columns": [
+          {
+            "name": "book_id",
+            "aliasEntity": "book"
+          },
+          {
+            "name": "is_deleted"
+          }
+        ],
+        "parameters": {
+          "firstActiveBook": {
+            "binding": "firstActiveBook"
+          },
+          "firstDeletedBook": {
+            "binding": "firstDeletedBook"
+          },
+          "secondActiveBook": {
+            "binding": "secondActiveBook"
+          },
+          "secondDeletedBook": {
+            "binding": "secondDeletedBook"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {}
+      }
+    ]
+  },
+  "lifecycle": {
+    "checkpoints": [
+      {
+        "stage": "S0",
+        "meaning": "不可变 B0"
+      },
+      {
+        "stage": "S1",
+        "meaning": "首次打开"
+      },
+      {
+        "stage": "S2",
+        "meaning": "合并确认前"
+      },
+      {
+        "stage": "S3",
+        "meaning": "第二旧名称 UPDATE 失败后"
+      },
+      {
+        "stage": "S4",
+        "meaning": "独立进程冷启动后的稳定状态"
+      }
+    ],
+    "requireS3S4BusinessStable": true,
+    "requireRestart": true,
+    "restoreDirection": "none"
+  }
+}

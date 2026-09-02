@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://xmnote.local/schemas/book-alignment-runtime-profile.schema.json",
+  "title": "BookAlignmentRuntimeProfile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "settings"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bookSortMode": { "type": ["null", "boolean", "integer", "number", "string"] },
+        "bookGroupingMode": { "type": ["null", "boolean", "integer", "number", "string"] },
+        "newBookPosition": { "type": ["null", "boolean", "integer", "number", "string"] }
+      }
+    }
+  }
+}

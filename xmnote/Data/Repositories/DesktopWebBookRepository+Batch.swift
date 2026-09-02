@@ -83,16 +83,12 @@ nonisolated extension DesktopWebBookRepository {
                         arguments: [id, tagID]
                     ) ?? 0) > 0
                     if exists { continue }
-                    var relation = TagBookRecord(
-                        id: nil,
-                        bookId: id,
-                        tagId: tagID,
-                        createdDate: now,
-                        updatedDate: 0,
-                        lastSyncDate: 0,
-                        isDeleted: 0
+                    try BookRelationWriter.insertTag(
+                        db,
+                        bookID: id,
+                        tagID: tagID,
+                        createdAt: now
                     )
-                    try relation.insert(db)
                 }
             }
         }
@@ -129,18 +125,14 @@ nonisolated extension DesktopWebBookRepository {
                     ? Array(Set(current + normalizedTagIDs)).sorted()
                     : normalizedTagIDs
                 if current == final { continue }
-                try softDeleteBatchTags(db, bookID: id, now: currentTimeMillis())
+                try hardDeleteBatchTags(db, bookID: id)
                 for tagID in final {
-                    var relation = TagBookRecord(
-                        id: nil,
-                        bookId: id,
-                        tagId: tagID,
-                        createdDate: now,
-                        updatedDate: 0,
-                        lastSyncDate: 0,
-                        isDeleted: 0
+                    try BookRelationWriter.insertTag(
+                        db,
+                        bookID: id,
+                        tagID: tagID,
+                        createdAt: now
                     )
-                    try relation.insert(db)
                 }
             }
         }
@@ -165,18 +157,14 @@ nonisolated extension DesktopWebBookRepository {
             for item in items {
                 let current = existingTagMap[item.id] ?? []
                 if current == item.tagIDs { continue }
-                try softDeleteBatchTags(db, bookID: item.id, now: currentTimeMillis())
+                try hardDeleteBatchTags(db, bookID: item.id)
                 for tagID in item.tagIDs {
-                    var relation = TagBookRecord(
-                        id: nil,
-                        bookId: item.id,
-                        tagId: tagID,
-                        createdDate: now,
-                        updatedDate: 0,
-                        lastSyncDate: 0,
-                        isDeleted: 0
+                    try BookRelationWriter.insertTag(
+                        db,
+                        bookID: item.id,
+                        tagID: tagID,
+                        createdAt: now
                     )
-                    try relation.insert(db)
                 }
             }
         }
@@ -234,27 +222,19 @@ nonisolated extension DesktopWebBookRepository {
                     arguments: [targetGroupID]
                 ) ?? 0
                 let targetOrder = Int64(Int32(truncatingIfNeeded: maximum) &+ 1)
-                // SQL 目的：软删除该书全部有效分组关系，为目标关系重建腾出唯一主关系。
-                // 涉及表：group_book；不限制来源分组或 owner。
-                // 时间字段：updated_date 使用当前 Unix 毫秒时间。
-                // 副作用用途：同一事务内随后插入新的目标分组关系。
+                // SQL 目的：物理删除该书全部分组关系，为 v48 唯一目标关系重建腾出业务键。
+                // 涉及表：group_book；不限制来源分组、owner 或历史删除状态。
+                // 时间字段：物理删除不写时间字段；副作用用途：同一事务内随后插入新的目标分组关系。
                 try db.execute(
-                    sql: """
-                        UPDATE group_book SET is_deleted = 1, updated_date = ?
-                        WHERE book_id = ? AND is_deleted = 0
-                        """,
-                    arguments: [now, id]
+                    sql: "DELETE FROM group_book WHERE book_id = ?",
+                    arguments: [id]
                 )
-                var relation = GroupBookRecord(
-                    id: nil,
-                    groupId: targetGroupID,
-                    bookId: id,
-                    createdDate: now,
-                    updatedDate: 0,
-                    lastSyncDate: 0,
-                    isDeleted: 0
+                try BookRelationWriter.insertGroup(
+                    db,
+                    groupID: targetGroupID,
+                    bookID: id,
+                    createdAt: now
                 )
-                try relation.insert(db)
                 // SQL 目的：把书籍排序更新为刚计算的目标组尾序号。
                 // 涉及表：book；按 id 更新，不额外复查 owner 或删除状态。
                 // 时间字段：updated_date 使用当前 Unix 毫秒时间。
@@ -286,16 +266,12 @@ nonisolated extension DesktopWebBookRepository {
                     arguments: [now, id]
                 )
                 let order = try topLevelBoundaryOrder(db, placeAtEnd: placeAtEnd)
-                // SQL 目的：软删除书籍全部有效分组关系。
-                // 涉及表：group_book；不限制来源分组。
-                // 时间字段：updated_date 使用本书共享 now 毫秒。
-                // 副作用用途：对齐 Web moveOutFromGroup 的全关系移除并与排序共同提交。
+                // SQL 目的：物理删除书籍全部分组关系。
+                // 涉及表：group_book；不限制来源分组或历史删除状态。
+                // 时间字段：物理删除不写时间字段；副作用用途：与排序更新共同提交。
                 try db.execute(
-                    sql: """
-                        UPDATE group_book SET is_deleted = 1, updated_date = ?
-                        WHERE book_id = ? AND is_deleted = 0
-                        """,
-                    arguments: [now, id]
+                    sql: "DELETE FROM group_book WHERE book_id = ?",
+                    arguments: [id]
                 )
                 // SQL 目的：写入刚计算的顶层排序值。
                 // 涉及表：book；DAO 只按 id，不复查删除状态或 owner。
@@ -414,19 +390,15 @@ nonisolated extension DesktopWebBookRepository {
         }
     }
 
-    /// 在标签批量事务内软删除一本书全部有效标签关系。
-    func softDeleteBatchTags(_ db: Database, bookID: Int64, now: Int64) throws {
-        // SQL 目的：复制 softDeleteTagBooksByBookId 的关系替换清理。
+    /// 在标签批量事务内物理删除一本书全部标签关系。
+    func hardDeleteBatchTags(_ db: Database, bookID: Int64) throws {
+        // SQL 目的：为标签集合替换物理清理全部现存关系。
         // 涉及表：tag_book。
-        // 关键过滤：book_id 且 is_deleted = 0；包括指向已删除标签的残留关系。
-        // 时间字段：updated_date 使用每次 DAO 调用独立毫秒值。
-        // 副作用用途：随后按最终标签集合重建新关系。
+        // 关键过滤：book_id 精确匹配；包括旧备份 tombstone 与指向已删除标签的残留关系。
+        // 时间字段：物理删除不写时间字段；副作用用途：随后按最终标签集合重建 v48 唯一关系。
         try db.execute(
-            sql: """
-                UPDATE tag_book SET is_deleted = 1, updated_date = ?
-                WHERE book_id = ? AND is_deleted = 0
-                """,
-            arguments: [now, bookID]
+            sql: "DELETE FROM tag_book WHERE book_id = ?",
+            arguments: [bookID]
         )
     }
 

@@ -1,7 +1,7 @@
 /**
- * [INPUT]: 依赖 AppDatabase、RoomCanonicalSchemaV44...V47、GRDB 与临时 SQLite 数据库
- * [OUTPUT]: 验证 v47 新库、v44/v45/v46 升级、Android v46/v47 恢复、v48 拒绝、排序迁移、来源迁移与 seed
- * [POS]: iOS 数据库迁移集成测试，锁定 Android Room v47 最终物理合同与连续数据迁移
+ * [INPUT]: 依赖 AppDatabase、RoomCanonicalSchemaV44...V48、GRDB 与临时 SQLite 数据库
+ * [OUTPUT]: 验证 v48 新库、v44...v47 升级、关系确定性去重、v49 拒绝、排序迁移、来源迁移与 seed
+ * [POS]: iOS 数据库迁移集成测试，锁定 Android Room v48 最终物理合同与连续数据迁移
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -10,20 +10,21 @@ import GRDB
 import Testing
 @testable import xmnote
 
-struct RoomCanonicalSchemaV47Tests {
+struct RoomCanonicalSchemaV48Tests {
     @Test
-    func freshDatabaseUsesAndroidRoomV47ContractAndReadestSeed() throws {
-        let databaseURL = temporaryDatabaseURL("room_v47_fresh")
+    func freshDatabaseUsesAndroidRoomV48ContractAndReadestSeed() throws {
+        let databaseURL = temporaryDatabaseURL("room_v48_fresh")
         defer { removeDatabaseArtifacts(at: databaseURL) }
         let database = try AppDatabase(path: databaseURL.path)
         defer { try? database.close() }
 
         try database.dbPool.read { db in
-            #expect(try databaseVersion(db) == 47)
-            #expect(try RoomCanonicalSchemaV47.hasValidIdentityHash(db))
-            try RoomCanonicalSchemaV47.validateExistingDatabase(db)
-            #expect(try RoomCanonicalSchemaV47.loadSchema().entities.count == 39)
+            #expect(try databaseVersion(db) == 48)
+            #expect(try RoomCanonicalSchemaV48.hasValidIdentityHash(db))
+            try RoomCanonicalSchemaV48.validateExistingDatabase(db)
+            #expect(try RoomCanonicalSchemaV48.loadSchema().entities.count == 39)
             #expect(try migrationMarkerCount(AppDatabase.roomV47MigrationIdentifier, db: db) == 1)
+            #expect(try migrationMarkerCount(AppDatabase.roomV48MigrationIdentifier, db: db) == 1)
             #expect(try db.tableExists("notion_page_sync"))
             #expect(try db.tableExists("notion_block_sync"))
             #expect(try db.tableExists("notion_sync_operation"))
@@ -81,8 +82,8 @@ struct RoomCanonicalSchemaV47Tests {
     }
 
     @Test
-    func androidRoomV44DatabaseMigratesThroughV45AndV46ToV47() throws {
-        let databaseURL = temporaryDatabaseURL("room_v44_to_v47")
+    func androidRoomV44DatabaseMigratesThroughV45AndV46ToV48() throws {
+        let databaseURL = temporaryDatabaseURL("room_v44_to_v48")
         defer { removeDatabaseArtifacts(at: databaseURL) }
 
         try DatabaseQueue(path: databaseURL.path).write { db in
@@ -93,11 +94,12 @@ struct RoomCanonicalSchemaV47Tests {
         defer { try? database.close() }
 
         try database.dbPool.read { db in
-            #expect(try databaseVersion(db) == 47)
-            try RoomCanonicalSchemaV47.validateExistingDatabase(db)
+            #expect(try databaseVersion(db) == 48)
+            try RoomCanonicalSchemaV48.validateExistingDatabase(db)
             #expect(try migrationMarkerCount(AppDatabase.roomV45MigrationIdentifier, db: db) == 1)
             #expect(try migrationMarkerCount(AppDatabase.roomV46MigrationIdentifier, db: db) == 1)
             #expect(try migrationMarkerCount(AppDatabase.roomV47MigrationIdentifier, db: db) == 1)
+            #expect(try migrationMarkerCount(AppDatabase.roomV48MigrationIdentifier, db: db) == 1)
             #expect(try db.tableExists("note_import_hash"))
             #expect(try SourceRecord.fetchOne(db, key: 28)?.name == "Readest")
         }
@@ -125,10 +127,11 @@ struct RoomCanonicalSchemaV47Tests {
         defer { try? database.close() }
 
         try database.dbPool.read { db in
-            #expect(try databaseVersion(db) == 47)
-            try RoomCanonicalSchemaV47.validateExistingDatabase(db)
+            #expect(try databaseVersion(db) == 48)
+            try RoomCanonicalSchemaV48.validateExistingDatabase(db)
             #expect(try migrationMarkerCount(AppDatabase.roomV46MigrationIdentifier, db: db) == 1)
             #expect(try migrationMarkerCount(AppDatabase.roomV47MigrationIdentifier, db: db) == 1)
+            #expect(try migrationMarkerCount(AppDatabase.roomV48MigrationIdentifier, db: db) == 1)
 
             let readest = try #require(try SourceRecord.fetchOne(db, key: 28))
             #expect(readest.name == "Readest")
@@ -180,9 +183,10 @@ struct RoomCanonicalSchemaV47Tests {
         defer { try? database.close() }
 
         try database.dbPool.read { db in
-            #expect(try databaseVersion(db) == 47)
-            try RoomCanonicalSchemaV47.validateExistingDatabase(db)
+            #expect(try databaseVersion(db) == 48)
+            try RoomCanonicalSchemaV48.validateExistingDatabase(db)
             #expect(try migrationMarkerCount(AppDatabase.roomV47MigrationIdentifier, db: db) == 1)
+            #expect(try migrationMarkerCount(AppDatabase.roomV48MigrationIdentifier, db: db) == 1)
 
             // SQL 目的：读取书籍 1 迁移生成的有效 type=6 排序记录，验证最新 type=1 被复制且删除目标不阻断。
             // 涉及表：sort；关键过滤：book_id=1、type=6、is_deleted=0；返回全部迁移字段。
@@ -214,8 +218,8 @@ struct RoomCanonicalSchemaV47Tests {
     }
 
     @Test
-    func androidRoomV46DatabaseWithoutGRDBMarkersMigratesToV47WithoutReapplyingSeed() throws {
-        let databaseURL = temporaryDatabaseURL("room_v46_restore_to_v47")
+    func androidRoomV46DatabaseWithoutGRDBMarkersMigratesToV48WithoutReapplyingSeed() throws {
+        let databaseURL = temporaryDatabaseURL("room_v46_restore_to_v48")
         defer { removeDatabaseArtifacts(at: databaseURL) }
 
         try DatabaseQueue(path: databaseURL.path).write { db in
@@ -227,20 +231,21 @@ struct RoomCanonicalSchemaV47Tests {
         defer { try? database.close() }
 
         try database.dbPool.read { db in
-            #expect(try databaseVersion(db) == 47)
+            #expect(try databaseVersion(db) == 48)
             #expect(try migrationMarkerCount(AppDatabase.roomSeedMigrationIdentifier, db: db) == 1)
             #expect(try migrationMarkerCount(AppDatabase.roomV45MigrationIdentifier, db: db) == 1)
             #expect(try migrationMarkerCount(AppDatabase.roomV46MigrationIdentifier, db: db) == 1)
             #expect(try migrationMarkerCount(AppDatabase.roomV47MigrationIdentifier, db: db) == 1)
+            #expect(try migrationMarkerCount(AppDatabase.roomV48MigrationIdentifier, db: db) == 1)
             #expect(try UserRecord.fetchCount(db) == 0)
             #expect(try SourceRecord.fetchCount(db) == 1)
             #expect(try SourceRecord.fetchOne(db, key: 28)?.bookshelfOrder == -1)
-            try RoomCanonicalSchemaV47.validateExistingDatabase(db)
+            try RoomCanonicalSchemaV48.validateExistingDatabase(db)
         }
     }
 
     @Test
-    func androidRoomV47DatabaseWithoutGRDBMarkersDoesNotReapplyMigrationOrSeed() throws {
+    func androidRoomV47DatabaseWithoutGRDBMarkersMigratesOnlyRelationsToV48() throws {
         let databaseURL = temporaryDatabaseURL("room_v47_restore")
         defer { removeDatabaseArtifacts(at: databaseURL) }
 
@@ -257,9 +262,10 @@ struct RoomCanonicalSchemaV47Tests {
         defer { try? database.close() }
 
         try database.dbPool.read { db in
-            #expect(try databaseVersion(db) == 47)
+            #expect(try databaseVersion(db) == 48)
             #expect(try migrationMarkerCount(AppDatabase.roomSeedMigrationIdentifier, db: db) == 1)
             #expect(try migrationMarkerCount(AppDatabase.roomV47MigrationIdentifier, db: db) == 1)
+            #expect(try migrationMarkerCount(AppDatabase.roomV48MigrationIdentifier, db: db) == 1)
             #expect(try UserRecord.fetchCount(db) == 1)
             #expect(try SourceRecord.fetchCount(db) == 1)
 
@@ -267,20 +273,107 @@ struct RoomCanonicalSchemaV47Tests {
             // 涉及表：sort；关键过滤：book_id=1、type=6；分别返回有效数与总数。
             #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM sort WHERE book_id = 1 AND type = 6 AND is_deleted = 0") == 0)
             #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM sort WHERE book_id = 1 AND type = 6") == 1)
-            try RoomCanonicalSchemaV47.validateExistingDatabase(db)
+            try RoomCanonicalSchemaV48.validateExistingDatabase(db)
         }
     }
 
     @Test
-    func databaseNewerThanV47IsRejected() throws {
-        let databaseURL = temporaryDatabaseURL("room_v48_rejected")
+    func androidRoomV47RelationDuplicatesMigrateDeterministicallyToV48() throws {
+        let databaseURL = temporaryDatabaseURL("room_v47_relation_dedup_to_v48")
         defer { removeDatabaseArtifacts(at: databaseURL) }
 
         try DatabaseQueue(path: databaseURL.path).write { db in
             try RoomCanonicalSchemaV47.createAllTables(db)
-            // SQL 目的：构造未来版本 Room fixture，验证恢复兼容上限拒绝 user_version=48。
+            try insertRequiredReferences(db)
+            try insertSource(db, id: 1, name: "未知", order: 0, bookshelfOrder: 0, isDeleted: 0)
+            try insertBook(db, id: 100, name: "关系书籍 A", sourceID: 1, isDeleted: 0)
+            try insertBook(db, id: 101, name: "关系书籍 B", sourceID: 1, isDeleted: 0)
+
+            // SQL 目的：创建关系迁移所需的最小有效书单、标签和分组父记录。
+            // 涉及表：collection、tag、`group`；关键字段：固定测试主键；时间字段固定为 0。
+            // 副作用：只写测试临时数据库。
+            try db.execute(sql: """
+                INSERT INTO collection (
+                    id, title, desc, "order", is_annual, year,
+                    created_date, updated_date, last_sync_date, is_deleted
+                ) VALUES
+                    (10, '书单 A', '', 0, 0, 0, 0, 0, 0, 0),
+                    (11, '书单 B', '', 0, 0, 0, 0, 0, 0, 0)
+                """)
+            try db.execute(sql: """
+                INSERT INTO tag (
+                    id, user_id, name, color, tag_order, type,
+                    created_date, updated_date, last_sync_date, is_deleted
+                ) VALUES
+                    (200, 1, '标签 A', 0, 0, 0, 0, 0, 0, 0),
+                    (201, 1, '标签 B', 0, 0, 0, 0, 0, 0, 0)
+                """)
+            try db.execute(sql: """
+                INSERT INTO `group` (
+                    id, user_id, name, group_order, pinned, pin_order,
+                    created_date, updated_date, last_sync_date, is_deleted
+                ) VALUES
+                    (300, 1, '分组 A', 0, 0, 0, 0, 0, 0, 0),
+                    (301, 1, '分组 B', 0, 0, 0, 0, 0, 0, 0),
+                    (302, 1, '分组 C', 0, 0, 0, 0, 0, 0, 0)
+                """)
+
+            // SQL 目的：构造与 Android Migration47To48Test 相同的有效重复与历史删除关系。
+            // 涉及表：collection_book、tag_book、group_book；关键字段：固定业务键与主键。
+            // 时间字段：显式设置 created_date/updated_date，用于验证规范行选择规则。
+            try db.execute(sql: """
+                INSERT INTO collection_book (
+                    id, collection_id, book_id, recommend, "order",
+                    created_date, updated_date, last_sync_date, is_deleted
+                ) VALUES
+                    (1, 10, 100, '', 1, 10, 10, 0, 0),
+                    (2, 10, 100, '', 2, 20, 30, 0, 0),
+                    (3, 11, 101, '', 3, 30, 40, 0, 1)
+                """)
+            try db.execute(sql: """
+                INSERT INTO tag_book (
+                    id, book_id, tag_id, created_date, updated_date, last_sync_date, is_deleted
+                ) VALUES
+                    (11, 100, 200, 10, 0, 0, 0),
+                    (12, 100, 200, 20, 0, 0, 0),
+                    (13, 101, 201, 30, 0, 0, 1)
+                """)
+            try db.execute(sql: """
+                INSERT INTO group_book (
+                    id, group_id, book_id, created_date, updated_date, last_sync_date, is_deleted
+                ) VALUES
+                    (21, 300, 100, 10, 0, 0, 0),
+                    (22, 301, 100, 20, 0, 0, 0),
+                    (23, 302, 101, 30, 0, 0, 1)
+                """)
+        }
+
+        let database = try AppDatabase(path: databaseURL.path)
+        defer { try? database.close() }
+
+        try database.dbPool.read { db in
+            #expect(try databaseVersion(db) == 48)
+            #expect(try Int64.fetchAll(db, sql: "SELECT id FROM collection_book ORDER BY id") == [2])
+            #expect(try Int64.fetchAll(db, sql: "SELECT id FROM tag_book ORDER BY id") == [11])
+            #expect(try Int64.fetchAll(db, sql: "SELECT id FROM group_book ORDER BY id") == [21])
+            #expect(try Int64.fetchOne(db, sql: "SELECT \"order\" FROM collection_book WHERE id = 2") == 2)
+            #expect(try isUniqueIndex("collection_book", named: "index_collection_book_collection_id_book_id", db: db))
+            #expect(try isUniqueIndex("tag_book", named: "index_tag_book_book_id_tag_id", db: db))
+            #expect(try isUniqueIndex("group_book", named: "index_group_book_book_id", db: db))
+            try RoomCanonicalSchemaV48.validateExistingDatabase(db)
+        }
+    }
+
+    @Test
+    func databaseNewerThanV48IsRejected() throws {
+        let databaseURL = temporaryDatabaseURL("room_v49_rejected")
+        defer { removeDatabaseArtifacts(at: databaseURL) }
+
+        try DatabaseQueue(path: databaseURL.path).write { db in
+            try RoomCanonicalSchemaV48.createAllTables(db)
+            // SQL 目的：构造未来版本 Room fixture，验证恢复兼容上限拒绝 user_version=49。
             // 涉及表：无；副作用：只更新测试临时数据库版本号。
-            try db.execute(sql: "PRAGMA user_version = 48")
+            try db.execute(sql: "PRAGMA user_version = 49")
         }
 
         #expect(throws: RoomCanonicalSchemaError.self) {
@@ -376,7 +469,21 @@ struct RoomCanonicalSchemaV47Tests {
     }
 }
 
-private extension RoomCanonicalSchemaV47Tests {
+private extension RoomCanonicalSchemaV48Tests {
+    /// 判断目标表的指定索引是否存在且具备 UNIQUE 属性。
+    func isUniqueIndex(_ table: String, named indexName: String, db: Database) throws -> Bool {
+        guard ["collection_book", "tag_book", "group_book"].contains(table) else { return false }
+        // SQL 目的：读取测试目标关系表的索引列表，验证 v48 业务唯一约束已落地。
+        // 涉及表：SQLite schema 元数据；关键过滤：由调用方在固定白名单中选择关系表。
+        // 返回字段：name 与 unique 标志；时间字段不参与。
+        let rows = try Row.fetchAll(db, sql: "PRAGMA index_list(`\(table)`)")
+        return rows.contains { row in
+            let name: String = row["name"]
+            let isUnique: Int = row["unique"]
+            return name == indexName && isUnique == 1
+        }
+    }
+
     /// 插入 book 外键所需的最小用户与阅读状态根记录。
     func insertRequiredReferences(_ db: Database) throws {
         // SQL 目的：写入迁移 fixture 所需的默认用户根记录。

@@ -1,10 +1,11 @@
 /**
- * [INPUT]: 依赖外部注入的 BookCollectionListViewModel 与 EditMode，依赖书单显示设置、分组切换保存入口、BookCollectionImportRouter、LoadingGate 与 XMScopeSelector 驱动手动书单、年度书单、删除确认、排序和稳定加载占位
- * [OUTPUT]: 对外提供 BookCollectionListView，承载首页书单 Tab 的范围切换、列表/网格集合卡片、中性上下文操作、写入反馈、系统分享导入、表单弹层与书单详情入口
+ * [INPUT]: 依赖外部注入的 BookCollectionListViewModel、EditMode 与页面私有视口锚点绑定，依赖书单显示设置、分组切换保存入口、BookCollectionImportRouter、LoadingGate 与 XMScopeSelector 驱动手动书单、年度书单、删除确认、排序和稳定加载占位
+ * [OUTPUT]: 对外提供 BookCollectionListView，承载首页书单 Tab 的范围切换、列表/网格集合卡片、跨排序模式的语义视口保持、中性上下文操作、写入反馈、系统分享导入、表单弹层与书单详情入口
  * [POS]: Views/Book 的书单首页页面壳层，被 BookContainerView 的书单二级页消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
+import Dispatch
 import SwiftUI
 
 /// 首页书单列表页，按 iOS 分段结构表达 Android “我的书单 / 年度书单”业务分组。
@@ -12,17 +13,26 @@ struct BookCollectionListView: View {
     @Environment(BookCollectionImportRouter.self) private var importRouter
     @Bindable var viewModel: BookCollectionListViewModel
     @Binding var editMode: EditMode
+    @Binding var gridScrollPositionID: Int64?
     let onOpenCollection: (Int64) -> Void
     @State private var loadingGate = LoadingGate()
+    @State private var visibleGridCollectionIDs: Set<Int64> = []
+    @State private var visibleListCollectionIDs: Set<Int64> = []
+    @State private var lastLeadingGridCollectionID: Int64?
+    @State private var lastLeadingListCollectionID: Int64?
+    @State private var pendingGridReturnCollectionID: Int64?
+    @State private var viewportRestoreRequest: BookCollectionViewportRestoreRequest?
 
     /// 注入书单状态与打开回调，保持列表页只负责范围、列表与弹层渲染。
     init(
         viewModel: BookCollectionListViewModel,
         editMode: Binding<EditMode>,
+        viewportAnchorID: Binding<Int64?>,
         onOpenCollection: @escaping (Int64) -> Void = { _ in }
     ) {
         self.viewModel = viewModel
         self._editMode = editMode
+        self._gridScrollPositionID = viewportAnchorID
         self.onOpenCollection = onOpenCollection
     }
 
@@ -43,8 +53,15 @@ struct BookCollectionListView: View {
             syncLoadingGate()
         }
         .onChange(of: viewModel.selectedKind) { _, _ in
+            resetViewportTracking()
             guard editMode.isEditing else { return }
             editMode = .inactive
+        }
+        .onChange(of: editMode.isEditing) { wasEditing, isEditing in
+            prepareViewportRestore(wasEditing: wasEditing, isEditing: isEditing)
+        }
+        .onChange(of: viewModel.visibleCollections.map(\.id)) { _, visibleIDs in
+            pruneViewportTracking(validIDs: Set(visibleIDs))
         }
         .onChange(of: importRouter.pendingImport) { _, _ in
             consumePendingWereadImport()
@@ -113,69 +130,100 @@ struct BookCollectionListView: View {
 
     @ViewBuilder
     private var content: some View {
-        if shouldUseGridContent {
-            gridContent
+        if shouldKeepGridAlive {
+            ZStack {
+                gridContent
+                    .opacity(editMode.isEditing ? 0 : 1)
+                    .allowsHitTesting(!editMode.isEditing)
+                    .accessibilityHidden(editMode.isEditing)
+
+                if editMode.isEditing {
+                    listContent
+                }
+            }
+            .transaction(value: editMode.isEditing) { transaction in
+                transaction.animation = nil
+                transaction.disablesAnimations = true
+            }
         } else {
             listContent
         }
     }
 
     private var listContent: some View {
-        List {
-            phaseRows
-        }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .environment(\.defaultMinListRowHeight, 1)
-        .environment(\.editMode, $editMode)
-        .accessibilityIdentifier("book.collection.list")
-        .transaction(value: loadPhase) { transaction in
-            transaction.animation = nil
-            transaction.disablesAnimations = true
-        }
-        .overlay(alignment: .top) {
-            feedbackBanner
+        ScrollViewReader { proxy in
+            List {
+                phaseRows
+            }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .environment(\.defaultMinListRowHeight, 1)
+            .environment(\.editMode, $editMode)
+            .accessibilityIdentifier("book.collection.list")
+            .transaction(value: loadPhase) { transaction in
+                transaction.animation = nil
+                transaction.disablesAnimations = true
+            }
+            .overlay(alignment: .top) {
+                feedbackBanner
+            }
+            .onScrollTargetVisibilityChange(idType: Int64.self, threshold: 0.5) { visibleIDs in
+                recordCollectionVisibility(visibleIDs, on: .list)
+            }
+            .task(id: viewportRestoreRequest?.requestID) {
+                await restoreViewportIfNeeded(on: .list, proxy: proxy)
+            }
         }
     }
 
-    private var shouldUseGridContent: Bool {
+    private var shouldKeepGridAlive: Bool {
         viewModel.displaySetting.displayMode == .grid
-            && !editMode.isEditing
             && loadPhase == .content
             && !viewModel.visibleCollections.isEmpty
     }
 
     private var gridContent: some View {
-        ScrollView {
-            LazyVGrid(columns: gridColumns, spacing: Spacing.base) {
-                ForEach(viewModel.visibleCollections) { item in
-                    Button {
-                        onOpenCollection(item.id)
-                    } label: {
-                        BookCollectionListCard(
-                            item: item,
-                            displayMode: .grid,
-                            coverArrangement: viewModel.displaySetting.coverArrangement,
-                            showsStatistics: viewModel.displaySetting.showsStatistics
-                        )
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVGrid(columns: gridColumns, spacing: Spacing.base) {
+                    ForEach(viewModel.visibleCollections) { item in
+                        Button {
+                            onOpenCollection(item.id)
+                        } label: {
+                            BookCollectionListCard(
+                                item: item,
+                                displayMode: .grid,
+                                coverArrangement: viewModel.displaySetting.coverArrangement,
+                                showsStatistics: viewModel.displaySetting.showsStatistics
+                            )
+                        }
+                        .buttonStyle(BookCollectionListCardButtonStyle())
+                        .contextMenu {
+                            collectionContextMenu(for: item)
+                        }
+                        .xmMenuNeutralTint()
+                        .id(item.id)
+                        .accessibilityIdentifier("book.collection.grid.\(item.id)")
                     }
-                    .buttonStyle(BookCollectionListCardButtonStyle())
-                    .contextMenu {
-                        collectionContextMenu(for: item)
-                    }
-                    .xmMenuNeutralTint()
-                    .accessibilityIdentifier("book.collection.grid.\(item.id)")
                 }
+                .scrollTargetLayout()
+                .padding(.horizontal, Spacing.screenEdge)
+                .padding(.top, Spacing.half)
+                .padding(.bottom, Spacing.contentEdge)
             }
-            .padding(.horizontal, Spacing.screenEdge)
-            .padding(.top, Spacing.half)
-            .padding(.bottom, Spacing.contentEdge)
-        }
-        .scrollIndicators(.hidden)
-        .background(Color.surfacePage)
-        .accessibilityIdentifier("book.collection.grid")
-        .overlay(alignment: .top) {
-            feedbackBanner
+            .scrollIndicators(.hidden)
+            .scrollPosition(id: $gridScrollPositionID, anchor: .top)
+            .background(Color.surfacePage)
+            .accessibilityIdentifier("book.collection.grid")
+            .overlay(alignment: .top) {
+                feedbackBanner
+            }
+            .onScrollTargetVisibilityChange(idType: Int64.self, threshold: 0.5) { visibleIDs in
+                recordCollectionVisibility(visibleIDs, on: .grid)
+            }
+            .task(id: viewportRestoreRequest?.requestID) {
+                await restoreViewportIfNeeded(on: .grid, proxy: proxy)
+            }
         }
     }
 
@@ -278,6 +326,7 @@ struct BookCollectionListView: View {
             )
         }
         .buttonStyle(BookCollectionListCardButtonStyle())
+        .id(item.id)
         .accessibilityIdentifier("book.collection.row.\(item.id)")
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             if item.kind == .manual {
@@ -300,6 +349,170 @@ struct BookCollectionListView: View {
         }
         .xmMenuNeutralTint()
         .modifier(BookCollectionListRowChrome())
+    }
+
+    /// 以容器级原子快照记录当前可见书单，避免逐行出现/消失事件乱序留下过期锚点。
+    private func recordCollectionVisibility(
+        _ collectionIDs: [Int64],
+        on surface: BookCollectionViewportSurface
+    ) {
+        let validIDs = Set(viewModel.visibleCollections.map(\.id))
+        let visibleIDs = Set(collectionIDs).intersection(validIDs)
+        let leadingID = viewModel.visibleCollections
+            .lazy
+            .map(\.id)
+            .first(where: visibleIDs.contains)
+        switch surface {
+        case .grid:
+            visibleGridCollectionIDs = visibleIDs
+            if let leadingID, leadingID != lastLeadingGridCollectionID {
+                lastLeadingGridCollectionID = leadingID
+            }
+        case .list:
+            visibleListCollectionIDs = visibleIDs
+            if let leadingID, leadingID != lastLeadingListCollectionID {
+                lastLeadingListCollectionID = leadingID
+            }
+            if editMode.isEditing, let leadingID {
+                pendingGridReturnCollectionID = leadingID
+                gridScrollPositionID = leadingID
+            }
+        }
+    }
+
+    /// 在网格与排序列表真正互换容器时捕获业务锚点；普通列表排序不制造滚动请求。
+    private func prepareViewportRestore(wasEditing: Bool, isEditing: Bool) {
+        guard wasEditing != isEditing,
+              viewModel.selectedKind == .manual,
+              viewModel.displaySetting.displayMode == .grid else {
+            return
+        }
+        let sourceSurface: BookCollectionViewportSurface = isEditing ? .grid : .list
+        let destinationSurface: BookCollectionViewportSurface = isEditing ? .list : .grid
+        guard let collectionID = leadingCollectionID(on: sourceSurface),
+              viewModel.visibleCollections.contains(where: { $0.id == collectionID }) else {
+            viewportRestoreRequest = nil
+            return
+        }
+        pendingGridReturnCollectionID = collectionID
+        if destinationSurface == .grid {
+            gridScrollPositionID = collectionID
+        }
+        viewportRestoreRequest = BookCollectionViewportRestoreRequest(
+            collectionID: collectionID,
+            destination: destinationSurface
+        )
+    }
+
+    /// 优先沿用尚未完成的反向恢复目标，避免快速重复切换从新容器的临时首屏重新取锚点。
+    private func leadingCollectionID(on surface: BookCollectionViewportSurface) -> Int64? {
+        if viewportRestoreRequest?.destination == surface {
+            return viewportRestoreRequest?.collectionID
+        }
+        switch surface {
+        case .grid:
+            return lastLeadingGridCollectionID
+        case .list:
+            return lastLeadingListCollectionID
+        }
+    }
+
+    /// 新容器完成首轮布局后无动画恢复同一书单；SwiftUI task 会在容器消失或请求替换时自动取消。
+    @MainActor
+    private func restoreViewportIfNeeded(
+        on surface: BookCollectionViewportSurface,
+        proxy: ScrollViewProxy
+    ) async {
+        if viewportRestoreRequest == nil,
+           surface == .grid,
+           !editMode.isEditing,
+           let pendingGridReturnCollectionID,
+           viewModel.visibleCollections.contains(where: { $0.id == pendingGridReturnCollectionID }) {
+            viewportRestoreRequest = BookCollectionViewportRestoreRequest(
+                collectionID: pendingGridReturnCollectionID,
+                destination: .grid
+            )
+            return
+        }
+        guard let request = viewportRestoreRequest,
+              request.destination == surface else {
+            return
+        }
+        await Task.yield()
+        await waitForNextMainRunLoopTurn()
+        guard !Task.isCancelled,
+              viewportRestoreRequest == request,
+              viewModel.selectedKind == .manual,
+              viewModel.displaySetting.displayMode == .grid,
+              editMode.isEditing == (surface == .list),
+              viewModel.visibleCollections.contains(where: { $0.id == request.collectionID }) else {
+            if viewportRestoreRequest == request {
+                viewportRestoreRequest = nil
+            }
+            if surface == .grid {
+                pendingGridReturnCollectionID = nil
+            }
+            return
+        }
+
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            proxy.scrollTo(request.collectionID, anchor: .top)
+        }
+        if viewportRestoreRequest == request {
+            viewportRestoreRequest = nil
+        }
+        if surface == .grid {
+            pendingGridReturnCollectionID = nil
+        }
+    }
+
+    /// 将滚动恢复推迟到新容器完成首轮布局登记；恢复任务取消后仍会在下一次校验处退出，不会写回过期视口。
+    @MainActor
+    private func waitForNextMainRunLoopTurn() async {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async {
+                continuation.resume()
+            }
+        }
+    }
+
+    /// 切换手动/年度范围时清空旧容器锚点，阻止不同数据集合之间错误定位。
+    private func resetViewportTracking() {
+        visibleGridCollectionIDs.removeAll()
+        visibleListCollectionIDs.removeAll()
+        lastLeadingGridCollectionID = nil
+        lastLeadingListCollectionID = nil
+        gridScrollPositionID = nil
+        pendingGridReturnCollectionID = nil
+        viewportRestoreRequest = nil
+    }
+
+    /// 数据变化后仅保留仍有效的可见身份，并取消已经失效的待恢复目标。
+    private func pruneViewportTracking(validIDs: Set<Int64>) {
+        visibleGridCollectionIDs.formIntersection(validIDs)
+        visibleListCollectionIDs.formIntersection(validIDs)
+        if let lastLeadingGridCollectionID,
+           !validIDs.contains(lastLeadingGridCollectionID) {
+            self.lastLeadingGridCollectionID = nil
+        }
+        if let lastLeadingListCollectionID,
+           !validIDs.contains(lastLeadingListCollectionID) {
+            self.lastLeadingListCollectionID = nil
+        }
+        if let viewportRestoreRequest,
+           !validIDs.contains(viewportRestoreRequest.collectionID) {
+            self.viewportRestoreRequest = nil
+        }
+        if let pendingGridReturnCollectionID,
+           !validIDs.contains(pendingGridReturnCollectionID) {
+            self.pendingGridReturnCollectionID = nil
+        }
+        if let gridScrollPositionID,
+           !validIDs.contains(gridScrollPositionID) {
+            self.gridScrollPositionID = nil
+        }
     }
 
     @ViewBuilder
@@ -399,6 +612,19 @@ struct BookCollectionListView: View {
             ]
         )
     }
+}
+
+/// 区分书单首页浏览网格与系统排序列表，避免把不同布局的像素偏移直接互相复制。
+private enum BookCollectionViewportSurface: Hashable {
+    case grid
+    case list
+}
+
+/// 一次性语义视口恢复请求，以稳定书单 ID 和目标容器约束快速反向切换。
+private struct BookCollectionViewportRestoreRequest: Equatable {
+    let requestID = UUID()
+    let collectionID: Int64
+    let destination: BookCollectionViewportSurface
 }
 
 /// 书单列表顶部范围切换，帮助用户在手动书单和年度书单之间快速定位。

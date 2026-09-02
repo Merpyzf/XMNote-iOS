@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 DatabaseManager、GRDB、ObservationStream 与 TagRecord，按 Android 标签业务语义和 iOS 全局硬删除约束执行标签管理读写
- * [OUTPUT]: 对外提供 TagManagementRepository（TagManagementRepositoryProtocol 的 GRDB 实现）
+ * [OUTPUT]: 对外提供 TagManagementRepository（TagManagementRepositoryProtocol 的 GRDB 实现，单次管理命令及批量删除保持事务原子性）
  * [POS]: Data 层标签管理仓储实现，统一封装标签管理页与业务标签选择器共用的书摘/书籍标签列表、增改删与排序写入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -24,7 +24,7 @@ struct TagManagementRepository: TagManagementRepositoryProtocol {
         }
     }
 
-    /// 新建标签；新增 tag_order 固定为 Android Int.MAX_VALUE，时间字段保持 Android 管理页实际写入的 0。
+    /// 新建标签并在同一事务归一化排序；默认字段保持 Android 管理页的确定结果。
     func createTag(named name: String, scope: TagManagementScope) async throws {
         let normalizedName = try validatedName(name)
         try await databaseManager.database.dbPool.write { db in
@@ -45,11 +45,11 @@ struct TagManagementRepository: TagManagementRepositoryProtocol {
                 isDeleted: 0
             )
             try record.insert(db)
+            try normalizeTagOrder(db, scope: scope)
         }
-        try await normalizeTagOrder(scope: scope)
     }
 
-    /// 编辑标签名称；Android TagManage 走 Room @Update，实际会把时间字段按 mapper 结果覆盖为 0。
+    /// 编辑标签名称并在同一事务归一化排序；字段值保持 Android TagManage 的确定结果。
     func updateTag(tagID: Int64, name: String, scope: TagManagementScope) async throws {
         let normalizedName = try validatedName(name)
         try await databaseManager.database.dbPool.write { db in
@@ -72,25 +72,25 @@ struct TagManagementRepository: TagManagementRepositoryProtocol {
                 normalizedName: normalizedName,
                 scope: scope
             )
+            try normalizeTagOrder(db, scope: scope)
         }
-        try await normalizeTagOrder(scope: scope)
     }
 
-    /// 物理删除标签及全部关系；批量删除保持每个标签单独事务，避免单项失败回滚其它已完成项。
+    /// 在单一事务内物理删除标签及全部关系；任一项失败时回滚整批及排序归一化。
     func deleteTags(tagIDs: [Int64], scope: TagManagementScope) async throws {
         let uniqueIDs = uniquePositiveIDs(tagIDs)
         guard !uniqueIDs.isEmpty else { throw TagManagementRepositoryError.emptySelection }
 
-        for tagID in uniqueIDs {
-            try await databaseManager.database.dbPool.write { db in
+        try await databaseManager.database.dbPool.write { db in
+            for tagID in uniqueIDs {
                 guard try fetchActiveTag(db, tagID: tagID, scope: scope) != nil else {
                     throw TagManagementRepositoryError.invalidTag
                 }
                 try hardDeleteTagRelations(db, tagID: tagID)
                 try hardDeleteTag(db, tagID: tagID, scope: scope)
             }
+            try normalizeTagOrder(db, scope: scope)
         }
-        try await normalizeTagOrder(scope: scope)
     }
 
     /// 写入标签排序；每条 UPDATE 按 Android DAO 更新 updated_date 与 tag_order。
@@ -149,13 +149,11 @@ private extension TagManagementRepository {
         }
     }
 
-    func normalizeTagOrder(scope: TagManagementScope) async throws {
-        try await databaseManager.database.dbPool.write { db in
-            let ownerID = try DatabaseOwnerResolver.fetchExistingOwnerID(in: db) ?? 0
-            let orderedIDs = try fetchOrderedActiveTagIDs(db, ownerID: ownerID, scope: scope)
-            for (index, tagID) in orderedIDs.enumerated() {
-                try updateTagOrder(db, tagID: tagID, order: index, updatedAt: timestampMillis())
-            }
+    nonisolated func normalizeTagOrder(_ db: Database, scope: TagManagementScope) throws {
+        let ownerID = try DatabaseOwnerResolver.fetchExistingOwnerID(in: db) ?? 0
+        let orderedIDs = try fetchOrderedActiveTagIDs(db, ownerID: ownerID, scope: scope)
+        for (index, tagID) in orderedIDs.enumerated() {
+            try updateTagOrder(db, tagID: tagID, order: index, updatedAt: timestampMillis())
         }
     }
 

@@ -1,0 +1,284 @@
+{
+  "schemaVersion": 1,
+  "caseId": "a05.read-status-sort.late-failure",
+  "title": "A-05 阅读状态排序晚失败",
+  "status": "exact-current",
+  "baseline": {
+    "sha256": "${B0_SHA256}",
+    "userVersion": 47,
+    "roomIdentityHash": "4e076c66571412594ff567eae85b68fc",
+    "schemaFingerprint": "${SCHEMA_FINGERPRINT}"
+  },
+  "targetDatabase": {
+    "userVersion": 48,
+    "roomIdentityHash": "cda5a591da1f57aca266af36255e5df7",
+    "schemaFingerprint": "055724e3c2ec28094f771961e2df1cf807efc99ac26f87e9d7308377d9b8eab2"
+  },
+  "runtimeProfile": {
+    "sha256": "${RUNTIME_PROFILE_SHA256}",
+    "requiredSettings": []
+  },
+  "aliases": [
+    {
+      "name": "prefixStatusA",
+      "entity": "readStatus",
+      "description": "第一条成功写入 read_status_order 的状态",
+      "requirements": [
+        "S2 时 read_status_order=310"
+      ]
+    },
+    {
+      "name": "prefixStatusB",
+      "entity": "readStatus",
+      "description": "第二条成功写入 read_status_order 的状态",
+      "requirements": [
+        "S2 时 read_status_order=311"
+      ]
+    },
+    {
+      "name": "failingStatus",
+      "entity": "readStatus",
+      "description": "第三条顺序 UPDATE 被 test-only trigger 中止的状态",
+      "requirements": [
+        "S2 时 read_status_order=312"
+      ]
+    },
+    {
+      "name": "suffixStatus",
+      "entity": "readStatus",
+      "description": "失败后未被循环处理的第四个状态",
+      "requirements": [
+        "S2 时 read_status_order=313"
+      ]
+    }
+  ],
+  "intent": {
+    "summary": "通过生产 BookRepository.updateBookReadStatusOrder 提交四个阅读状态顺序，并在第三项注入晚失败",
+    "selectionScope": "all-visible",
+    "confirmation": "immediate",
+    "outcome": "failed",
+    "repeatTrigger": "once",
+    "selectedAliases": [
+      "prefixStatusA",
+      "prefixStatusB",
+      "failingStatus",
+      "suffixStatus"
+    ]
+  },
+  "adapters": {
+    "android": {
+      "entry": "阅读状态管理的 Repository 排序 owner",
+      "steps": [
+        {
+          "action": "打开隔离基准并稳定读取",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "准备四个状态及第三项失败 trigger",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "触发确定性晚失败，验证本次业务命令完整回滚",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host force-stop、创建 resume marker 后冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    },
+    "ios": {
+      "entry": "原生阅读状态排序入口",
+      "steps": [
+        {
+          "action": "打开隔离基准并稳定读取",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "准备等价四个状态及第三项失败注入",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "触发确定性晚失败，验证本次业务命令完整回滚",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host 终止 App 后以同一副本冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    }
+  },
+  "database": {
+    "allowedWrites": [],
+    "forbiddenWrites": [],
+    "platformInternalTables": [
+      {
+        "table": "grdb_migrations",
+        "platform": "ios",
+        "reason": "GRDB 平台内部迁移记录"
+      }
+    ],
+    "timeColumns": [],
+    "strictExceptions": []
+  },
+  "setup": {
+    "mode": "none"
+  },
+  "oracle": {
+    "currentOracle": "阅读状态排序应在共同事务内写入；任一项失败时全量回滚并报告失败。",
+    "desiredSemantics": "阅读状态排序应在共同事务内写入；任一项失败时全量回滚并报告失败。",
+    "semanticProjections": [
+      {
+        "name": "read-status-orders",
+        "description": "比较四个阅读状态的最终顺序及不变时间字段",
+        "sql": "SELECT id AS status_id, read_status_order, updated_date FROM read_status WHERE id IN (:prefixStatusA, :prefixStatusB, :failingStatus, :suffixStatus) ORDER BY id",
+        "mode": "ordered-rows",
+        "columns": [
+          {
+            "name": "status_id",
+            "aliasEntity": "readStatus"
+          },
+          {
+            "name": "read_status_order"
+          },
+          {
+            "name": "updated_date"
+          }
+        ],
+        "parameters": {
+          "prefixStatusA": {
+            "binding": "prefixStatusA"
+          },
+          "prefixStatusB": {
+            "binding": "prefixStatusB"
+          },
+          "failingStatus": {
+            "binding": "failingStatus"
+          },
+          "suffixStatus": {
+            "binding": "suffixStatus"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": [
+            {
+              "status_id": "prefixStatusA",
+              "read_status_order": 310,
+              "updated_date": 1600000000000
+            },
+            {
+              "status_id": "prefixStatusB",
+              "read_status_order": 311,
+              "updated_date": 1600000000000
+            },
+            {
+              "status_id": "failingStatus",
+              "read_status_order": 312,
+              "updated_date": 1600000000000
+            },
+            {
+              "status_id": "suffixStatus",
+              "read_status_order": 313,
+              "updated_date": 1600000000000
+            }
+          ],
+          "iosBefore": [
+            {
+              "status_id": "prefixStatusA",
+              "read_status_order": 310,
+              "updated_date": 1600000000000
+            },
+            {
+              "status_id": "prefixStatusB",
+              "read_status_order": 311,
+              "updated_date": 1600000000000
+            },
+            {
+              "status_id": "failingStatus",
+              "read_status_order": 312,
+              "updated_date": 1600000000000
+            },
+            {
+              "status_id": "suffixStatus",
+              "read_status_order": 313,
+              "updated_date": 1600000000000
+            }
+          ],
+          "androidAfter": [
+            {
+              "status_id": "prefixStatusA",
+              "read_status_order": 310,
+              "updated_date": 1600000000000
+            },
+            {
+              "status_id": "prefixStatusB",
+              "read_status_order": 311,
+              "updated_date": 1600000000000
+            },
+            {
+              "status_id": "failingStatus",
+              "read_status_order": 312,
+              "updated_date": 1600000000000
+            },
+            {
+              "status_id": "suffixStatus",
+              "read_status_order": 313,
+              "updated_date": 1600000000000
+            }
+          ],
+          "iosAfter": [
+            {
+              "status_id": "prefixStatusA",
+              "read_status_order": 310,
+              "updated_date": 1600000000000
+            },
+            {
+              "status_id": "prefixStatusB",
+              "read_status_order": 311,
+              "updated_date": 1600000000000
+            },
+            {
+              "status_id": "failingStatus",
+              "read_status_order": 312,
+              "updated_date": 1600000000000
+            },
+            {
+              "status_id": "suffixStatus",
+              "read_status_order": 313,
+              "updated_date": 1600000000000
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "lifecycle": {
+    "checkpoints": [
+      {
+        "stage": "S0",
+        "meaning": "不可变 B0"
+      },
+      {
+        "stage": "S1",
+        "meaning": "首次打开"
+      },
+      {
+        "stage": "S2",
+        "meaning": "阅读状态排序提交前"
+      },
+      {
+        "stage": "S3",
+        "meaning": "第三项失败并向上传播后"
+      },
+      {
+        "stage": "S4",
+        "meaning": "独立进程冷启动后的稳定状态"
+      }
+    ],
+    "requireS3S4BusinessStable": true,
+    "requireRestart": true,
+    "restoreDirection": "none"
+  }
+}

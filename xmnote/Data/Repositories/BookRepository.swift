@@ -3,7 +3,7 @@ import GRDB
 
 /**
  * [INPUT]: 依赖 AppDatabase 提供本地数据库连接，依赖 ObservationStream 提供观察流桥接
- * [OUTPUT]: 对外提供 BookRepository（BookRepositoryProtocol 的 GRDB 实现，含书架列表读写、单书评分与四域观察、书架/书单显示设置、分组移入移出、书单加入、批量编辑、删除与重命名管理）
+ * [OUTPUT]: 对外提供 BookRepository（BookRepositoryProtocol 的 GRDB 实现，含书架列表读写、单书评分与四域观察、书架/书单显示设置、分组移入移出、书单加入、批量编辑、作者/出版社书籍字段批改、删除与重命名管理）
  * [POS]: Data 层书籍仓储实现，统一封装书架列表/详情/四域内容数据读取、默认书架分组预览排序与默认书架排序置顶写入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -167,10 +167,14 @@ struct BookRepository: BookRepositoryProtocol {
         }
     }
 
-    /// 批量设置书籍标签：单本替换，多本追加缺失。
-    func batchSetBooksTags(bookIDs: [Int64], tagIDs: [Int64]) async throws {
+    /// 按显式模式批量变更书籍标签关系。
+    func mutateBooksTags(
+        bookIDs: [Int64],
+        tagIDs: [Int64],
+        mode: BookTagMutationMode
+    ) async throws {
         try await databaseManager.database.dbPool.write { db in
-            try batchSetBooksTags(db, bookIDs: bookIDs, tagIDs: tagIDs)
+            try mutateBooksTags(db, bookIDs: bookIDs, tagIDs: tagIDs, mode: mode)
         }
     }
 
@@ -269,7 +273,7 @@ struct BookRepository: BookRepositoryProtocol {
         }
     }
 
-    /// 删除手动书单及其全部 relation。
+    /// 在单一事务内物理删除手动书单及其全部 relation，并清理由此产生的孤立引用占位书。
     func deleteBookCollection(collectionID: Int64) async throws {
         try await databaseManager.database.dbPool.write { db in
             try deleteBookCollection(db, collectionID: collectionID)
@@ -307,7 +311,7 @@ struct BookRepository: BookRepositoryProtocol {
         }
     }
 
-    /// 从书单内移除指定 relation。
+    /// 从书单内物理移除指定 relation，并在最后一个有效引用消失后清理引用占位书。
     func removeBooksFromCollection(collectionBookIDs: [Int64]) async throws {
         try await databaseManager.database.dbPool.write { db in
             try removeBooksFromCollection(db, collectionBookIDs: collectionBookIDs)
@@ -407,7 +411,7 @@ struct BookRepository: BookRepositoryProtocol {
         try await updateBookshelfOrder(orderedItems)
     }
 
-    /// 删除默认书架条目，Book 走软删除级联清理，Group 先安置组内书籍再软删除。
+    /// 删除默认书架条目，Book 走物理级联清理，Group 先安置组内书籍再物理删除。
     func deleteBookshelfItems(
         _ ids: [BookshelfItemID],
         groupBooksPlacement: GroupBooksPlacement
@@ -417,14 +421,23 @@ struct BookRepository: BookRepositoryProtocol {
         }
     }
 
-    /// 将书籍移入目标分组，复刻 Android GroupRepository.moveBooksToGroup 语义。
-    func moveBooks(_ bookIDs: [Int64], toGroup targetGroupID: Int64) async throws {
+    /// 将书籍从操作时的原分组移入目标分组，复刻 Android GroupRepository.moveBooksToGroup 的并发校验语义。
+    func moveBooks(
+        _ bookIDs: [Int64],
+        fromGroup currentGroupID: Int64,
+        toGroup targetGroupID: Int64
+    ) async throws {
         try await databaseManager.database.dbPool.write { db in
-            try moveBooksToGroup(db, bookIDs: bookIDs, targetGroupID: targetGroupID)
+            try moveBooksToGroup(
+                db,
+                bookIDs: bookIDs,
+                currentGroupID: currentGroupID,
+                targetGroupID: targetGroupID
+            )
         }
     }
 
-    /// 软删除指定书籍及其 Android 对齐关联数据。
+    /// 在单一事务内物理删除指定书籍及其业务关联数据。
     func deleteBooks(_ bookIDs: [Int64]) async throws {
         try await databaseManager.database.dbPool.write { db in
             try deleteBooks(db, bookIDs: bookIDs)
@@ -438,7 +451,7 @@ struct BookRepository: BookRepositoryProtocol {
         }
     }
 
-    /// 重命名分组，更新时间戳以便后续同步层感知变更。
+    /// 重命名分组，并按 Android 当前命令语义更新时间戳。
     func renameGroup(groupID: Int64, newName: String) async throws {
         try await databaseManager.database.dbPool.write { db in
             try renameGroup(db, groupID: groupID, newName: newName)
@@ -480,6 +493,13 @@ struct BookRepository: BookRepositoryProtocol {
         }
     }
 
+    /// 原子修改多个作者维度下的有效书籍，不创建、重命名或删除作者资料记录。
+    func batchModifyBooksAuthor(sourceNames: [String], newName: String) async throws {
+        try await databaseManager.database.dbPool.write { db in
+            try batchModifyBooksAuthor(db, sourceNames: sourceNames, newName: newName)
+        }
+    }
+
     /// 删除作者维度下的所有有效书籍，并按 Android 语义硬删除作者资料行。
     func deleteAuthor(name: String) async throws {
         try await databaseManager.database.dbPool.write { db in
@@ -491,6 +511,13 @@ struct BookRepository: BookRepositoryProtocol {
     func renamePress(oldName: String, newName: String) async throws {
         try await databaseManager.database.dbPool.write { db in
             try renamePress(db, oldName: oldName, newName: newName)
+        }
+    }
+
+    /// 原子修改多个出版社维度下的有效书籍，不创建、重命名或删除出版社资料记录。
+    func batchModifyBooksPress(sourceNames: [String], newName: String) async throws {
+        try await databaseManager.database.dbPool.write { db in
+            try batchModifyBooksPress(db, sourceNames: sourceNames, newName: newName)
         }
     }
 

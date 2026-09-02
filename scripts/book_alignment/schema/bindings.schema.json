@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://xmnote.local/schemas/book-alignment-bindings.schema.json",
+  "title": "BookAlignmentBindings",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "baselineSha256", "schemaFingerprint", "runtimeProfileSha256", "aliases"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "baselineSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "schemaFingerprint": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "runtimeProfileSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "setupSqlSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "aliases": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["entity", "id"],
+        "properties": {
+          "entity": {
+            "enum": [
+              "book",
+              "group",
+              "tag",
+              "source",
+              "readStatus",
+              "collection",
+              "author",
+              "publisher",
+              "categoryContent",
+              "other"
+            ]
+          },
+          "id": { "type": ["integer", "string"] },
+          "privateLabel": { "type": "string" }
+        }
+      }
+    }
+  }
+}

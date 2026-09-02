@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 BookshelfBookListChromeMetrics、InteractionMetrics、顶部按钮与书架管理模式动效
- * [OUTPUT]: 对外提供 BookshelfBookListBrowsingChrome，供二级书籍列表页组合普通态顶部 chrome
+ * [INPUT]: 依赖 BookshelfBookListChromeMetrics、InteractionMetrics、Reicon 整理入口、顶部按钮与书架管理模式动效
+ * [OUTPUT]: 对外提供带 Reicon 整理入口的 BookshelfBookListBrowsingChrome，供二级书籍列表页组合普通态顶部 chrome
  * [POS]: Book 模块二级书籍列表页面私有 chrome 子视图，降低 BookshelfBookListView 文件职责密度
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -67,10 +67,15 @@ struct BookshelfBookListBrowsingChrome: View {
                 .animation(BookshelfManagementMotion.bookListTopActionAnimation(reduceMotion: reduceMotion), value: canEnterEditing)
 
             Button(action: onEnterEditing) {
-                TopBarActionIcon(
-                    systemName: "checklist",
+                BookshelfEditingActionIcon(
+                    icon: .checklist,
                     foregroundColor: canEnterEditing ? Color.iconPrimary : Color.textHint
                 )
+                .frame(
+                    width: InteractionMetrics.minimumTouchTarget,
+                    height: InteractionMetrics.minimumTouchTarget
+                )
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .disabled(!canEnterEditing)

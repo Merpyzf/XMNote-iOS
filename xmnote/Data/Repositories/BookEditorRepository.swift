@@ -3,7 +3,7 @@ import GRDB
 
 /**
  * [INPUT]: 依赖 DatabaseManager 提供本地数据库连接，依赖 BookRecord/ChapterRecord/GroupRecord/TagRecord/SourceRecord 等持久化实体，依赖 S3UploadRepositoryProtocol 与 XMCoverImageLoading 执行新书外部封面异步转存
- * [OUTPUT]: 对外提供 BookEditorRepository（BookEditorRepositoryProtocol 的 GRDB 实现）
+ * [OUTPUT]: 对外提供 BookEditorRepository（BookEditorRepositoryProtocol 的 GRDB 实现，编辑时物理替换分组与标签关系）
  * [POS]: Data 层书籍录入仓储实现，统一封装录入选项、偏好、新增保存与既有书籍编辑事务
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -183,29 +183,21 @@ struct BookEditorRepository: BookEditorRepositoryProtocol {
             )
 
             if let groupId {
-                var groupBook = GroupBookRecord(
-                    id: nil,
-                    groupId: groupId,
-                    bookId: bookId,
-                    createdDate: now,
-                    updatedDate: 0,
-                    lastSyncDate: 0,
-                    isDeleted: 0
+                try BookRelationWriter.insertGroup(
+                    db,
+                    groupID: groupId,
+                    bookID: bookId,
+                    createdAt: now
                 )
-                try groupBook.insert(db)
             }
 
             for tagId in tagIds {
-                var tagBook = TagBookRecord(
-                    id: nil,
-                    bookId: bookId,
-                    tagId: tagId,
-                    createdDate: now,
-                    updatedDate: 0,
-                    lastSyncDate: 0,
-                    isDeleted: 0
+                try BookRelationWriter.insertTag(
+                    db,
+                    bookID: bookId,
+                    tagID: tagId,
+                    createdAt: now
                 )
-                try tagBook.insert(db)
             }
 
             return (
@@ -1119,54 +1111,44 @@ private extension BookEditorRepository {
 
     nonisolated func replaceGroupRelation(groupId: Int64?, for bookId: Int64, updatedAt: Int64, db: Database) throws {
         // SQL 目的：编辑分组时替换书籍有效分组关系，保持单书唯一有效分组语义。
-        // 涉及表：group_book；先使原关系产生 Android 同步可见的 tombstone，再插入新关系。
-        // 关键过滤：book_id 精确匹配且只处理 is_deleted = 0 的有效关系。
-        // 时间字段：updated_date 与新关系 created_date 均使用本次保存的 Unix 毫秒时间戳。
-        // 副作用用途：保留跨端删除语义，避免物理删除导致旧关系被远端复活。
+        // 涉及表：group_book；先物理清理该书全部有效及历史关系，再按当前选择插入唯一关系。
+        // 关键过滤：book_id 精确匹配，不保留旧备份 tombstone。
+        // 时间字段：物理删除不写时间字段；新关系 created_date 使用本次保存的 Unix 毫秒时间戳。
+        // 副作用用途：遵循全局硬删除语义，并让重复保存保持单一关系最终状态。
         let sql = """
-            UPDATE group_book
-            SET updated_date = ?, is_deleted = 1
-            WHERE book_id = ? AND is_deleted = 0
+            DELETE FROM group_book
+            WHERE book_id = ?
             """
-        try db.execute(sql: sql, arguments: [updatedAt, bookId])
+        try db.execute(sql: sql, arguments: [bookId])
 
         guard let groupId else { return }
-        var relation = GroupBookRecord(
-            id: nil,
-            groupId: groupId,
-            bookId: bookId,
-            createdDate: updatedAt,
-            updatedDate: 0,
-            lastSyncDate: 0,
-            isDeleted: 0
+        try BookRelationWriter.insertGroup(
+            db,
+            groupID: groupId,
+            bookID: bookId,
+            createdAt: updatedAt
         )
-        try relation.insert(db)
     }
 
     nonisolated func replaceTagRelations(tagIds: [Int64], for bookId: Int64, updatedAt: Int64, db: Database) throws {
         // SQL 目的：编辑标签时替换书籍有效标签关系，与 Android 单书编辑的全量覆盖语义一致。
-        // 涉及表：tag_book；先软删除原关系，再按草稿标签集合插入新关系。
-        // 关键过滤：book_id 精确匹配且只处理 is_deleted = 0 的有效关系。
-        // 时间字段：updated_date 与新关系 created_date 均使用本次保存的 Unix 毫秒时间戳。
-        // 副作用用途：保留可同步的关系删除记录，再建立当前唯一有效集合。
+        // 涉及表：tag_book；先物理清理该书全部有效及历史关系，再按草稿标签集合插入新关系。
+        // 关键过滤：book_id 精确匹配，不保留旧备份 tombstone。
+        // 时间字段：物理删除不写时间字段；新关系 created_date 使用本次保存的 Unix 毫秒时间戳。
+        // 副作用用途：遵循全局硬删除语义并建立当前唯一有效集合。
         let sql = """
-            UPDATE tag_book
-            SET updated_date = ?, is_deleted = 1
-            WHERE book_id = ? AND is_deleted = 0
+            DELETE FROM tag_book
+            WHERE book_id = ?
             """
-        try db.execute(sql: sql, arguments: [updatedAt, bookId])
+        try db.execute(sql: sql, arguments: [bookId])
 
         for tagId in tagIds {
-            var relation = TagBookRecord(
-                id: nil,
-                bookId: bookId,
-                tagId: tagId,
-                createdDate: updatedAt,
-                updatedDate: 0,
-                lastSyncDate: 0,
-                isDeleted: 0
+            try BookRelationWriter.insertTag(
+                db,
+                bookID: bookId,
+                tagID: tagId,
+                createdAt: updatedAt
             )
-            try relation.insert(db)
         }
     }
 

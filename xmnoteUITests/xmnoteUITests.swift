@@ -41,14 +41,17 @@ final class BookshelfBookListSearchDrawerUITests: XCTestCase {
 
     func testDefaultBookshelfSearchFiltersClearsAndCancels() throws {
         let app = launchDefaultBookshelf()
-        _ = waitForDefaultBookshelf(in: app)
+        let collection = waitForDefaultBookshelf(in: app)
 
         XCTAssertFalse(app.textFields["bookshelf.default.search.field"].exists)
-        XCTAssertFalse(app.buttons["bookshelf.default.search.drawer"].exists)
+        XCTAssertFalse(app.buttons["bookshelf.default.search.drawer"].isHittable)
 
-        let activateSearch = app.buttons["bookshelf.default.search.activate"]
-        XCTAssertTrue(activateSearch.waitForExistence(timeout: 4))
-        activateSearch.tap()
+        revealSearchDrawer(
+            in: collection,
+            drawerIdentifier: "bookshelf.default.search.drawer",
+            app: app
+        )
+        app.buttons["bookshelf.default.search.drawer"].tap()
 
         let field = app.textFields["bookshelf.default.search.field"]
         XCTAssertTrue(field.waitForExistence(timeout: 3))
@@ -73,12 +76,15 @@ final class BookshelfBookListSearchDrawerUITests: XCTestCase {
 
     func testDefaultBookshelfSearchExplainsSortingDisabledInEditing() throws {
         let app = launchDefaultBookshelf()
-        _ = waitForDefaultBookshelf(in: app)
+        let collection = waitForDefaultBookshelf(in: app)
 
         let sortingNotice = "搜索结果暂不支持排序，清除搜索后可调整顺序"
-        let activateSearch = app.buttons["bookshelf.default.search.activate"]
-        XCTAssertTrue(activateSearch.waitForExistence(timeout: 4))
-        activateSearch.tap()
+        revealSearchDrawer(
+            in: collection,
+            drawerIdentifier: "bookshelf.default.search.drawer",
+            app: app
+        )
+        app.buttons["bookshelf.default.search.drawer"].tap()
 
         let field = app.textFields["bookshelf.default.search.field"]
         XCTAssertTrue(field.waitForExistence(timeout: 3))
@@ -92,15 +98,18 @@ final class BookshelfBookListSearchDrawerUITests: XCTestCase {
 
     func testDefaultBookshelfEditingSearchUsesSharedSurfaceAndSelectsVisibleResults() throws {
         let app = launchDefaultBookshelf()
-        _ = waitForDefaultBookshelf(in: app)
+        let collection = waitForDefaultBookshelf(in: app)
 
         openDefaultBookshelfEditing(in: app)
-        XCTAssertTrue(app.staticTexts["选择书籍"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["退出整理模式"].waitForExistence(timeout: 3))
         XCTAssertFalse(app.textFields["在整理结果中搜索"].exists)
 
-        let editSearchButton = app.buttons["bookshelf.edit.search.activate"]
-        XCTAssertTrue(editSearchButton.waitForExistence(timeout: 3))
-        editSearchButton.tap()
+        revealSearchDrawer(
+            in: collection,
+            drawerIdentifier: "bookshelf.default.search.drawer",
+            app: app
+        )
+        app.buttons["bookshelf.default.search.drawer"].tap()
 
         let field = app.textFields["bookshelf.default.search.field"]
         XCTAssertTrue(field.waitForExistence(timeout: 3))
@@ -120,6 +129,90 @@ final class BookshelfBookListSearchDrawerUITests: XCTestCase {
         XCTAssertTrue(defaultEditingBookButton(in: app, id: 1001, selected: true).waitForExistence(timeout: 3))
     }
 
+    func testDefaultBookshelfSelectionLifecycleAndCellReuseStayConsistent() throws {
+        let app = launchDefaultBookshelf()
+        let collection = waitForDefaultBookshelf(in: app)
+
+        openDefaultBookshelfEditing(in: app)
+        let firstBook = defaultEditingBookButton(in: app, id: 1001, selected: false)
+        XCTAssertTrue(firstBook.waitForExistence(timeout: 3), app.debugDescription)
+        XCTAssertFalse(firstBook.isSelected)
+
+        firstBook.tap()
+        let selectedFirstBook = defaultEditingBookButton(in: app, id: 1001, selected: true)
+        XCTAssertTrue(selectedFirstBook.waitForExistence(timeout: 3), app.debugDescription)
+        XCTAssertTrue(selectedFirstBook.isSelected)
+        XCTAssertTrue(app.staticTexts["已选 1 本"].waitForExistence(timeout: 3), app.debugDescription)
+
+        selectedFirstBook.tap()
+        let deselectedFirstBook = defaultEditingBookButton(in: app, id: 1001, selected: false)
+        XCTAssertTrue(deselectedFirstBook.waitForExistence(timeout: 3), app.debugDescription)
+        XCTAssertFalse(deselectedFirstBook.isSelected)
+        XCTAssertTrue(app.staticTexts["未选择"].waitForExistence(timeout: 3), app.debugDescription)
+
+        let rapidlyToggledBook = defaultBookButton(in: app, id: 1001)
+        rapidlyToggledBook.tap()
+        rapidlyToggledBook.tap()
+        XCTAssertTrue(
+            defaultEditingBookButton(in: app, id: 1001, selected: false).waitForExistence(timeout: 3),
+            app.debugDescription
+        )
+
+        defaultEditingBookButton(in: app, id: 1001, selected: false).tap()
+        XCTAssertTrue(
+            defaultEditingBookButton(in: app, id: 1001, selected: true).waitForExistence(timeout: 3),
+            app.debugDescription
+        )
+
+        let reusedTarget = defaultEditingBookButton(in: app, id: 1016, selected: false)
+        scrollToUpperHalf(reusedTarget, in: collection, app: app)
+        XCTAssertFalse(reusedTarget.isSelected)
+        XCTAssertFalse(defaultEditingBookButton(in: app, id: 1016, selected: true).exists)
+
+        scrollTowardBeginningUntilVisible(
+            defaultEditingBookButton(in: app, id: 1001, selected: true),
+            in: collection,
+            app: app
+        )
+        XCTAssertTrue(defaultEditingBookButton(in: app, id: 1001, selected: true).isSelected)
+
+        finishBookshelfEditing(in: app)
+        let browsingFirstBook = defaultBookButton(in: app, id: 1001)
+        XCTAssertTrue(browsingFirstBook.waitForExistence(timeout: 3), app.debugDescription)
+        XCTAssertFalse(browsingFirstBook.isSelected)
+        XCTAssertFalse(defaultEditingBookButton(in: app, id: 1001, selected: true).waitForExistence(timeout: 1))
+        XCTAssertFalse(defaultEditingBookButton(in: app, id: 1001, selected: false).waitForExistence(timeout: 1))
+
+        openDefaultBookshelfEditing(in: app)
+        let resetFirstBook = defaultEditingBookButton(in: app, id: 1001, selected: false)
+        XCTAssertTrue(resetFirstBook.waitForExistence(timeout: 3), app.debugDescription)
+        XCTAssertFalse(resetFirstBook.isSelected)
+    }
+
+    func testDefaultBookshelfEditingPreservesScrolledViewport() throws {
+        let app = launchDefaultBookshelf()
+        let collection = waitForDefaultBookshelf(in: app)
+        let target = defaultBookButton(in: app, id: 1016)
+
+        scrollToUpperHalf(target, in: collection, app: app)
+        let targetFrameBeforeEditing = target.frame
+        XCTAssertFalse(defaultBookButton(in: app, id: 1001).isHittable)
+
+        openDefaultBookshelfEditing(in: app)
+        XCTAssertTrue(target.waitForExistence(timeout: 3), app.debugDescription)
+        XCTAssertTrue(target.isHittable, app.debugDescription)
+        XCTAssertFalse(defaultBookButton(in: app, id: 1001).isHittable)
+        XCTAssertLessThan(
+            abs(target.frame.midY - targetFrameBeforeEditing.midY),
+            collection.frame.height * 0.25
+        )
+
+        finishBookshelfEditing(in: app)
+        XCTAssertTrue(target.waitForExistence(timeout: 3), app.debugDescription)
+        XCTAssertTrue(target.isHittable, app.debugDescription)
+        XCTAssertFalse(defaultBookButton(in: app, id: 1001).isHittable)
+    }
+
     func testSearchDrawerHiddenByDefaultAndRevealedByPull() throws {
         let app = launchBookList(argument: wantReadArgument)
         let collection = waitForBookList(in: app)
@@ -133,7 +226,7 @@ final class BookshelfBookListSearchDrawerUITests: XCTestCase {
         let drawer = app.buttons["bookshelf.book-list.search.drawer"]
         XCTAssertTrue(drawer.waitForExistence(timeout: 2))
         XCTAssertTrue(drawer.isHittable)
-        XCTAssertTrue(drawer.label.contains("在 26 本中搜索"))
+        XCTAssertEqual(drawer.label, "搜索书名或作者")
     }
 
     func testSearchDrawerPinsWhileSearching() throws {
@@ -184,19 +277,105 @@ final class BookshelfBookListSearchDrawerUITests: XCTestCase {
         let editButton = app.buttons["整理书籍"]
         XCTAssertTrue(editButton.waitForExistence(timeout: 3))
         editButton.tap()
-        XCTAssertTrue(app.staticTexts["选择书籍"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["退出整理模式"].waitForExistence(timeout: 3))
         XCTAssertFalse(app.textFields["在整理结果中搜索"].exists)
-        XCTAssertTrue(app.buttons["bookshelf.edit.search.activate"].exists)
 
         revealSearchDrawer(in: collection, app: app)
         let drawer = app.buttons["bookshelf.book-list.search.drawer"]
         XCTAssertTrue(drawer.waitForExistence(timeout: 2))
-        XCTAssertTrue(drawer.label.contains("在 26 本中搜索"))
+        XCTAssertEqual(drawer.label, "搜索书名或作者")
 
         drawer.tap()
         let field = app.textFields["bookshelf.book-list.search.field"]
         XCTAssertTrue(field.waitForExistence(timeout: 2))
         XCTAssertFalse(app.textFields["在整理结果中搜索"].exists)
+    }
+
+    func testBookListSelectionLifecycleAndCellReuseStayConsistent() throws {
+        let app = launchBookList(argument: wantReadArgument)
+        let collection = waitForBookList(in: app)
+
+        openBookListEditing(in: app)
+        let firstBook = editingBookButton(in: app, id: 1001, selected: false)
+        XCTAssertTrue(firstBook.waitForExistence(timeout: 3), app.debugDescription)
+        XCTAssertFalse(firstBook.isSelected)
+
+        firstBook.tap()
+        let selectedFirstBook = editingBookButton(in: app, id: 1001, selected: true)
+        XCTAssertTrue(selectedFirstBook.waitForExistence(timeout: 3), app.debugDescription)
+        XCTAssertTrue(selectedFirstBook.isSelected)
+        XCTAssertTrue(app.staticTexts["已选 1 本"].waitForExistence(timeout: 3), app.debugDescription)
+
+        selectedFirstBook.tap()
+        let deselectedFirstBook = editingBookButton(in: app, id: 1001, selected: false)
+        XCTAssertTrue(deselectedFirstBook.waitForExistence(timeout: 3), app.debugDescription)
+        XCTAssertFalse(deselectedFirstBook.isSelected)
+        XCTAssertTrue(app.staticTexts["未选择"].waitForExistence(timeout: 3), app.debugDescription)
+
+        let rapidlyToggledBook = bookButton(in: app, id: 1001)
+        rapidlyToggledBook.tap()
+        rapidlyToggledBook.tap()
+        XCTAssertTrue(
+            editingBookButton(in: app, id: 1001, selected: false).waitForExistence(timeout: 3),
+            app.debugDescription
+        )
+
+        editingBookButton(in: app, id: 1001, selected: false).tap()
+        XCTAssertTrue(
+            editingBookButton(in: app, id: 1001, selected: true).waitForExistence(timeout: 3),
+            app.debugDescription
+        )
+
+        let reusedTarget = editingBookButton(in: app, id: 1016, selected: false)
+        scrollToUpperHalf(reusedTarget, in: collection, app: app)
+        XCTAssertFalse(reusedTarget.isSelected)
+        XCTAssertFalse(editingBookButton(in: app, id: 1016, selected: true).exists)
+
+        scrollTowardBeginningUntilVisible(
+            editingBookButton(in: app, id: 1001, selected: true),
+            in: collection,
+            app: app
+        )
+        XCTAssertTrue(editingBookButton(in: app, id: 1001, selected: true).isSelected)
+
+        finishBookshelfEditing(in: app)
+        let browsingFirstBook = bookButton(in: app, id: 1001)
+        XCTAssertTrue(browsingFirstBook.waitForExistence(timeout: 3), app.debugDescription)
+        XCTAssertFalse(browsingFirstBook.isSelected)
+        XCTAssertFalse(editingBookButton(in: app, id: 1001, selected: true).waitForExistence(timeout: 1))
+        XCTAssertFalse(editingBookButton(in: app, id: 1001, selected: false).waitForExistence(timeout: 1))
+
+        openBookListEditing(in: app)
+        let resetFirstBook = editingBookButton(in: app, id: 1001, selected: false)
+        XCTAssertTrue(resetFirstBook.waitForExistence(timeout: 3), app.debugDescription)
+        XCTAssertFalse(resetFirstBook.isSelected)
+    }
+
+    func testBookListEditingPreservesScrolledViewport() throws {
+        let app = launchBookList(argument: wantReadArgument)
+        let collection = waitForBookList(in: app)
+        let target = bookButton(in: app, id: 1016)
+
+        scrollToUpperHalf(target, in: collection, app: app)
+        let targetFrameBeforeEditing = target.frame
+        XCTAssertFalse(bookButton(in: app, id: 1001).isHittable)
+
+        let editButton = app.buttons["整理书籍"]
+        XCTAssertTrue(editButton.waitForExistence(timeout: 3), app.debugDescription)
+        editButton.tap()
+
+        XCTAssertTrue(target.waitForExistence(timeout: 3), app.debugDescription)
+        XCTAssertTrue(target.isHittable, app.debugDescription)
+        XCTAssertFalse(bookButton(in: app, id: 1001).isHittable)
+        XCTAssertLessThan(
+            abs(target.frame.midY - targetFrameBeforeEditing.midY),
+            collection.frame.height * 0.25
+        )
+
+        finishBookshelfEditing(in: app)
+        XCTAssertTrue(target.waitForExistence(timeout: 3), app.debugDescription)
+        XCTAssertTrue(target.isHittable, app.debugDescription)
+        XCTAssertFalse(bookButton(in: app, id: 1001).isHittable)
     }
 
     func testBookListReorderStillUsesCollectionDrag() throws {
@@ -206,7 +385,7 @@ final class BookshelfBookListSearchDrawerUITests: XCTestCase {
         let editButton = app.buttons["整理书籍"]
         XCTAssertTrue(editButton.waitForExistence(timeout: 3))
         editButton.tap()
-        XCTAssertTrue(app.staticTexts["选择书籍"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["退出整理模式"].waitForExistence(timeout: 3))
 
         let firstBook = editingBookButton(in: app, id: 2001)
         let targetBook = editingBookButton(in: app, id: 2004)
@@ -232,14 +411,14 @@ final class BookshelfBookListSearchDrawerUITests: XCTestCase {
         let app = launchDefaultBookshelf()
         openBookCollectionTab(in: app)
 
-        XCTAssertTrue(app.buttons["book.collection.create"].waitForExistence(timeout: 3), app.debugDescription)
-        XCTAssertTrue(app.buttons["book.collection.reorder"].exists)
+        XCTAssertTrue(app.buttons["book.collection.top.create"].waitForExistence(timeout: 3), app.debugDescription)
+        XCTAssertTrue(app.buttons["book.collection.top.more"].exists)
         XCTAssertTrue(app.staticTexts["UI测试手动书单"].waitForExistence(timeout: 3), app.debugDescription)
 
         app.staticTexts["UI测试手动书单"].tap()
 
         XCTAssertTrue(app.otherElements["book.collection.detail"].waitForExistence(timeout: 4), app.debugDescription)
-        XCTAssertTrue(app.buttons["加入书籍"].waitForExistence(timeout: 3), app.debugDescription)
+        XCTAssertTrue(app.buttons["book.collection.detail.add"].waitForExistence(timeout: 3), app.debugDescription)
         XCTAssertTrue(app.staticTexts["适合验证书单详情的推荐语"].waitForExistence(timeout: 3), app.debugDescription)
     }
 
@@ -247,33 +426,69 @@ final class BookshelfBookListSearchDrawerUITests: XCTestCase {
         let app = launchDefaultBookshelf()
         openBookCollectionTab(in: app)
 
-        let annualSegment = app.buttons["年度书单"]
-        XCTAssertTrue(annualSegment.waitForExistence(timeout: 3), app.debugDescription)
-        annualSegment.tap()
+        selectAnnualBookCollections(in: app)
 
         XCTAssertTrue(app.staticTexts["2026 年阅读书单"].waitForExistence(timeout: 3), app.debugDescription)
         app.staticTexts["2026 年阅读书单"].tap()
 
         XCTAssertTrue(app.otherElements["book.collection.detail"].waitForExistence(timeout: 4), app.debugDescription)
-        XCTAssertTrue(app.staticTexts["年度书单由读完记录维护，标题、书籍和顺序在 iOS 端保持只读。"].waitForExistence(timeout: 3), app.debugDescription)
-        XCTAssertFalse(app.buttons["加入书籍"].exists)
+        XCTAssertTrue(app.staticTexts["年度书单内容自动同步"].waitForExistence(timeout: 3), app.debugDescription)
+        XCTAssertFalse(app.buttons["book.collection.detail.add"].exists)
+    }
+
+    func testBookCollectionGridReorderingPreservesSemanticViewport() throws {
+        let app = launchDefaultBookshelf()
+        openBookCollectionTab(in: app)
+        switchBookCollectionDisplayToList(in: app)
+        switchBookCollectionDisplayToGrid(in: app)
+
+        let grid = app.scrollViews["book.collection.grid"]
+        XCTAssertTrue(grid.waitForExistence(timeout: 4), app.debugDescription)
+        let targetGridCard = app.buttons["book.collection.grid.9116"]
+        scrollToUpperHalf(targetGridCard, in: grid, app: app)
+        XCTAssertFalse(app.buttons["book.collection.grid.9101"].isHittable)
+        let anchorID = leadingVisibleManualCollectionID(in: grid, app: app)
+        XCTAssertNotEqual(anchorID, 9_101)
+
+        app.buttons["book.collection.top.more"].tap()
+        let reorder = app.buttons["调整排序"]
+        XCTAssertTrue(reorder.waitForExistence(timeout: 3), app.debugDescription)
+        reorder.tap()
+
+        let targetRow = app.buttons["book.collection.row.\(anchorID)"]
+        XCTAssertTrue(targetRow.waitForExistence(timeout: 4), app.debugDescription)
+        XCTAssertTrue(targetRow.isHittable, app.debugDescription)
+        XCTAssertFalse(app.buttons["book.collection.row.9101"].isHittable)
+
+        let done = app.buttons["book.collection.top.reorder.done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 3), app.debugDescription)
+        done.tap()
+
+        let restoredGridCard = app.buttons["book.collection.grid.\(anchorID)"]
+        XCTAssertTrue(restoredGridCard.waitForExistence(timeout: 4), app.debugDescription)
+        XCTAssertTrue(restoredGridCard.isHittable, app.debugDescription)
+        XCTAssertFalse(app.buttons["book.collection.grid.9101"].isHittable)
     }
 
     func testBookCollectionCreateEditAddAndDeleteFlow() throws {
         let app = launchDefaultBookshelf()
         openBookCollectionTab(in: app)
+        switchBookCollectionDisplayToList(in: app)
 
         let createdTitle = "UITest Collection"
         let editedTitle = "UITest Collection Edited"
 
-        app.buttons["book.collection.create"].tap()
-        let createAlert = app.alerts["新建书单"]
-        XCTAssertTrue(createAlert.waitForExistence(timeout: 3), app.debugDescription)
-        createAlert.textFields.element(boundBy: 0).tap()
-        createAlert.textFields.element(boundBy: 0).typeText(createdTitle)
-        createAlert.textFields.element(boundBy: 1).tap()
-        createAlert.textFields.element(boundBy: 1).typeText("Created by UI test")
-        createAlert.buttons["创建"].tap()
+        app.buttons["book.collection.top.create"].tap()
+        XCTAssertTrue(app.navigationBars["新建书单"].waitForExistence(timeout: 3), app.debugDescription)
+        let createTitleField = app.textFields["书单标题"]
+        XCTAssertTrue(createTitleField.waitForExistence(timeout: 3), app.debugDescription)
+        createTitleField.tap()
+        createTitleField.typeText(createdTitle)
+        let createDescription = app.textViews.firstMatch
+        XCTAssertTrue(createDescription.waitForExistence(timeout: 3), app.debugDescription)
+        createDescription.tap()
+        createDescription.typeText("Created by UI test")
+        app.buttons["确认"].firstMatch.tap()
 
         let createdTitleElement = app.staticTexts[createdTitle]
         XCTAssertTrue(createdTitleElement.waitForExistence(timeout: 4), app.debugDescription)
@@ -283,20 +498,20 @@ final class BookshelfBookListSearchDrawerUITests: XCTestCase {
         XCTAssertTrue(editButton.waitForExistence(timeout: 2), app.debugDescription)
         editButton.tap()
 
-        let editAlert = app.alerts["编辑书单"]
-        XCTAssertTrue(editAlert.waitForExistence(timeout: 3), app.debugDescription)
-        replaceText(in: editAlert.textFields.element(boundBy: 0), with: editedTitle)
-        editAlert.buttons["保存"].tap()
+        XCTAssertTrue(app.navigationBars["编辑书单"].waitForExistence(timeout: 3), app.debugDescription)
+        replaceText(in: app.textFields["书单标题"], with: editedTitle)
+        app.buttons["确认"].firstMatch.tap()
 
         let editedTitleElement = app.staticTexts[editedTitle]
         XCTAssertTrue(editedTitleElement.waitForExistence(timeout: 4), app.debugDescription)
         editedTitleElement.tap()
 
         XCTAssertTrue(app.otherElements["book.collection.detail"].waitForExistence(timeout: 4), app.debugDescription)
-        XCTAssertTrue(app.buttons["加入书籍"].waitForExistence(timeout: 3), app.debugDescription)
-        app.buttons["加入书籍"].tap()
+        let addBookButton = app.buttons["book.collection.detail.add"]
+        XCTAssertTrue(addBookButton.waitForExistence(timeout: 3), app.debugDescription)
+        addBookButton.tap()
 
-        XCTAssertTrue(app.navigationBars["加入书单"].waitForExistence(timeout: 4), app.debugDescription)
+        XCTAssertTrue(app.navigationBars["添加书籍"].waitForExistence(timeout: 4), app.debugDescription)
         let pickerSearchField = app.searchFields["搜索书名、作者、ISBN"]
         XCTAssertTrue(pickerSearchField.waitForExistence(timeout: 3), app.debugDescription)
         pickerSearchField.tap()
@@ -319,15 +534,16 @@ final class BookshelfBookListSearchDrawerUITests: XCTestCase {
         } else {
             addedBookTitle.swipeLeft()
         }
-        let recommendButton = app.buttons["推荐语"]
+        let recommendButton = app.buttons["收藏理由"]
         XCTAssertTrue(recommendButton.waitForExistence(timeout: 3), app.debugDescription)
         recommendButton.tap()
 
-        let recommendAlert = app.alerts["编辑推荐语"]
-        XCTAssertTrue(recommendAlert.waitForExistence(timeout: 3), app.debugDescription)
-        recommendAlert.textFields.element(boundBy: 0).tap()
-        recommendAlert.textFields.element(boundBy: 0).typeText("UI 自动化推荐语")
-        recommendAlert.buttons["保存"].tap()
+        XCTAssertTrue(app.navigationBars["添加收藏理由"].waitForExistence(timeout: 3), app.debugDescription)
+        let recommendEditor = app.textViews.firstMatch
+        XCTAssertTrue(recommendEditor.waitForExistence(timeout: 3), app.debugDescription)
+        recommendEditor.tap()
+        recommendEditor.typeText("UI 自动化推荐语")
+        app.buttons["确认"].firstMatch.tap()
         XCTAssertTrue(app.staticTexts["UI 自动化推荐语"].waitForExistence(timeout: 4), app.debugDescription)
 
         app.buttons["书单更多操作"].tap()
@@ -383,8 +599,21 @@ final class BookshelfBookListSearchDrawerUITests: XCTestCase {
         moreButton.tap()
 
         let organizeButton = app.buttons["书籍整理"]
-        XCTAssertTrue(organizeButton.waitForExistence(timeout: 3), app.debugDescription)
-        organizeButton.tap()
+        if organizeButton.waitForExistence(timeout: 1) {
+            organizeButton.tap()
+            return
+        }
+
+        let systemMenu = app.collectionViews.allElementsBoundByIndex.first { element in
+            element.identifier != "bookshelf.default.collection"
+                && element.frame.width > 0
+                && element.frame.width < app.frame.width
+        }
+        XCTAssertNotNil(systemMenu, app.debugDescription)
+        guard let systemMenu else { return }
+        let organizeCell = systemMenu.cells.element(boundBy: 0)
+        XCTAssertTrue(organizeCell.exists, app.debugDescription)
+        organizeCell.tap()
     }
 
     private func openBookCollectionTab(in app: XCUIApplication) {
@@ -392,7 +621,14 @@ final class BookshelfBookListSearchDrawerUITests: XCTestCase {
         let collectionTab = app.buttons["书单"]
         XCTAssertTrue(collectionTab.waitForExistence(timeout: 4), app.debugDescription)
         collectionTab.tap()
-        XCTAssertTrue(app.staticTexts["UI测试手动书单"].waitForExistence(timeout: 6), app.debugDescription)
+
+        let manualCollection = app.staticTexts["UI测试手动书单"]
+        if !manualCollection.waitForExistence(timeout: 1) {
+            let scopePicker = app.descendants(matching: .any)["book.collection.kind.picker"]
+            XCTAssertTrue(scopePicker.waitForExistence(timeout: 3), app.debugDescription)
+            scopePicker.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.5)).tap()
+        }
+        XCTAssertTrue(manualCollection.waitForExistence(timeout: 6), app.debugDescription)
     }
 
     private func waitForBookList(in app: XCUIApplication) -> XCUIElement {
@@ -419,9 +655,17 @@ final class BookshelfBookListSearchDrawerUITests: XCTestCase {
         ).firstMatch
     }
 
-    private func editingBookButton(in app: XCUIApplication, id: Int64) -> XCUIElement {
+    private func editingBookButton(
+        in app: XCUIApplication,
+        id: Int64,
+        selected: Bool = false
+    ) -> XCUIElement {
         app.buttons.matching(
-            NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "bookshelf.book-list.book.\(id)", "未选中")
+            NSPredicate(
+                format: "identifier == %@ AND label CONTAINS %@",
+                "bookshelf.book-list.book.\(id)",
+                selected ? "已选中" : "未选中"
+            )
         ).firstMatch
     }
 
@@ -446,9 +690,146 @@ final class BookshelfBookListSearchDrawerUITests: XCTestCase {
         )
     }
 
-    private func revealSearchDrawer(in collection: XCUIElement, app: XCUIApplication) {
+    private func finishBookshelfEditing(in app: XCUIApplication) {
+        let done = app.buttons["退出整理模式"].firstMatch
+        XCTAssertTrue(done.waitForExistence(timeout: 3), app.debugDescription)
+        done.tap()
+    }
+
+    private func openBookListEditing(in app: XCUIApplication) {
+        let editButton = app.buttons["整理书籍"]
+        XCTAssertTrue(editButton.waitForExistence(timeout: 3), app.debugDescription)
+        editButton.tap()
+        XCTAssertTrue(app.buttons["退出整理模式"].waitForExistence(timeout: 3), app.debugDescription)
+    }
+
+    private func scrollToUpperHalf(
+        _ element: XCUIElement,
+        in scrollable: XCUIElement,
+        app: XCUIApplication
+    ) {
+        for _ in 0..<14 {
+            if element.exists,
+               element.isHittable,
+               element.frame.midY <= scrollable.frame.midY {
+                return
+            }
+            let start = scrollable.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.72))
+            let end = scrollable.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.42))
+            start.press(forDuration: 0.05, thenDragTo: end)
+        }
+        XCTAssertTrue(element.isHittable, app.debugDescription)
+        XCTAssertLessThanOrEqual(element.frame.midY, scrollable.frame.midY)
+    }
+
+    private func scrollTowardBeginningUntilVisible(
+        _ element: XCUIElement,
+        in scrollable: XCUIElement,
+        app: XCUIApplication
+    ) {
+        for _ in 0..<14 {
+            if element.exists, element.isHittable {
+                return
+            }
+            let start = scrollable.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.38))
+            let end = scrollable.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.70))
+            start.press(forDuration: 0.05, thenDragTo: end)
+        }
+        XCTAssertTrue(element.isHittable, app.debugDescription)
+    }
+
+    private func switchBookCollectionDisplayToGrid(in app: XCUIApplication) {
+        if app.scrollViews["book.collection.grid"].exists {
+            return
+        }
+        let more = app.buttons["book.collection.top.more"]
+        XCTAssertTrue(more.waitForExistence(timeout: 3), app.debugDescription)
+        more.tap()
+
+        let displaySettings = app.buttons["显示设置"]
+        XCTAssertTrue(displaySettings.waitForExistence(timeout: 3), app.debugDescription)
+        displaySettings.tap()
+
+        let displayMode = app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "显示方式，当前")
+        ).firstMatch
+        XCTAssertTrue(displayMode.waitForExistence(timeout: 3), app.debugDescription)
+        displayMode.tap()
+
+        let gridOption = app.buttons["网格"]
+        XCTAssertTrue(gridOption.waitForExistence(timeout: 3), app.debugDescription)
+        gridOption.tap()
+
+        let close = app.buttons["关闭"].firstMatch
+        XCTAssertTrue(close.waitForExistence(timeout: 3), app.debugDescription)
+        close.tap()
+        XCTAssertTrue(app.scrollViews["book.collection.grid"].waitForExistence(timeout: 4), app.debugDescription)
+    }
+
+    private func switchBookCollectionDisplayToList(in app: XCUIApplication) {
+        if !app.scrollViews["book.collection.grid"].exists {
+            return
+        }
+        let more = app.buttons["book.collection.top.more"]
+        XCTAssertTrue(more.waitForExistence(timeout: 3), app.debugDescription)
+        more.tap()
+
+        let displaySettings = app.buttons["显示设置"]
+        XCTAssertTrue(displaySettings.waitForExistence(timeout: 3), app.debugDescription)
+        displaySettings.tap()
+
+        let displayMode = app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "显示方式，当前")
+        ).firstMatch
+        XCTAssertTrue(displayMode.waitForExistence(timeout: 3), app.debugDescription)
+        displayMode.tap()
+
+        let listOption = app.buttons["列表"]
+        XCTAssertTrue(listOption.waitForExistence(timeout: 3), app.debugDescription)
+        listOption.tap()
+
+        let close = app.buttons["关闭"].firstMatch
+        XCTAssertTrue(close.waitForExistence(timeout: 3), app.debugDescription)
+        close.tap()
+        XCTAssertFalse(app.scrollViews["book.collection.grid"].waitForExistence(timeout: 2))
+    }
+
+    private func selectAnnualBookCollections(in app: XCUIApplication) {
+        let annualButton = app.buttons["年度书单"]
+        if annualButton.waitForExistence(timeout: 1) {
+            annualButton.tap()
+            return
+        }
+
+        let scopePicker = app.descendants(matching: .any)["book.collection.kind.picker"]
+        XCTAssertTrue(scopePicker.waitForExistence(timeout: 3), app.debugDescription)
+        scopePicker.coordinate(withNormalizedOffset: CGVector(dx: 0.75, dy: 0.5)).tap()
+    }
+
+    private func leadingVisibleManualCollectionID(
+        in grid: XCUIElement,
+        app: XCUIApplication
+    ) -> Int64 {
+        let orderedIDs = [Int64(9_101)] + (9_110...9_121).map(Int64.init)
+        for id in orderedIDs {
+            let card = app.buttons["book.collection.grid.\(id)"]
+            guard card.exists, card.isHittable else { continue }
+            let visibleHeight = card.frame.intersection(grid.frame).height
+            if visibleHeight >= card.frame.height * 0.5 {
+                return id
+            }
+        }
+        XCTFail(app.debugDescription)
+        return 9_101
+    }
+
+    private func revealSearchDrawer(
+        in collection: XCUIElement,
+        drawerIdentifier: String = "bookshelf.book-list.search.drawer",
+        app: XCUIApplication
+    ) {
         collection.swipeDown()
-        let drawer = app.buttons["bookshelf.book-list.search.drawer"]
+        let drawer = app.buttons[drawerIdentifier]
         if !drawer.waitForExistence(timeout: 1) || !drawer.isHittable {
             collection.swipeDown()
         }

@@ -1,0 +1,269 @@
+{
+  "schemaVersion": 1,
+  "caseId": "a03.duplicate-tag-and-book-ids",
+  "title": "A-03 重复标签与书籍 ID 输入按稳定顺序去重",
+  "status": "exact-current",
+  "baseline": {
+    "sha256": "${B0_SHA256}",
+    "userVersion": 47,
+    "roomIdentityHash": "4e076c66571412594ff567eae85b68fc",
+    "schemaFingerprint": "${SCHEMA_FINGERPRINT}"
+  },
+  "targetDatabase": {
+    "userVersion": 48,
+    "roomIdentityHash": "cda5a591da1f57aca266af36255e5df7",
+    "schemaFingerprint": "055724e3c2ec28094f771961e2df1cf807efc99ac26f87e9d7308377d9b8eab2"
+  },
+  "runtimeProfile": {
+    "sha256": "${RUNTIME_PROFILE_SHA256}",
+    "requiredSettings": []
+  },
+  "aliases": [
+    {
+      "name": "targetBook",
+      "entity": "book",
+      "description": "以重复 ID 两次传入批量标签命令的同一本有效书",
+      "requirements": [
+        "is_deleted=0",
+        "S2 时仅有 oldTag 这一条目标范围有效关系"
+      ],
+      "selector": "active-book"
+    },
+    {
+      "name": "oldTag",
+      "entity": "tag",
+      "description": "操作前已有且 Android 多本分支会保留的标签",
+      "requirements": [
+        "is_deleted=0",
+        "id!=targetTag"
+      ]
+    },
+    {
+      "name": "targetTag",
+      "entity": "tag",
+      "description": "在 tagIds 中重复两次的目标标签",
+      "requirements": [
+        "is_deleted=0",
+        "S2 时与 targetBook 无有效或历史同键关系"
+      ]
+    }
+  ],
+  "intent": {
+    "summary": "使用 bookIds=[targetBook,targetBook] 与 tagIds=[targetTag,targetTag] 调用真实批量标签 Repository",
+    "selectionScope": "batch",
+    "confirmation": "required",
+    "outcome": "committed",
+    "repeatTrigger": "once",
+    "selectedAliases": [
+      "targetBook"
+    ]
+  },
+  "adapters": {
+    "android": {
+      "entry": "test-only Repository 合同入口；正常 UI 不构造重复 ID",
+      "steps": [
+        {
+          "action": "打开隔离副本",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "准备一本有旧标签的书与重复输入",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "通过 BookRepository.batchSetBooksTags 提交一次",
+          "targetAlias": "targetTag",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "关闭并重开 Room 后重新读取",
+          "checkpoint": "S4"
+        }
+      ]
+    },
+    "ios": {
+      "entry": "Repository 合同入口",
+      "steps": [
+        {
+          "action": "打开隔离副本",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "准备等价一本书与重复输入",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "在单一 GRDB 写事务中提交一次",
+          "targetAlias": "targetTag",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "终止 App 后以同一副本冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    }
+  },
+  "database": {
+    "allowedWrites": [
+      {
+        "table": "tag_book",
+        "operations": [
+          "insert",
+          "delete"
+        ],
+        "platforms": [
+          "android",
+          "ios"
+        ],
+        "reason": "显式 REPLACE 在稳定去重后物理替换关系，重复输入不产生重复写入"
+      }
+    ],
+    "forbiddenWrites": [
+      {
+        "table": "tag",
+        "operations": [
+          "insert",
+          "update",
+          "delete"
+        ],
+        "columns": [
+          "*"
+        ],
+        "platforms": [
+          "android",
+          "ios"
+        ],
+        "reason": "选择既有标签不得修改标签实体"
+      }
+    ],
+    "platformInternalTables": [
+      {
+        "table": "grdb_migrations",
+        "platform": "ios",
+        "reason": "GRDB 平台内部迁移记录"
+      }
+    ],
+    "timeColumns": [
+      {
+        "table": "tag_book",
+        "column": "created_date",
+        "unit": "epoch-millis",
+        "monotonic": true,
+        "allowZeroOnInsert": false,
+        "requireOperationWindow": true,
+        "toleranceMillis": 1000,
+        "reason": "唯一目标关系的创建时间"
+      }
+    ],
+    "strictExceptions": []
+  },
+  "setup": {
+    "mode": "none"
+  },
+  "oracle": {
+    "currentOracle": "书籍与标签 ID 在业务命令入口按首次出现顺序稳定去重；显式 REPLACE 物理移除旧关系并只保留一条 targetTag 关系。",
+    "desiredSemantics": "书籍与标签 ID 在业务命令入口按首次出现顺序稳定去重；显式 REPLACE 物理移除旧关系并只保留一条 targetTag 关系。",
+    "semanticProjections": [
+      {
+        "name": "active-duplicate-tag-relations",
+        "description": "保留重复行而不使用 DISTINCT，比较目标书有效标签关系多重集",
+        "sql": "SELECT tag_id FROM tag_book WHERE book_id = :targetBook AND tag_id IN (:oldTag, :targetTag) AND is_deleted = 0 ORDER BY tag_id, id",
+        "mode": "ordered-rows",
+        "columns": [
+          {
+            "name": "tag_id",
+            "aliasEntity": "tag"
+          }
+        ],
+        "parameters": {
+          "targetBook": {
+            "binding": "targetBook"
+          },
+          "oldTag": {
+            "binding": "oldTag"
+          },
+          "targetTag": {
+            "binding": "targetTag"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": [
+            {
+              "tag_id": "oldTag"
+            }
+          ],
+          "iosBefore": [
+            {
+              "tag_id": "oldTag"
+            }
+          ],
+          "androidAfter": [
+            {
+              "tag_id": "targetTag"
+            }
+          ],
+          "iosAfter": [
+            {
+              "tag_id": "targetTag"
+            }
+          ]
+        }
+      },
+      {
+        "name": "target-tag-active-count",
+        "description": "直接锁定重复目标关系数量",
+        "sql": "SELECT COUNT(*) AS active_count FROM tag_book WHERE book_id = :targetBook AND tag_id = :targetTag AND is_deleted = 0",
+        "mode": "scalar",
+        "columns": [
+          {
+            "name": "active_count"
+          }
+        ],
+        "parameters": {
+          "targetBook": {
+            "binding": "targetBook"
+          },
+          "targetTag": {
+            "binding": "targetTag"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": 0,
+          "iosBefore": 0,
+          "androidAfter": 1,
+          "iosAfter": 1
+        }
+      }
+    ]
+  },
+  "lifecycle": {
+    "checkpoints": [
+      {
+        "stage": "S0",
+        "meaning": "不可变 B0"
+      },
+      {
+        "stage": "S1",
+        "meaning": "Room 首次打开"
+      },
+      {
+        "stage": "S2",
+        "meaning": "重复 ID 标签命令前"
+      },
+      {
+        "stage": "S3",
+        "meaning": "一次 Repository 提交后"
+      },
+      {
+        "stage": "S4",
+        "meaning": "关闭并重开 Room 冷启动后的稳定状态"
+      }
+    ],
+    "requireS3S4BusinessStable": true,
+    "requireRestart": true,
+    "restoreDirection": "none"
+  }
+}

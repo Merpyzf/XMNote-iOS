@@ -97,6 +97,7 @@ extension BookRepository {
         case invalidReadStatus
         case invalidCollection
         case invalidBook
+        case invalidOrder
         case ratingRequired
         case invalidName(String)
         case invalidNameLength(target: String, maxLength: Int)
@@ -119,6 +120,8 @@ extension BookRepository {
                 return "书单已不存在，请刷新后重试"
             case .invalidBook:
                 return "书籍状态已变化，请刷新后重试"
+            case .invalidOrder:
+                return "排序内容已变化，请刷新后重试"
             case .ratingRequired:
                 return "标记读完时需要选择评分"
             case .invalidName(let target):

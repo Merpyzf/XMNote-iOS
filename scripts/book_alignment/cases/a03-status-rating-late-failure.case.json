@@ -1,0 +1,251 @@
+{
+  "schemaVersion": 1,
+  "caseId": "a03.status-rating.late-failure",
+  "title": "A-03 批量阅读状态与评分的晚失败",
+  "status": "exact-current",
+  "baseline": {
+    "sha256": "${B0_SHA256}",
+    "userVersion": 47,
+    "roomIdentityHash": "4e076c66571412594ff567eae85b68fc",
+    "schemaFingerprint": "${SCHEMA_FINGERPRINT}"
+  },
+  "targetDatabase": {
+    "userVersion": 48,
+    "roomIdentityHash": "cda5a591da1f57aca266af36255e5df7",
+    "schemaFingerprint": "055724e3c2ec28094f771961e2df1cf807efc99ac26f87e9d7308377d9b8eab2"
+  },
+  "runtimeProfile": {
+    "sha256": "${RUNTIME_PROFILE_SHA256}",
+    "requiredSettings": []
+  },
+  "aliases": [
+    {
+      "name": "firstBook",
+      "entity": "book",
+      "description": "循环中状态和评分均先成功的有效书",
+      "requirements": [
+        "is_deleted=0",
+        "S2 时 read_status_id=2",
+        "S2 时 score=11",
+        "id 小于 secondBook"
+      ],
+      "selector": "active-book"
+    },
+    {
+      "name": "secondBook",
+      "entity": "book",
+      "description": "状态先成功、评分 UPDATE 注入失败的有效书",
+      "requirements": [
+        "is_deleted=0",
+        "S2 时 read_status_id=2",
+        "S2 时 score=12",
+        "id 介于 firstBook 与 thirdBook"
+      ],
+      "selector": "active-book"
+    },
+    {
+      "name": "thirdBook",
+      "entity": "book",
+      "description": "晚失败后尚未被循环处理的有效书",
+      "requirements": [
+        "is_deleted=0",
+        "S2 时 read_status_id=2",
+        "S2 时 score=13",
+        "id 大于 secondBook"
+      ],
+      "selector": "active-book"
+    }
+  ],
+  "intent": {
+    "summary": "依次把三本书标记为读完并评分 47，在第二本评分 UPDATE 注入 test-only 晚失败",
+    "selectionScope": "batch",
+    "confirmation": "required",
+    "outcome": "failed",
+    "repeatTrigger": "once",
+    "selectedAliases": [
+      "firstBook",
+      "secondBook",
+      "thirdBook"
+    ]
+  },
+  "adapters": {
+    "android": {
+      "entry": "书籍批量整理的阅读状态与评分命令",
+      "steps": [
+        {
+          "action": "打开管理上下文并稳定读取",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "准备三本书并安装第二本评分晚失败注入",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "触发确定性晚失败，验证本次业务命令完整回滚",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host force-stop、创建 resume marker 后冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    },
+    "ios": {
+      "entry": "原生批量整理的阅读状态与评分入口",
+      "steps": [
+        {
+          "action": "打开管理上下文并稳定读取",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "准备三本书并安装第二本评分晚失败注入",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "触发确定性晚失败，验证本次业务命令完整回滚",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host 终止 App 后以同一副本冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    }
+  },
+  "database": {
+    "allowedWrites": [],
+    "forbiddenWrites": [],
+    "platformInternalTables": [
+      {
+        "table": "grdb_migrations",
+        "platform": "ios",
+        "reason": "GRDB 平台内部迁移记录"
+      }
+    ],
+    "timeColumns": [],
+    "strictExceptions": []
+  },
+  "setup": {
+    "mode": "none"
+  },
+  "oracle": {
+    "currentOracle": "同一批状态与评分命令必须共用事务，任一步失败时书籍、历史记录和年度书单关系均保持 S2。",
+    "desiredSemantics": "同一批状态与评分命令必须共用事务，任一步失败时书籍、历史记录和年度书单关系均保持 S2。",
+    "semanticProjections": [
+      {
+        "name": "target-status-book-count",
+        "description": "状态和状态时间均已写为目标值的目标书数量",
+        "sql": "SELECT COUNT(*) AS target_count FROM book WHERE id IN (:firstBook, :secondBook, :thirdBook) AND read_status_id = 3 AND read_status_changed_date = 1700000200000",
+        "mode": "scalar",
+        "columns": [
+          {
+            "name": "target_count"
+          }
+        ],
+        "parameters": {
+          "firstBook": {
+            "binding": "firstBook"
+          },
+          "secondBook": {
+            "binding": "secondBook"
+          },
+          "thirdBook": {
+            "binding": "thirdBook"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": 0,
+          "iosBefore": 0,
+          "androidAfter": 0,
+          "iosAfter": 0
+        }
+      },
+      {
+        "name": "target-rating-book-count",
+        "description": "评分已写为 47 的目标书数量",
+        "sql": "SELECT COUNT(*) AS target_count FROM book WHERE id IN (:firstBook, :secondBook, :thirdBook) AND score = 47",
+        "mode": "scalar",
+        "columns": [
+          {
+            "name": "target_count"
+          }
+        ],
+        "parameters": {
+          "firstBook": {
+            "binding": "firstBook"
+          },
+          "secondBook": {
+            "binding": "secondBook"
+          },
+          "thirdBook": {
+            "binding": "thirdBook"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": 0,
+          "iosBefore": 0,
+          "androidAfter": 0,
+          "iosAfter": 0
+        }
+      },
+      {
+        "name": "target-status-history-count",
+        "description": "本次目标状态时间对应的读完历史数量",
+        "sql": "SELECT COUNT(*) AS target_count FROM book_read_status_record WHERE book_id IN (:firstBook, :secondBook, :thirdBook) AND read_status_id = 3 AND changed_date = 1700000200000 AND is_deleted = 0",
+        "mode": "scalar",
+        "columns": [
+          {
+            "name": "target_count"
+          }
+        ],
+        "parameters": {
+          "firstBook": {
+            "binding": "firstBook"
+          },
+          "secondBook": {
+            "binding": "secondBook"
+          },
+          "thirdBook": {
+            "binding": "thirdBook"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": 0,
+          "iosBefore": 0,
+          "androidAfter": 0,
+          "iosAfter": 0
+        }
+      }
+    ]
+  },
+  "lifecycle": {
+    "checkpoints": [
+      {
+        "stage": "S0",
+        "meaning": "不可变 B0"
+      },
+      {
+        "stage": "S1",
+        "meaning": "首次打开"
+      },
+      {
+        "stage": "S2",
+        "meaning": "批量提交前"
+      },
+      {
+        "stage": "S3",
+        "meaning": "第二本评分晚失败后"
+      },
+      {
+        "stage": "S4",
+        "meaning": "独立进程冷启动后的稳定状态"
+      }
+    ],
+    "requireS3S4BusinessStable": true,
+    "requireRestart": true,
+    "restoreDirection": "none"
+  }
+}

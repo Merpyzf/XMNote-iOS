@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 BookshelfItem/BookshelfDisplaySetting、BookRoute 与现有 SwiftUI 书架卡片，接收 BookGridView 注入的导航、搜索 drawer、选择、排序提交、页面激活态、底部滚动余量和底部栏滚动观察开关
- * [OUTPUT]: 对外提供 BookshelfDefaultCollectionView，使用 UIKit UICollectionView 承接默认书架滚动、集合顶部搜索 drawer、二级页硬切禁动画、整项长按拖拽排序、本地预览顺序与 iOS 26 底部边缘过渡
+ * [INPUT]: 依赖 BookshelfItem/BookshelfDisplaySetting、BookRoute、UIContentConfiguration、Reicon 菜单图标与现有 SwiftUI 书架卡片，接收 BookGridView 注入的导航、搜索 drawer、选择、排序提交和页面激活态
+ * [OUTPUT]: 对外提供 BookshelfDefaultCollectionView，使用 UIKit UICollectionView 承接默认书架滚动、确定性 SwiftUI Cell 配置、集合顶部搜索 drawer、Reicon 菜单、拖拽排序与 iOS 26 底部边缘过渡
  * [POS]: Book 模块页面私有集合区组件，被 BookGridView 的默认书架维度消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -972,6 +972,20 @@ private extension BookshelfDefaultCollectionHostView {
             updateCollectionVisibilityForSearchDrawerPreparation(animated: animated)
             return
         }
+        let didEnterEditingWithoutSearch = !previousConfiguration.isEditing
+            && configuration.isEditing
+            && !configuration.hasSearchText
+            && !configuration.hasSearchKeyword
+        if didEnterEditingWithoutSearch {
+            didApplyInitialSearchDrawerOffset = true
+            isPendingInitialSearchDrawerOffset = false
+            let hiddenOffsetY = hiddenSearchDrawerOffsetY()
+            if collectionView.contentOffset.y < hiddenOffsetY - 0.5 {
+                setSearchDrawerHidden(animated: false)
+            }
+            updateCollectionVisibilityForSearchDrawerPreparation(animated: animated)
+            return
+        }
         if configuration.showsExpandedSearchSurface {
             didApplyInitialSearchDrawerOffset = true
             isPendingInitialSearchDrawerOffset = false
@@ -1593,7 +1607,7 @@ private extension BookshelfDefaultCollectionHostView {
     func configureCell(_ cell: BookshelfDefaultCollectionCell, at indexPath: IndexPath) {
         guard let item = item(at: indexPath) else { return }
         cell.configure(
-            with: BookshelfDefaultCollectionCellContent(
+            with: BookshelfDefaultCollectionCellRenderSnapshot(
                 item: item,
                 layoutMode: configuration.layoutMode,
                 showsNoteCount: configuration.showsNoteCount,
@@ -1603,9 +1617,9 @@ private extension BookshelfDefaultCollectionHostView {
                 isEditing: configuration.isEditing,
                 isSelected: configuration.selectedIDs.contains(item.id),
                 canMove: configuration.movableIDs.contains(item.id),
-                activeWriteAction: configuration.activeWriteAction,
-                onContextAction: configuration.onContextAction
-            )
+                activeWriteAction: configuration.activeWriteAction
+            ),
+            onContextAction: configuration.onContextAction
         )
     }
 
@@ -2160,6 +2174,8 @@ private final class BookshelfDefaultSectionHeaderView: UICollectionReusableView 
 /// 默认书架 collection cell，内部通过 UIHostingConfiguration 承载 SwiftUI 内容。
 private final class BookshelfDefaultCollectionCell: UICollectionViewCell {
     static let reuseIdentifier = "BookshelfDefaultCollectionCell"
+    private var hostedContentView: (UIView & UIContentView)?
+    private var renderedIdentity: BookshelfItemID?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -2174,23 +2190,64 @@ private final class BookshelfDefaultCollectionCell: UICollectionViewCell {
 
     override func prepareForReuse() {
         super.prepareForReuse()
-        contentConfiguration = nil
+        renderedIdentity = nil
+        hostedContentView?.isHidden = true
+        hostedContentView?.accessibilityElementsHidden = true
+        hostedContentView?.layer.removeAllAnimations()
         layer.removeAllAnimations()
         alpha = 1
         transform = .identity
     }
 
-    /// 使用现有 SwiftUI 书架内容作为 cell 渲染配置。
-    func configure(with content: BookshelfDefaultCollectionCellContent) {
-        contentConfiguration = UIHostingConfiguration {
-            content
+    /// 将完整渲染快照提交给稳定 UIContentView；相同业务身份保留选择动画前态。
+    func configure(
+        with snapshot: BookshelfDefaultCollectionCellRenderSnapshot,
+        onContextAction: @escaping (BookshelfBookContextAction, BookshelfItemID) -> Void
+    ) {
+        let didChangeIdentity = renderedIdentity != nil && renderedIdentity != snapshot.identity
+        renderedIdentity = snapshot.identity
+
+        let configuration = UIHostingConfiguration {
+            BookshelfDefaultCollectionCellContent(
+                snapshot: snapshot,
+                onContextAction: onContextAction
+            )
+            .id(snapshot.identity)
         }
         .margins(.all, 0)
+
+        apply(configuration)
+        if didChangeIdentity {
+            hostedContentView?.layer.removeAllAnimations()
+        }
+    }
+
+    /// 优先更新现有内容视图；配置类型不兼容时才重建宿主，避免依赖隐式观察失效。
+    private func apply<Configuration: UIContentConfiguration>(_ configuration: Configuration) {
+        if let hostedContentView, hostedContentView.supports(configuration) {
+            hostedContentView.configuration = configuration
+            hostedContentView.isHidden = false
+            hostedContentView.accessibilityElementsHidden = false
+            return
+        }
+
+        hostedContentView?.removeFromSuperview()
+        let contentView = configuration.makeContentView()
+        contentView.translatesAutoresizingMaskIntoConstraints = false
+        contentView.backgroundColor = .clear
+        hostedContentView = contentView
+        self.contentView.addSubview(contentView)
+        NSLayoutConstraint.activate([
+            contentView.leadingAnchor.constraint(equalTo: self.contentView.leadingAnchor),
+            contentView.trailingAnchor.constraint(equalTo: self.contentView.trailingAnchor),
+            contentView.topAnchor.constraint(equalTo: self.contentView.topAnchor),
+            contentView.bottomAnchor.constraint(equalTo: self.contentView.bottomAnchor)
+        ])
     }
 }
 
-/// 单个默认书架 cell 的 SwiftUI 内容，集中处理编辑态选中视觉和 context menu。
-private struct BookshelfDefaultCollectionCellContent: View {
+/// 默认书架 cell 的完整值快照；动作闭包留在快照之外，避免把 View 或业务 owner 当作可变状态保存。
+private struct BookshelfDefaultCollectionCellRenderSnapshot: Hashable {
     let item: BookshelfItem
     let layoutMode: BookshelfLayoutMode
     let showsNoteCount: Bool
@@ -2201,7 +2258,25 @@ private struct BookshelfDefaultCollectionCellContent: View {
     let isSelected: Bool
     let canMove: Bool
     let activeWriteAction: BookshelfPendingAction?
+
+    var identity: BookshelfItemID { item.id }
+}
+
+/// 单个默认书架 cell 的 SwiftUI 内容，集中处理编辑态选中视觉和 context menu。
+private struct BookshelfDefaultCollectionCellContent: View {
+    let snapshot: BookshelfDefaultCollectionCellRenderSnapshot
     let onContextAction: (BookshelfBookContextAction, BookshelfItemID) -> Void
+
+    private var item: BookshelfItem { snapshot.item }
+    private var layoutMode: BookshelfLayoutMode { snapshot.layoutMode }
+    private var showsNoteCount: Bool { snapshot.showsNoteCount }
+    private var sortCriteria: BookshelfSortCriteria { snapshot.sortCriteria }
+    private var titleDisplayMode: BookshelfTitleDisplayMode { snapshot.titleDisplayMode }
+    private var searchKeyword: String { snapshot.searchKeyword }
+    private var isEditing: Bool { snapshot.isEditing }
+    private var isSelected: Bool { snapshot.isSelected }
+    private var canMove: Bool { snapshot.canMove }
+    private var activeWriteAction: BookshelfPendingAction? { snapshot.activeWriteAction }
 
     var body: some View {
         itemLabel
@@ -2294,13 +2369,17 @@ private struct BookshelfDefaultCollectionCellContent: View {
             Button {
                 onContextAction(.organizeBooks, item.id)
             } label: {
-                XMMenuLabel("整理书籍", systemImage: "checklist")
+                BookshelfEditingMenuLabel(title: "整理书籍", icon: .checklist)
             }
 
             Button(role: .destructive) {
                 onContextAction(.delete, item.id)
             } label: {
-                Label("删除书籍", systemImage: "trash")
+                BookshelfEditingMenuLabel(
+                    title: "删除书籍",
+                    icon: .trash,
+                    foregroundColor: .feedbackError
+                )
             }
             .disabled(activeWriteAction != nil)
         case .group:
@@ -2309,13 +2388,17 @@ private struct BookshelfDefaultCollectionCellContent: View {
             Button {
                 onContextAction(.organizeBooks, item.id)
             } label: {
-                XMMenuLabel("整理书籍", systemImage: "checklist")
+                BookshelfEditingMenuLabel(title: "整理书籍", icon: .checklist)
             }
 
             Button(role: .destructive) {
                 onContextAction(.delete, item.id)
             } label: {
-                Label("删除分组", systemImage: "trash")
+                BookshelfEditingMenuLabel(
+                    title: "删除分组",
+                    icon: .trash,
+                    foregroundColor: .feedbackError
+                )
             }
             .disabled(activeWriteAction != nil)
         }
@@ -2385,7 +2468,7 @@ private struct BookshelfDefaultCollectionSelectionModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .opacity(isEditing ? (isSelected ? 1 : 0.92) : 1)
+            .opacity(isEditing ? 0.92 : 1)
             .overlay {
                 if isEditing && layoutMode == .list {
                     BookshelfSelectionRowOverlay(isSelected: isSelected)
@@ -2393,7 +2476,6 @@ private struct BookshelfDefaultCollectionSelectionModifier: ViewModifier {
             }
             .contentShape(RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
             .animation(selectionAnimation, value: isEditing)
-            .animation(selectionAnimation, value: isSelected)
     }
 
     private var selectionAnimation: Animation? {

@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 BookshelfBookListCollectionItem、BookshelfBookListCollectionConfiguration 与 SwiftUI 行视图
- * [OUTPUT]: 对外提供二级书籍列表 collection cell、搜索 cell、section header 与空态承载视图
+ * [INPUT]: 依赖 BookshelfBookListCollectionItem、BookshelfBookListCollectionConfiguration、UIContentConfiguration 与 SwiftUI 行视图
+ * [OUTPUT]: 对外提供带确定性 SwiftUI Cell 配置的二级书籍列表 collection cell、搜索 cell、section header 与空态承载视图
  * [POS]: Book 模块二级书籍列表页面私有 cell 组件，隔离 UICollectionView cell 渲染细节
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -147,6 +147,8 @@ struct BookshelfBookListEmptyStateContainer: View {
 /// 二级列表 cell，使用 UIHostingConfiguration 复用 SwiftUI 行视觉。
 final class BookshelfBookListCollectionCell: UICollectionViewCell {
     static let reuseIdentifier = "BookshelfBookListCollectionCell"
+    private var hostedContentView: (UIView & UIContentView)?
+    private var renderedIdentity: BookshelfBookListCollectionCellRenderIdentity?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -161,7 +163,13 @@ final class BookshelfBookListCollectionCell: UICollectionViewCell {
 
     override func prepareForReuse() {
         super.prepareForReuse()
-        contentConfiguration = nil
+        renderedIdentity = nil
+        hostedContentView?.isHidden = true
+        hostedContentView?.accessibilityElementsHidden = true
+        hostedContentView?.layer.removeAllAnimations()
+        layer.removeAllAnimations()
+        alpha = 1
+        transform = .identity
     }
 
     /// 渲染当前 item。
@@ -171,56 +179,161 @@ final class BookshelfBookListCollectionCell: UICollectionViewCell {
         emptyPresentationMode: BookshelfBookListEmptyPresentationMode = .steadyEmptyUpdate
     ) {
         backgroundColor = .clear
-        contentConfiguration = nil
-        contentConfiguration = UIHostingConfiguration {
-            switch item {
-            case .searchDrawer:
-                EmptyView()
-            case .loading:
-                BookshelfLoadingSkeletonView(
-                    layoutMode: configuration.layoutMode,
-                    columnCount: configuration.columnCount,
-                    bottomContentInset: configuration.bottomContentInset,
-                    accessibilityLabel: "正在整理书籍"
-                )
-                .frame(maxWidth: .infinity)
-                .frame(minHeight: BookshelfBookListLayoutMetrics.loadingHeight)
-            case .empty(let emptyState):
-                BookshelfBookListEmptyStateContainer(
-                    emptyState: emptyState,
-                    presentationMode: emptyPresentationMode
-                )
-            case .book(let book):
-                switch configuration.layoutMode {
-                case .grid:
-                    BookshelfBookListGridItemView(
-                        book: book,
-                        showsNoteCount: configuration.showsNoteCount,
-                        sortCriteria: configuration.sortCriteria,
-                        titleDisplayMode: configuration.titleDisplayMode,
-                        searchKeyword: configuration.browseSearchKeyword,
-                        isEditing: configuration.isEditing,
-                        isSelected: configuration.selectedBookIDs.contains(book.id),
-                        supportsContextPin: configuration.supportsContextPin,
-                        activeWriteAction: configuration.activeWriteAction,
-                        onContextAction: configuration.onContextAction
-                    )
-                case .list:
-                    BookshelfBookListRowView(
-                        book: book,
-                        showsNoteCount: configuration.showsNoteCount,
-                        sortCriteria: configuration.sortCriteria,
-                        titleDisplayMode: configuration.titleDisplayMode,
-                        searchKeyword: configuration.browseSearchKeyword,
-                        isEditing: configuration.isEditing,
-                        isSelected: configuration.selectedBookIDs.contains(book.id),
-                        supportsContextPin: configuration.supportsContextPin,
-                        activeWriteAction: configuration.activeWriteAction,
-                        onContextAction: configuration.onContextAction
-                    )
-                }
-            }
+        let snapshot = BookshelfBookListCollectionCellRenderSnapshot(
+            item: item,
+            layoutMode: configuration.layoutMode,
+            columnCount: configuration.columnCount,
+            bottomContentInset: configuration.bottomContentInset,
+            showsNoteCount: configuration.showsNoteCount,
+            sortCriteria: configuration.sortCriteria,
+            titleDisplayMode: configuration.titleDisplayMode,
+            searchKeyword: configuration.browseSearchKeyword,
+            isEditing: configuration.isEditing,
+            isSelected: item.bookID.map(configuration.selectedBookIDs.contains) ?? false,
+            supportsContextPin: configuration.supportsContextPin,
+            activeWriteAction: configuration.activeWriteAction,
+            emptyPresentationMode: emptyPresentationMode
+        )
+        let didChangeIdentity = renderedIdentity != nil && renderedIdentity != snapshot.identity
+        renderedIdentity = snapshot.identity
+
+        let hostingConfiguration = UIHostingConfiguration {
+            BookshelfBookListCollectionCellContent(
+                snapshot: snapshot,
+                onContextAction: configuration.onContextAction
+            )
+            .id(snapshot.identity)
         }
         .margins(.all, 0)
+
+        apply(hostingConfiguration)
+        if didChangeIdentity {
+            hostedContentView?.layer.removeAllAnimations()
+        }
+    }
+
+    /// 优先更新现有内容视图；配置类型不兼容时才重建宿主，保证每次输入都有显式刷新出口。
+    private func apply<Configuration: UIContentConfiguration>(_ configuration: Configuration) {
+        if let hostedContentView, hostedContentView.supports(configuration) {
+            hostedContentView.configuration = configuration
+            hostedContentView.isHidden = false
+            hostedContentView.accessibilityElementsHidden = false
+            return
+        }
+
+        hostedContentView?.removeFromSuperview()
+        let contentView = configuration.makeContentView()
+        contentView.translatesAutoresizingMaskIntoConstraints = false
+        contentView.backgroundColor = .clear
+        hostedContentView = contentView
+        self.contentView.addSubview(contentView)
+        NSLayoutConstraint.activate([
+            contentView.leadingAnchor.constraint(equalTo: self.contentView.leadingAnchor),
+            contentView.trailingAnchor.constraint(equalTo: self.contentView.trailingAnchor),
+            contentView.topAnchor.constraint(equalTo: self.contentView.topAnchor),
+            contentView.bottomAnchor.constraint(equalTo: self.contentView.bottomAnchor)
+        ])
+    }
+}
+
+/// 二级书籍 cell 的业务身份只随内容类型或书籍 ID 改变，选择和整理状态不会重置 SwiftUI 身份。
+private enum BookshelfBookListCollectionCellRenderIdentity: Hashable {
+    case searchDrawer
+    case loading
+    case empty
+    case book(Int64)
+}
+
+/// 二级书籍 cell 的完整值快照；仅携带当前条目实际消费的展示字段。
+private struct BookshelfBookListCollectionCellRenderSnapshot: Hashable {
+    let item: BookshelfBookListCollectionItem
+    let layoutMode: BookshelfLayoutMode
+    let columnCount: Int
+    let bottomContentInset: CGFloat
+    let showsNoteCount: Bool
+    let sortCriteria: BookshelfSortCriteria
+    let titleDisplayMode: BookshelfTitleDisplayMode
+    let searchKeyword: String
+    let isEditing: Bool
+    let isSelected: Bool
+    let supportsContextPin: Bool
+    let activeWriteAction: BookshelfBookListEditAction?
+    let emptyPresentationMode: BookshelfBookListEmptyPresentationMode
+
+    var identity: BookshelfBookListCollectionCellRenderIdentity {
+        switch item {
+        case .searchDrawer:
+            return .searchDrawer
+        case .loading:
+            return .loading
+        case .empty:
+            return .empty
+        case .book(let book):
+            return .book(book.id)
+        }
+    }
+}
+
+/// 使用值快照生成二级书籍 cell 内容，视觉与可访问性始终读取同一个 isSelected。
+private struct BookshelfBookListCollectionCellContent: View {
+    let snapshot: BookshelfBookListCollectionCellRenderSnapshot
+    let onContextAction: (BookshelfBookContextAction, Int64) -> Void
+
+    @ViewBuilder
+    var body: some View {
+        switch snapshot.item {
+        case .searchDrawer:
+            EmptyView()
+        case .loading:
+            BookshelfLoadingSkeletonView(
+                layoutMode: snapshot.layoutMode,
+                columnCount: snapshot.columnCount,
+                bottomContentInset: snapshot.bottomContentInset,
+                accessibilityLabel: "正在整理书籍"
+            )
+            .frame(maxWidth: .infinity)
+            .frame(minHeight: BookshelfBookListLayoutMetrics.loadingHeight)
+        case .empty(let emptyState):
+            BookshelfBookListEmptyStateContainer(
+                emptyState: emptyState,
+                presentationMode: snapshot.emptyPresentationMode
+            )
+        case .book(let book):
+            switch snapshot.layoutMode {
+            case .grid:
+                BookshelfBookListGridItemView(
+                    book: book,
+                    showsNoteCount: snapshot.showsNoteCount,
+                    sortCriteria: snapshot.sortCriteria,
+                    titleDisplayMode: snapshot.titleDisplayMode,
+                    searchKeyword: snapshot.searchKeyword,
+                    isEditing: snapshot.isEditing,
+                    isSelected: snapshot.isSelected,
+                    supportsContextPin: snapshot.supportsContextPin,
+                    activeWriteAction: snapshot.activeWriteAction,
+                    onContextAction: onContextAction
+                )
+            case .list:
+                BookshelfBookListRowView(
+                    book: book,
+                    showsNoteCount: snapshot.showsNoteCount,
+                    sortCriteria: snapshot.sortCriteria,
+                    titleDisplayMode: snapshot.titleDisplayMode,
+                    searchKeyword: snapshot.searchKeyword,
+                    isEditing: snapshot.isEditing,
+                    isSelected: snapshot.isSelected,
+                    supportsContextPin: snapshot.supportsContextPin,
+                    activeWriteAction: snapshot.activeWriteAction,
+                    onContextAction: onContextAction
+                )
+            }
+        }
+    }
+}
+
+private extension BookshelfBookListCollectionItem {
+    var bookID: Int64? {
+        guard case .book(let book) = self else { return nil }
+        return book.id
     }
 }

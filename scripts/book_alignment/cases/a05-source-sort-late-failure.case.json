@@ -1,0 +1,273 @@
+{
+  "schemaVersion": 1,
+  "caseId": "a05.source-sort.late-failure",
+  "title": "A-05 书架来源排序晚失败",
+  "status": "exact-current",
+  "baseline": {
+    "sha256": "${B0_SHA256}",
+    "userVersion": 47,
+    "roomIdentityHash": "4e076c66571412594ff567eae85b68fc",
+    "schemaFingerprint": "${SCHEMA_FINGERPRINT}"
+  },
+  "targetDatabase": {
+    "userVersion": 48,
+    "roomIdentityHash": "cda5a591da1f57aca266af36255e5df7",
+    "schemaFingerprint": "055724e3c2ec28094f771961e2df1cf807efc99ac26f87e9d7308377d9b8eab2"
+  },
+  "runtimeProfile": {
+    "sha256": "${RUNTIME_PROFILE_SHA256}",
+    "requiredSettings": []
+  },
+  "aliases": [
+    {
+      "name": "prefixSource",
+      "entity": "source",
+      "description": "第一条成功写入 bookshelf_order 的来源",
+      "requirements": [
+        "is_deleted=0",
+        "S2 时 bookshelf_order=410",
+        "S2 时 source_order=510"
+      ]
+    },
+    {
+      "name": "failingSource",
+      "entity": "source",
+      "description": "第二条 bookshelf_order UPDATE 被 test-only trigger 中止的来源",
+      "requirements": [
+        "is_deleted=0",
+        "S2 时 bookshelf_order=411",
+        "S2 时 source_order=511"
+      ]
+    },
+    {
+      "name": "suffixSource",
+      "entity": "source",
+      "description": "异常向上传播后未被循环处理的第三个来源",
+      "requirements": [
+        "is_deleted=0",
+        "S2 时 bookshelf_order=412",
+        "S2 时 source_order=512"
+      ]
+    }
+  ],
+  "intent": {
+    "summary": "通过生产 BookRepository.updateBookSourceListOrder 提交三个来源的书架顺序，并在第二项注入晚失败",
+    "selectionScope": "all-visible",
+    "confirmation": "immediate",
+    "outcome": "failed",
+    "repeatTrigger": "once",
+    "selectedAliases": [
+      "prefixSource",
+      "failingSource",
+      "suffixSource"
+    ]
+  },
+  "adapters": {
+    "android": {
+      "entry": "来源书架排序的 Repository owner",
+      "steps": [
+        {
+          "action": "打开隔离基准并稳定读取",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "准备三个来源及第二项失败 trigger",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "触发确定性晚失败，验证本次业务命令完整回滚",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host force-stop、创建 resume marker 后冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    },
+    "ios": {
+      "entry": "原生来源排序入口",
+      "steps": [
+        {
+          "action": "打开隔离基准并稳定读取",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "准备等价三个来源及第二项失败注入",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "触发确定性晚失败，验证本次业务命令完整回滚",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host 终止 App 后以同一副本冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    }
+  },
+  "database": {
+    "allowedWrites": [],
+    "forbiddenWrites": [],
+    "platformInternalTables": [
+      {
+        "table": "grdb_migrations",
+        "platform": "ios",
+        "reason": "GRDB 平台内部迁移记录"
+      }
+    ],
+    "timeColumns": [],
+    "strictExceptions": []
+  },
+  "setup": {
+    "mode": "none"
+  },
+  "oracle": {
+    "currentOracle": "来源书架排序应在共同事务内写入；任一项失败时全量回滚并报告失败。",
+    "desiredSemantics": "来源书架排序应在共同事务内写入；任一项失败时全量回滚并报告失败。",
+    "semanticProjections": [
+      {
+        "name": "source-bookshelf-orders",
+        "description": "比较来源书架顺序并证明业务 source_order 与时间字段不变",
+        "sql": "SELECT id AS source_id, bookshelf_order, source_order, updated_date FROM source WHERE id IN (:prefixSource, :failingSource, :suffixSource) ORDER BY id",
+        "mode": "ordered-rows",
+        "columns": [
+          {
+            "name": "source_id",
+            "aliasEntity": "source"
+          },
+          {
+            "name": "bookshelf_order"
+          },
+          {
+            "name": "source_order"
+          },
+          {
+            "name": "updated_date"
+          }
+        ],
+        "parameters": {
+          "prefixSource": {
+            "binding": "prefixSource"
+          },
+          "failingSource": {
+            "binding": "failingSource"
+          },
+          "suffixSource": {
+            "binding": "suffixSource"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": [
+            {
+              "source_id": "prefixSource",
+              "bookshelf_order": 410,
+              "source_order": 510,
+              "updated_date": 1600000000000
+            },
+            {
+              "source_id": "failingSource",
+              "bookshelf_order": 411,
+              "source_order": 511,
+              "updated_date": 1600000000000
+            },
+            {
+              "source_id": "suffixSource",
+              "bookshelf_order": 412,
+              "source_order": 512,
+              "updated_date": 1600000000000
+            }
+          ],
+          "iosBefore": [
+            {
+              "source_id": "prefixSource",
+              "bookshelf_order": 410,
+              "source_order": 510,
+              "updated_date": 1600000000000
+            },
+            {
+              "source_id": "failingSource",
+              "bookshelf_order": 411,
+              "source_order": 511,
+              "updated_date": 1600000000000
+            },
+            {
+              "source_id": "suffixSource",
+              "bookshelf_order": 412,
+              "source_order": 512,
+              "updated_date": 1600000000000
+            }
+          ],
+          "androidAfter": [
+            {
+              "source_id": "prefixSource",
+              "bookshelf_order": 410,
+              "source_order": 510,
+              "updated_date": 1600000000000
+            },
+            {
+              "source_id": "failingSource",
+              "bookshelf_order": 411,
+              "source_order": 511,
+              "updated_date": 1600000000000
+            },
+            {
+              "source_id": "suffixSource",
+              "bookshelf_order": 412,
+              "source_order": 512,
+              "updated_date": 1600000000000
+            }
+          ],
+          "iosAfter": [
+            {
+              "source_id": "prefixSource",
+              "bookshelf_order": 410,
+              "source_order": 510,
+              "updated_date": 1600000000000
+            },
+            {
+              "source_id": "failingSource",
+              "bookshelf_order": 411,
+              "source_order": 511,
+              "updated_date": 1600000000000
+            },
+            {
+              "source_id": "suffixSource",
+              "bookshelf_order": 412,
+              "source_order": 512,
+              "updated_date": 1600000000000
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "lifecycle": {
+    "checkpoints": [
+      {
+        "stage": "S0",
+        "meaning": "不可变 B0"
+      },
+      {
+        "stage": "S1",
+        "meaning": "首次打开"
+      },
+      {
+        "stage": "S2",
+        "meaning": "来源书架排序提交前"
+      },
+      {
+        "stage": "S3",
+        "meaning": "第二项失败并向上传播后"
+      },
+      {
+        "stage": "S4",
+        "meaning": "独立进程冷启动后的稳定状态"
+      }
+    ],
+    "requireS3S4BusinessStable": true,
+    "requireRestart": true,
+    "restoreDirection": "none"
+  }
+}

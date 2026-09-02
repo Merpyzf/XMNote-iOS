@@ -603,6 +603,7 @@ struct SheetProductionValidationTestView: View {
 
         case .batchBookTags:
             BookshelfBatchTagsSheet(
+                mode: .replace,
                 options: Self.bookTagOptions,
                 selectedCount: 3,
                 initialSelectedIDs: [1, 3],

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 DatabaseManager、GRDB、ObservationStream 与 SourceRecord，按 Android v46 内置来源边界执行书籍来源管理读写
- * [OUTPUT]: 对外提供 SourceManagementRepository（SourceManagementRepositoryProtocol 的 GRDB 实现）
+ * [OUTPUT]: 对外提供 SourceManagementRepository（SourceManagementRepositoryProtocol 的 GRDB 实现，来源删除采用事务内物理删除）
  * [POS]: Data 层书籍来源管理仓储实现，统一封装“我的 > 书籍来源”的来源列表、增改删与排序写入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -68,12 +68,13 @@ struct SourceManagementRepository: SourceManagementRepositoryProtocol {
         }
     }
 
-    /// 批量删除我的来源；在单一事务中逐项把关联书籍迁移到“未知”，再软删除来源。
+    /// 批量删除我的来源；在单一事务中逐项把全部关联书籍迁移到“未知”，再物理删除来源。
     func deleteSources(sourceIDs: [Int64]) async throws {
         let uniqueIDs = uniquePositiveIDs(sourceIDs)
         guard !uniqueIDs.isEmpty else { throw SourceManagementRepositoryError.emptySelection }
 
         try await databaseManager.database.dbPool.write { db in
+            let now = timestampMillis()
             for sourceID in uniqueIDs {
                 guard try fetchActiveSource(db, sourceID: sourceID) != nil else {
                     throw SourceManagementRepositoryError.invalidSource
@@ -82,8 +83,8 @@ struct SourceManagementRepository: SourceManagementRepositoryProtocol {
                     throw SourceManagementRepositoryError.defaultSourceReadonly
                 }
                 try ensureUnknownSource(db, excludingSourceID: sourceID)
-                try migrateBooksToUnknownSource(db, sourceID: sourceID)
-                try softDeleteSource(db, sourceID: sourceID)
+                try migrateBooksToUnknownSource(db, sourceID: sourceID, updatedAt: now)
+                try hardDeleteSource(db, sourceID: sourceID)
             }
         }
     }
@@ -286,30 +287,32 @@ private extension SourceManagementRepository {
         )
     }
 
-    nonisolated func migrateBooksToUnknownSource(_ db: Database, sourceID: Int64) throws {
-        // SQL 目的：删除来源前把该来源下的有效书籍迁移到 Android 默认“未知”来源。
+    nonisolated func migrateBooksToUnknownSource(
+        _ db: Database,
+        sourceID: Int64,
+        updatedAt: Int64
+    ) throws {
+        // SQL 目的：删除来源前把该来源下的全部书籍（含旧备份占位行）迁移到 Android 默认“未知”来源。
         // 涉及表：book。
-        // 关键过滤：source_id = ? 且 is_deleted = 0，对齐 Android BookDao.updateOldSourceToNew，不额外排除 book.id = 0。
-        // 时间字段：Android 迁移来源不更新 book.updated_date，iOS 保持一致不改时间字段。
-        // 副作用用途：避免有效书籍继续引用已软删除的来源。
+        // 关键过滤：source_id = ?，不按 is_deleted 过滤且不额外排除 book.id = 0，避免物理删除来源后留下悬空外键。
+        // 时间字段：updated_date 写入本次批量删除命令统一的毫秒时间。
+        // 副作用用途：避免有效书籍或兼容占位行继续引用已删除的来源。
         let sql = """
             UPDATE book
-            SET source_id = ?
+            SET source_id = ?,
+                updated_date = ?
             WHERE source_id = ?
-              AND is_deleted = 0
             """
-        try db.execute(sql: sql, arguments: [Constants.unknownSourceID, sourceID])
+        try db.execute(sql: sql, arguments: [Constants.unknownSourceID, updatedAt, sourceID])
     }
 
-    nonisolated func softDeleteSource(_ db: Database, sourceID: Int64) throws {
-        // SQL 目的：软删除来源主记录。
+    nonisolated func hardDeleteSource(_ db: Database, sourceID: Int64) throws {
+        // SQL 目的：在全部引用迁移完成后物理删除来源主记录。
         // 涉及表：source。
-        // 关键过滤：按 id 精确命中，对齐 Android SourceDao.delete。
-        // 时间字段：Android 来源删除不更新 updated_date，iOS 保持一致不改时间字段。
-        // 副作用用途：从来源管理和来源维度入口中移除该来源。
+        // 关键过滤：按 id 精确命中；调用方已保护默认来源并确认目标有效。
+        // 时间字段：物理删除不更新时间字段；副作用用途：从来源管理和来源维度入口中移除该来源且不保留 tombstone。
         let sql = """
-            UPDATE source
-            SET is_deleted = 1
+            DELETE FROM source
             WHERE id = ?
             """
         try db.execute(sql: sql, arguments: [sourceID])

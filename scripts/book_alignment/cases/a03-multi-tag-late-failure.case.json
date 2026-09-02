@@ -1,0 +1,245 @@
+{
+  "schemaVersion": 1,
+  "caseId": "a03.multi-tag.late-failure",
+  "title": "A-03 多本追加标签时第二本关系晚失败",
+  "status": "exact-current",
+  "baseline": {
+    "sha256": "${B0_SHA256}",
+    "userVersion": 47,
+    "roomIdentityHash": "4e076c66571412594ff567eae85b68fc",
+    "schemaFingerprint": "${SCHEMA_FINGERPRINT}"
+  },
+  "targetDatabase": {
+    "userVersion": 48,
+    "roomIdentityHash": "cda5a591da1f57aca266af36255e5df7",
+    "schemaFingerprint": "055724e3c2ec28094f771961e2df1cf807efc99ac26f87e9d7308377d9b8eab2"
+  },
+  "runtimeProfile": {
+    "sha256": "${RUNTIME_PROFILE_SHA256}",
+    "requiredSettings": []
+  },
+  "aliases": [
+    {
+      "name": "firstBook",
+      "entity": "book",
+      "description": "追加循环中第一本成功插入目标关系的有效书",
+      "requirements": [
+        "is_deleted=0",
+        "S2 时仅有 firstOldTag",
+        "id 小于 secondBook"
+      ],
+      "selector": "active-book"
+    },
+    {
+      "name": "secondBook",
+      "entity": "book",
+      "description": "目标关系 INSERT 注入晚失败的第二本有效书",
+      "requirements": [
+        "is_deleted=0",
+        "S2 时仅有 secondOldTag",
+        "id 大于 firstBook"
+      ],
+      "selector": "active-book"
+    },
+    {
+      "name": "firstOldTag",
+      "entity": "tag",
+      "description": "第一本操作前已有且应保留的标签",
+      "requirements": [
+        "is_deleted=0",
+        "id!=targetTag"
+      ]
+    },
+    {
+      "name": "secondOldTag",
+      "entity": "tag",
+      "description": "第二本操作前已有且应保留的标签",
+      "requirements": [
+        "is_deleted=0",
+        "id!=targetTag"
+      ]
+    },
+    {
+      "name": "targetTag",
+      "entity": "tag",
+      "description": "批量追加的新标签",
+      "requirements": [
+        "is_deleted=0",
+        "S2 时与两本书均无有效关系"
+      ]
+    }
+  ],
+  "intent": {
+    "summary": "向两本书追加同一目标标签，在第二本关系 INSERT 注入 test-only 晚失败",
+    "selectionScope": "batch",
+    "confirmation": "required",
+    "outcome": "failed",
+    "repeatTrigger": "once",
+    "selectedAliases": [
+      "firstBook",
+      "secondBook"
+    ]
+  },
+  "adapters": {
+    "android": {
+      "entry": "多本书批量标签整理入口",
+      "steps": [
+        {
+          "action": "打开批量整理上下文",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "选择目标标签并安装第二本 INSERT 失败注入",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "触发确定性晚失败，验证本次业务命令完整回滚",
+          "targetAlias": "targetTag",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host force-stop、创建 resume marker 后冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    },
+    "ios": {
+      "entry": "原生多本书批量标签整理入口",
+      "steps": [
+        {
+          "action": "打开批量整理上下文",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "选择目标标签并安装第二本 INSERT 失败注入",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "触发确定性晚失败，验证本次业务命令完整回滚",
+          "targetAlias": "targetTag",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host 终止 App 后以同一副本冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    }
+  },
+  "database": {
+    "allowedWrites": [],
+    "forbiddenWrites": [],
+    "platformInternalTables": [
+      {
+        "table": "grdb_migrations",
+        "platform": "ios",
+        "reason": "GRDB 平台内部迁移记录"
+      }
+    ],
+    "timeColumns": [],
+    "strictExceptions": []
+  },
+  "setup": {
+    "mode": "none"
+  },
+  "oracle": {
+    "currentOracle": "一次批量追加标签必须在共同事务中完成，任一本失败时不得留下前缀关系。",
+    "desiredSemantics": "一次批量追加标签必须在共同事务中完成，任一本失败时不得留下前缀关系。",
+    "semanticProjections": [
+      {
+        "name": "active-multi-book-tags",
+        "description": "两本书当前有效标签关系图",
+        "sql": "SELECT book_id, tag_id FROM tag_book WHERE book_id IN (:firstBook, :secondBook) AND is_deleted = 0 ORDER BY book_id, tag_id",
+        "mode": "ordered-rows",
+        "columns": [
+          {
+            "name": "book_id",
+            "aliasEntity": "book"
+          },
+          {
+            "name": "tag_id",
+            "aliasEntity": "tag"
+          }
+        ],
+        "parameters": {
+          "firstBook": {
+            "binding": "firstBook"
+          },
+          "secondBook": {
+            "binding": "secondBook"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": [
+            {
+              "book_id": "firstBook",
+              "tag_id": "firstOldTag"
+            },
+            {
+              "book_id": "secondBook",
+              "tag_id": "secondOldTag"
+            }
+          ],
+          "iosBefore": [
+            {
+              "book_id": "firstBook",
+              "tag_id": "firstOldTag"
+            },
+            {
+              "book_id": "secondBook",
+              "tag_id": "secondOldTag"
+            }
+          ],
+          "androidAfter": [
+            {
+              "book_id": "firstBook",
+              "tag_id": "firstOldTag"
+            },
+            {
+              "book_id": "secondBook",
+              "tag_id": "secondOldTag"
+            }
+          ],
+          "iosAfter": [
+            {
+              "book_id": "firstBook",
+              "tag_id": "firstOldTag"
+            },
+            {
+              "book_id": "secondBook",
+              "tag_id": "secondOldTag"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "lifecycle": {
+    "checkpoints": [
+      {
+        "stage": "S0",
+        "meaning": "不可变 B0"
+      },
+      {
+        "stage": "S1",
+        "meaning": "首次打开"
+      },
+      {
+        "stage": "S2",
+        "meaning": "批量追加提交前"
+      },
+      {
+        "stage": "S3",
+        "meaning": "第二本关系晚失败后"
+      },
+      {
+        "stage": "S4",
+        "meaning": "独立进程冷启动后的稳定状态"
+      }
+    ],
+    "requireS3S4BusinessStable": true,
+    "requireRestart": true,
+    "restoreDirection": "none"
+  }
+}

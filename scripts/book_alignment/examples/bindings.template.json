@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "baselineSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "schemaFingerprint": "0000000000000000000000000000000000000000000000000000000000000000",
+  "runtimeProfileSha256": "675147fd28eeaba0256d252525a31cde49aa86ff183947061973a589d71f90d3",
+  "aliases": {
+    "ungroupedBookA": {
+      "entity": "book",
+      "id": "__LOCAL_BOOK_ID__",
+      "privateLabel": "__LOCAL_BOOK_NAME__"
+    },
+    "nonEmptyGroupA": {
+      "entity": "group",
+      "id": "__LOCAL_GROUP_ID__",
+      "privateLabel": "__LOCAL_GROUP_NAME__"
+    }
+  }
+}

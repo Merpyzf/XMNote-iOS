@@ -1,0 +1,203 @@
+{
+  "schemaVersion": 1,
+  "caseId": "a03.single-tag.late-failure",
+  "title": "A-03 单本标签替换时第二条关系晚失败",
+  "status": "exact-current",
+  "baseline": {
+    "sha256": "${B0_SHA256}",
+    "userVersion": 47,
+    "roomIdentityHash": "4e076c66571412594ff567eae85b68fc",
+    "schemaFingerprint": "${SCHEMA_FINGERPRINT}"
+  },
+  "targetDatabase": {
+    "userVersion": 48,
+    "roomIdentityHash": "cda5a591da1f57aca266af36255e5df7",
+    "schemaFingerprint": "055724e3c2ec28094f771961e2df1cf807efc99ac26f87e9d7308377d9b8eab2"
+  },
+  "runtimeProfile": {
+    "sha256": "${RUNTIME_PROFILE_SHA256}",
+    "requiredSettings": []
+  },
+  "aliases": [
+    {
+      "name": "targetBook",
+      "entity": "book",
+      "description": "走单本标签替换分支的有效书",
+      "requirements": [
+        "is_deleted=0",
+        "S2 时仅有 oldTag 有效关系"
+      ],
+      "selector": "active-book"
+    },
+    {
+      "name": "oldTag",
+      "entity": "tag",
+      "description": "单本操作前唯一有效标签",
+      "requirements": [
+        "is_deleted=0",
+        "id 不等于两个目标标签"
+      ]
+    },
+    {
+      "name": "firstTargetTag",
+      "entity": "tag",
+      "description": "替换循环中第一条成功插入的目标标签",
+      "requirements": [
+        "is_deleted=0",
+        "S2 时与 targetBook 无有效关系"
+      ]
+    },
+    {
+      "name": "secondTargetTag",
+      "entity": "tag",
+      "description": "INSERT 触发晚失败的第二个目标标签",
+      "requirements": [
+        "is_deleted=0",
+        "S2 时与 targetBook 无有效关系"
+      ]
+    }
+  ],
+  "intent": {
+    "summary": "为单本书用两个目标标签替换旧标签，在第二条关系 INSERT 注入 test-only 晚失败",
+    "selectionScope": "single",
+    "confirmation": "required",
+    "outcome": "failed",
+    "repeatTrigger": "once",
+    "selectedAliases": [
+      "targetBook"
+    ]
+  },
+  "adapters": {
+    "android": {
+      "entry": "单本书标签整理入口",
+      "steps": [
+        {
+          "action": "打开单本整理上下文",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "选择两个目标标签并安装第二条 INSERT 失败注入",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "触发确定性晚失败，验证本次业务命令完整回滚",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host force-stop、创建 resume marker 后冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    },
+    "ios": {
+      "entry": "原生单本书标签整理入口",
+      "steps": [
+        {
+          "action": "打开单本整理上下文",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "选择两个目标标签并安装第二条 INSERT 失败注入",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "触发确定性晚失败，验证本次业务命令完整回滚",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host 终止 App 后以同一副本冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    }
+  },
+  "database": {
+    "allowedWrites": [],
+    "forbiddenWrites": [],
+    "platformInternalTables": [
+      {
+        "table": "grdb_migrations",
+        "platform": "ios",
+        "reason": "GRDB 平台内部迁移记录"
+      }
+    ],
+    "timeColumns": [],
+    "strictExceptions": []
+  },
+  "setup": {
+    "mode": "none"
+  },
+  "oracle": {
+    "currentOracle": "单本标签替换的旧关系移除与全部新关系插入必须在同一事务中提交或回滚。",
+    "desiredSemantics": "单本标签替换的旧关系移除与全部新关系插入必须在同一事务中提交或回滚。",
+    "semanticProjections": [
+      {
+        "name": "active-single-book-tags",
+        "description": "单本书当前有效标签集合",
+        "sql": "SELECT tag_id FROM tag_book WHERE book_id = :targetBook AND is_deleted = 0 ORDER BY tag_id",
+        "mode": "ordered-rows",
+        "columns": [
+          {
+            "name": "tag_id",
+            "aliasEntity": "tag"
+          }
+        ],
+        "parameters": {
+          "targetBook": {
+            "binding": "targetBook"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": [
+            {
+              "tag_id": "oldTag"
+            }
+          ],
+          "iosBefore": [
+            {
+              "tag_id": "oldTag"
+            }
+          ],
+          "androidAfter": [
+            {
+              "tag_id": "oldTag"
+            }
+          ],
+          "iosAfter": [
+            {
+              "tag_id": "oldTag"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "lifecycle": {
+    "checkpoints": [
+      {
+        "stage": "S0",
+        "meaning": "不可变 B0"
+      },
+      {
+        "stage": "S1",
+        "meaning": "首次打开"
+      },
+      {
+        "stage": "S2",
+        "meaning": "标签替换提交前"
+      },
+      {
+        "stage": "S3",
+        "meaning": "第二条目标关系晚失败后"
+      },
+      {
+        "stage": "S4",
+        "meaning": "独立进程冷启动后的稳定状态"
+      }
+    ],
+    "requireS3S4BusinessStable": true,
+    "requireRestart": true,
+    "restoreDirection": "none"
+  }
+}

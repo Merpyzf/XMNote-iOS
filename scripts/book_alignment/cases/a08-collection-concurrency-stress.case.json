@@ -1,0 +1,311 @@
+{
+  "schemaVersion": 1,
+  "caseId": "a08.collection-concurrency.stress",
+  "title": "A-08 书单关系并发幂等压力场景",
+  "status": "exact-current",
+  "baseline": {
+    "sha256": "${B0_SHA256}",
+    "userVersion": 47,
+    "roomIdentityHash": "4e076c66571412594ff567eae85b68fc",
+    "schemaFingerprint": "${SCHEMA_FINGERPRINT}"
+  },
+  "targetDatabase": {
+    "userVersion": 48,
+    "roomIdentityHash": "cda5a591da1f57aca266af36255e5df7",
+    "schemaFingerprint": "055724e3c2ec28094f771961e2df1cf807efc99ac26f87e9d7308377d9b8eab2"
+  },
+  "runtimeProfile": {
+    "sha256": "${RUNTIME_PROFILE_SHA256}",
+    "requiredSettings": []
+  },
+  "aliases": [
+    {
+      "name": "selectedActiveBooks",
+      "entity": "other",
+      "description": "B0 中按业务 ID 稳定排序后选取的前 24 本有效非根书籍集合",
+      "requirements": [
+        "每本 is_deleted=0",
+        "每本 id!=0",
+        "S2 时均不属于 targetCollection"
+      ]
+    },
+    {
+      "name": "targetCollection",
+      "entity": "collection",
+      "description": "测试在 S2 前创建且仅用于本次压力诊断的手动书单",
+      "requirements": [
+        "id=9088101",
+        "is_deleted=0",
+        "is_annual=0",
+        "S2 时没有 collection_book 关系"
+      ]
+    }
+  ],
+  "intent": {
+    "summary": "对 24 本有效书逐本同时启动 16 次生产 addBooksToCollectionList 调用，验证数据库唯一约束与原子冲突策略保持幂等",
+    "selectionScope": "batch",
+    "confirmation": "immediate",
+    "outcome": "committed",
+    "repeatTrigger": "once",
+    "selectedAliases": [
+      "selectedActiveBooks",
+      "targetCollection"
+    ]
+  },
+  "adapters": {
+    "android": {
+      "entry": "test-only CollectionBookRepository 并发压力入口",
+      "steps": [
+        {
+          "action": "从隔离 B0 稳定读取至少 24 本有效书",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "创建 test-only 手动书单并确认目标关系为空",
+          "targetAlias": "targetCollection",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "每本使用 16 线程起跑闸门同时调用真实 addBooksToCollectionList，断言每本恰好一条关系",
+          "targetAlias": "selectedActiveBooks",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "host force-stop、创建 resume marker 后冷启动读取并再次断言每本恰好一条关系",
+          "checkpoint": "S4"
+        }
+      ]
+    },
+    "ios": {
+      "entry": "同一关系唯一语义的 Repository 并发测试",
+      "steps": [
+        {
+          "action": "从同一 B0 副本稳定读取等价有效书集合",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "创建隔离的 test-only 手动书单",
+          "targetAlias": "targetCollection",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "使用等价并发参数，断言每本恰好一条关系且调用无错误",
+          "targetAlias": "selectedActiveBooks",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "终止 App 后以同一副本冷启动检查关系计数稳定",
+          "checkpoint": "S4"
+        }
+      ]
+    }
+  },
+  "database": {
+    "allowedWrites": [
+      {
+        "table": "collection_book",
+        "operations": [
+          "insert"
+        ],
+        "columns": [
+          "id",
+          "collection_id",
+          "book_id",
+          "recommend",
+          "order",
+          "created_date",
+          "updated_date",
+          "is_deleted"
+        ],
+        "platforms": [
+          "android",
+          "ios"
+        ],
+        "reason": "生产 Repository 依靠业务唯一约束与 INSERT OR IGNORE/等价冲突策略，为每个业务键最多插入一条有效关系"
+      }
+    ],
+    "forbiddenWrites": [
+      {
+        "table": "collection_book",
+        "operations": [
+          "update",
+          "delete"
+        ],
+        "columns": [
+          "*"
+        ],
+        "platforms": [
+          "android",
+          "ios"
+        ],
+        "reason": "该生产加入路径只查询与插入，不更新或删除已有关系"
+      },
+      {
+        "table": "collection",
+        "operations": [
+          "insert",
+          "update",
+          "delete"
+        ],
+        "columns": [
+          "*"
+        ],
+        "platforms": [
+          "android",
+          "ios"
+        ],
+        "reason": "targetCollection 在 S2 前完成 test-only setup，压力操作本身不得改写书单"
+      },
+      {
+        "table": "book",
+        "operations": [
+          "insert",
+          "update",
+          "delete"
+        ],
+        "columns": [
+          "*"
+        ],
+        "platforms": [
+          "android",
+          "ios"
+        ],
+        "reason": "加入书单不得改写 B0 书籍"
+      }
+    ],
+    "platformInternalTables": [
+      {
+        "table": "grdb_migrations",
+        "platform": "ios",
+        "reason": "GRDB 平台内部迁移记录"
+      }
+    ],
+    "timeColumns": [
+      {
+        "table": "collection_book",
+        "column": "created_date",
+        "unit": "epoch-millis",
+        "monotonic": false,
+        "allowZeroOnInsert": false,
+        "requireOperationWindow": true,
+        "toleranceMillis": 1000,
+        "reason": "每次生产 Repository 插入以调用时刻创建关系"
+      },
+      {
+        "table": "collection_book",
+        "column": "updated_date",
+        "unit": "epoch-millis",
+        "monotonic": false,
+        "allowZeroOnInsert": true,
+        "requireOperationWindow": false,
+        "reason": "生产 Repository 未赋值，沿用 BaseEntity 的零默认值"
+      }
+    ],
+    "strictExceptions": []
+  },
+  "setup": {
+    "mode": "none"
+  },
+  "oracle": {
+    "currentOracle": "Android 24 本书在 16 worker 并发调用下，每个 collection_id+book_id 恰好保留一条有效关系，调用错误数为零，Room 重开及冷启动后计数稳定。",
+    "desiredSemantics": "同一 collection_id+book_id 在数据库层最多存在一条有效关系；Repository 的并发重试应通过唯一约束与原子冲突策略实现幂等。",
+    "semanticProjections": [
+      {
+        "name": "stress-covered-book-count",
+        "description": "至少拥有一条有效目标关系的不同书籍数量",
+        "sql": "SELECT COUNT(*) AS covered_book_count FROM (SELECT book_id FROM collection_book WHERE collection_id = 9088101 AND is_deleted = 0 GROUP BY book_id)",
+        "mode": "scalar",
+        "columns": [
+          {
+            "name": "covered_book_count"
+          }
+        ],
+        "parameters": {},
+        "compareAndroidIOSAfter": false,
+        "expected": {
+          "androidBefore": 0,
+          "iosBefore": 0,
+          "androidAfter": 24
+        }
+      },
+      {
+        "name": "stress-relation-count-histogram",
+        "description": "按每本有效关系数聚合，完成后只能存在 1×24 的唯一分布",
+        "sql": "SELECT relation_count, COUNT(*) AS book_count FROM (SELECT book_id, COUNT(*) AS relation_count FROM collection_book WHERE collection_id = 9088101 AND is_deleted = 0 GROUP BY book_id) GROUP BY relation_count ORDER BY relation_count",
+        "mode": "ordered-rows",
+        "columns": [
+          {
+            "name": "relation_count"
+          },
+          {
+            "name": "book_count"
+          }
+        ],
+        "parameters": {},
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": [],
+          "iosBefore": [],
+          "androidAfter": [
+            [
+              1,
+              24
+            ]
+          ],
+          "iosAfter": [
+            [
+              1,
+              24
+            ]
+          ]
+        }
+      },
+      {
+        "name": "stress-extra-relation-count",
+        "description": "超出每本一条的有效关系总数必须为零",
+        "sql": "SELECT COALESCE(SUM(relation_count - 1), 0) AS extra_relation_count FROM (SELECT book_id, COUNT(*) AS relation_count FROM collection_book WHERE collection_id = 9088101 AND is_deleted = 0 GROUP BY book_id)",
+        "mode": "scalar",
+        "columns": [
+          {
+            "name": "extra_relation_count"
+          }
+        ],
+        "parameters": {},
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": 0,
+          "iosBefore": 0,
+          "androidAfter": 0,
+          "iosAfter": 0
+        }
+      }
+    ]
+  },
+  "lifecycle": {
+    "checkpoints": [
+      {
+        "stage": "S0",
+        "meaning": "不可变 B0"
+      },
+      {
+        "stage": "S1",
+        "meaning": "首次打开并选取有效书籍"
+      },
+      {
+        "stage": "S2",
+        "meaning": "test-only 书单建立且关系为空"
+      },
+      {
+        "stage": "S3",
+        "meaning": "384 次真实 Repository 调用结束并输出本次 aggregate"
+      },
+      {
+        "stage": "S4",
+        "meaning": "独立进程冷启动后的稳定状态"
+      }
+    ],
+    "requireS3S4BusinessStable": true,
+    "requireRestart": true,
+    "restoreDirection": "none"
+  }
+}

@@ -6,7 +6,7 @@
 //
 
 /**
- * [INPUT]: 依赖 BookViewModel、AppNavigationCoordinator、页面可见态、LoadingGate、InteractionMetrics 与容器注入的浏览/搜索/编辑回调
+ * [INPUT]: 依赖 BookViewModel、AppNavigationCoordinator、页面可见态、LoadingGate、Reicon 整理入口、InteractionMetrics 与容器注入的浏览/搜索/编辑回调
  * [OUTPUT]: 对外提供 BookGridView，展示书籍子页维度工具行、书架内容区、集合顶部搜索 drawer、多维度 UICollectionView 聚合入口、选择覆盖层、搜索空态、写入错误浮层与拖拽排序交互
  * [POS]: Book 模块网格展示层，被 BookContainerView 嵌入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -185,7 +185,7 @@ struct BookGridView: View {
                 Button {
                     onEnterEditing(nil)
                 } label: {
-                    XMMenuLabel("书籍整理", systemImage: "checklist")
+                    BookshelfEditingMenuLabel(title: "书籍整理", icon: .checklist)
                 }
                 .disabled(!canShowSelectAction || !canEditCurrentDimension)
             }

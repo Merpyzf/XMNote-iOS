@@ -1,0 +1,326 @@
+{
+  "schemaVersion": 1,
+  "caseId": "a04.empty-tag-selection",
+  "title": "A-04 单本与多本空标签选择的分支语义",
+  "status": "exact-current",
+  "baseline": {
+    "sha256": "${B0_SHA256}",
+    "userVersion": 47,
+    "roomIdentityHash": "4e076c66571412594ff567eae85b68fc",
+    "schemaFingerprint": "${SCHEMA_FINGERPRINT}"
+  },
+  "targetDatabase": {
+    "userVersion": 48,
+    "roomIdentityHash": "cda5a591da1f57aca266af36255e5df7",
+    "schemaFingerprint": "055724e3c2ec28094f771961e2df1cf807efc99ac26f87e9d7308377d9b8eab2"
+  },
+  "runtimeProfile": {
+    "sha256": "${RUNTIME_PROFILE_SHA256}",
+    "requiredSettings": []
+  },
+  "aliases": [
+    {
+      "name": "singleBook",
+      "entity": "book",
+      "description": "空标签选择走单本替换分支的有效书",
+      "requirements": [
+        "is_deleted=0",
+        "S2 时仅有 singleExistingTag"
+      ],
+      "selector": "active-book"
+    },
+    {
+      "name": "batchBookA",
+      "entity": "book",
+      "description": "空标签选择走多本分支的第一本有效书",
+      "requirements": [
+        "is_deleted=0",
+        "S2 时有 batchExistingTag"
+      ],
+      "selector": "active-book"
+    },
+    {
+      "name": "batchBookB",
+      "entity": "book",
+      "description": "空标签选择走多本分支的第二本有效书",
+      "requirements": [
+        "is_deleted=0",
+        "S2 时有 batchExistingTag"
+      ],
+      "selector": "active-book"
+    },
+    {
+      "name": "singleExistingTag",
+      "entity": "tag",
+      "description": "单本操作前已有并会被清空的标签",
+      "requirements": [
+        "is_deleted=0",
+        "id!=batchExistingTag"
+      ]
+    },
+    {
+      "name": "batchExistingTag",
+      "entity": "tag",
+      "description": "两本批量目标操作前共同已有且应保留的标签",
+      "requirements": [
+        "is_deleted=0",
+        "id!=singleExistingTag"
+      ]
+    }
+  ],
+  "intent": {
+    "summary": "在同一场景的两份互不重叠 fixture 上依次提交单本空标签与多本空标签命令",
+    "selectionScope": "batch",
+    "confirmation": "required",
+    "outcome": "committed",
+    "repeatTrigger": "once",
+    "selectedAliases": [
+      "singleBook",
+      "batchBookA",
+      "batchBookB"
+    ]
+  },
+  "adapters": {
+    "android": {
+      "entry": "单本与批量整理的标签选择入口",
+      "steps": [
+        {
+          "action": "打开隔离副本",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "准备互不重叠的单本与多本标签关系",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "通过真实 Repository 依次提交两次空选择",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "关闭并重开 Room 后重新读取",
+          "checkpoint": "S4"
+        }
+      ]
+    },
+    "ios": {
+      "entry": "原生单本与批量标签 Sheet",
+      "steps": [
+        {
+          "action": "打开隔离副本",
+          "checkpoint": "S1"
+        },
+        {
+          "action": "准备等价且互不重叠的关系",
+          "checkpoint": "S2"
+        },
+        {
+          "action": "各自在单一 GRDB 写事务中提交空选择",
+          "checkpoint": "S3"
+        },
+        {
+          "action": "终止 App 后以同一副本冷启动读取",
+          "checkpoint": "S4"
+        }
+      ]
+    }
+  },
+  "database": {
+    "allowedWrites": [
+      {
+        "table": "tag_book",
+        "operations": [
+          "delete"
+        ],
+        "platforms": [
+          "android",
+          "ios"
+        ],
+        "reason": "单本 REPLACE 空选择物理清空旧关系；批量 ADD 空选择不写库"
+      }
+    ],
+    "forbiddenWrites": [
+      {
+        "table": "tag_book",
+        "operations": [
+          "insert"
+        ],
+        "platforms": [
+          "android",
+          "ios"
+        ],
+        "reason": "空标签选择不得新增关系"
+      },
+      {
+        "table": "tag",
+        "operations": [
+          "insert",
+          "update",
+          "delete"
+        ],
+        "columns": [
+          "*"
+        ],
+        "platforms": [
+          "android",
+          "ios"
+        ],
+        "reason": "空选择不得修改标签实体"
+      }
+    ],
+    "platformInternalTables": [
+      {
+        "table": "grdb_migrations",
+        "platform": "ios",
+        "reason": "GRDB 平台内部迁移记录"
+      }
+    ],
+    "timeColumns": [],
+    "strictExceptions": []
+  },
+  "setup": {
+    "mode": "none"
+  },
+  "oracle": {
+    "currentOracle": "单本 REPLACE 空选择在事务内物理清空全部标签；批量 ADD 空选择为 no-op 并保留原关系。",
+    "desiredSemantics": "单本 REPLACE 空选择在事务内物理清空全部标签；批量 ADD 空选择为 no-op 并保留原关系。",
+    "semanticProjections": [
+      {
+        "name": "active-empty-selection-relations",
+        "description": "比较三本书空选择前后的有效标签关系",
+        "sql": "SELECT book_id, tag_id FROM tag_book WHERE book_id IN (:singleBook, :batchBookA, :batchBookB) AND tag_id IN (:singleExistingTag, :batchExistingTag) AND is_deleted = 0 ORDER BY book_id, tag_id",
+        "mode": "ordered-rows",
+        "columns": [
+          {
+            "name": "book_id",
+            "aliasEntity": "book"
+          },
+          {
+            "name": "tag_id",
+            "aliasEntity": "tag"
+          }
+        ],
+        "parameters": {
+          "singleBook": {
+            "binding": "singleBook"
+          },
+          "batchBookA": {
+            "binding": "batchBookA"
+          },
+          "batchBookB": {
+            "binding": "batchBookB"
+          },
+          "singleExistingTag": {
+            "binding": "singleExistingTag"
+          },
+          "batchExistingTag": {
+            "binding": "batchExistingTag"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": [
+            {
+              "book_id": "singleBook",
+              "tag_id": "singleExistingTag"
+            },
+            {
+              "book_id": "batchBookA",
+              "tag_id": "batchExistingTag"
+            },
+            {
+              "book_id": "batchBookB",
+              "tag_id": "batchExistingTag"
+            }
+          ],
+          "iosBefore": [
+            {
+              "book_id": "singleBook",
+              "tag_id": "singleExistingTag"
+            },
+            {
+              "book_id": "batchBookA",
+              "tag_id": "batchExistingTag"
+            },
+            {
+              "book_id": "batchBookB",
+              "tag_id": "batchExistingTag"
+            }
+          ],
+          "androidAfter": [
+            {
+              "book_id": "batchBookA",
+              "tag_id": "batchExistingTag"
+            },
+            {
+              "book_id": "batchBookB",
+              "tag_id": "batchExistingTag"
+            }
+          ],
+          "iosAfter": [
+            {
+              "book_id": "batchBookA",
+              "tag_id": "batchExistingTag"
+            },
+            {
+              "book_id": "batchBookB",
+              "tag_id": "batchExistingTag"
+            }
+          ]
+        }
+      },
+      {
+        "name": "single-old-relation-physical-count",
+        "description": "两端均物理移除单本旧关系",
+        "sql": "SELECT COUNT(*) AS row_count FROM tag_book WHERE book_id = :singleBook AND tag_id = :singleExistingTag",
+        "mode": "scalar",
+        "columns": [
+          {
+            "name": "row_count"
+          }
+        ],
+        "parameters": {
+          "singleBook": {
+            "binding": "singleBook"
+          },
+          "singleExistingTag": {
+            "binding": "singleExistingTag"
+          }
+        },
+        "compareAndroidIOSAfter": true,
+        "expected": {
+          "androidBefore": 1,
+          "iosBefore": 1,
+          "androidAfter": 0,
+          "iosAfter": 0
+        }
+      }
+    ]
+  },
+  "lifecycle": {
+    "checkpoints": [
+      {
+        "stage": "S0",
+        "meaning": "不可变 B0"
+      },
+      {
+        "stage": "S1",
+        "meaning": "Room 首次打开"
+      },
+      {
+        "stage": "S2",
+        "meaning": "两份 fixture 的空选择提交前"
+      },
+      {
+        "stage": "S3",
+        "meaning": "单本清空与多本 no-op 后"
+      },
+      {
+        "stage": "S4",
+        "meaning": "关闭并重开 Room 冷启动后的稳定状态"
+      }
+    ],
+    "requireS3S4BusinessStable": true,
+    "requireRestart": true,
+    "restoreDirection": "none"
+  }
+}

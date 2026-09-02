@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖首页书籍二级列表编辑动作、批量编辑 Sheet 与确认弹窗业务状态
- * [OUTPUT]: 对外提供 BookshelfBookListEditAction、BookshelfBatchEditSheet 与二级列表编辑确认输入模型
+ * [OUTPUT]: 对外提供语义化 BookshelfBookListEditAction、BookshelfBatchEditSheet 与二级列表编辑确认输入模型
  * [POS]: Book 模块二级书籍列表 ViewModel 状态模型，隔离 BookshelfBookListViewModel 的状态类型定义
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -73,41 +73,6 @@ enum BookshelfBookListEditAction: String, CaseIterable, Identifiable, Hashable, 
         }
     }
 
-    var systemImage: String {
-        switch self {
-        case .pin:
-            return "pin"
-        case .unpin:
-            return "pin.slash"
-        case .reorder:
-            return "arrow.up.arrow.down"
-        case .moveToStart:
-            return "arrow.up.to.line"
-        case .moveToEnd:
-            return "arrow.down.to.line"
-        case .moveToGroup:
-            return "folder"
-        case .addToBookList:
-            return "books.vertical"
-        case .moveOut:
-            return "folder.badge.minus"
-        case .setTag:
-            return "tag"
-        case .setSource:
-            return "tray"
-        case .setReadStatus:
-            return "checklist"
-        case .exportNote:
-            return "doc.text"
-        case .exportBook:
-            return "square.and.arrow.up"
-        case .renameGroup, .renameTag, .renameSource:
-            return "pencil"
-        case .deleteGroup, .deleteTag, .deleteSource, .deleteBooks:
-            return "trash"
-        }
-    }
-
     var isDestructive: Bool {
         switch self {
         case .deleteGroup, .deleteTag, .deleteSource, .deleteBooks:
@@ -130,6 +95,8 @@ enum BookshelfBookListEditAction: String, CaseIterable, Identifiable, Hashable, 
 /// 二级书籍列表批量编辑 Sheet 类型，承载打开 Sheet 时刻的可选项快照与局部读取状态。
 enum BookshelfBatchEditSheet: Identifiable, Hashable, Sendable {
     case tags(
+        mode: BookTagMutationMode,
+        bookIDs: [Int64],
         options: [BookEditorNamedOption],
         initialSelectedIDs: [Int64],
         allowsEmptySelection: Bool,
@@ -143,8 +110,8 @@ enum BookshelfBatchEditSheet: Identifiable, Hashable, Sendable {
 
     var id: String {
         switch self {
-        case .tags:
-            return "tags"
+        case .tags(let mode, _, _, _, _, _, _):
+            return "tags-\(mode.rawValue)"
         case .source:
             return "source"
         case .readStatus:
@@ -155,6 +122,13 @@ enum BookshelfBatchEditSheet: Identifiable, Hashable, Sendable {
             return "bookCollection"
         }
     }
+}
+
+/// 多本书标签命令选择状态，冻结打开确认弹窗时的书籍范围。
+struct BookshelfBatchTagModeConfirmation: Identifiable, Hashable, Sendable {
+    let bookIDs: [Int64]
+
+    var id: String { bookIDs.map(String.init).joined(separator: "-") }
 }
 
 /// 默认分组移出确认状态，承载打开弹窗时的选择数量。

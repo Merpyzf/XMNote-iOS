@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 AppDatabase/GRDB 的 V44 group、group_book、book 表与可注入毫秒时钟
+ * [INPUT]: 依赖 AppDatabase/GRDB 的 Room v48 group、group_book、book 表与可注入毫秒时钟
  * [OUTPUT]: 对外提供 Android GroupService/BookService 分组路径可观察语义的专用仓储
  * [POS]: Data 层网页分组仓储；与 App 书架写用例隔离，由 DesktopWebAPIAdapter 映射为 Package DTO
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -252,7 +252,7 @@ nonisolated struct DesktopWebGroupRepository: Sendable {
         )
     }
 
-    /// 按 Android 当前事务语义删除分组；每本书先移回默认书架，再软删除剩余关系与主记录。
+    /// 在单一事务中删除分组；每本书先移回默认书架，再物理清理关系并软删除主记录。
     func deleteGroup(id: Int64, placeAtEnd: Bool) async throws {
         _ = try await requireGroup(id: id)
         let finalDeleteAt = currentTimeMillis()
@@ -266,17 +266,12 @@ nonisolated struct DesktopWebGroupRepository: Sendable {
                     db: db
                 )
             }
-            // SQL 目的：按 WebGroupDao.softDeleteGroupBooks 软删除该分组尚有效的全部关系。
+            // SQL 目的：物理删除该分组剩余的全部关系。
             // 涉及表：group_book。
-            // 关键过滤：group_id 精确匹配且 is_deleted = 0。
-            // 时间字段：使用进入 deleteGroup 后、移动书籍前取得的同一毫秒值。
-            // 副作用用途：清理无效/已删除书籍遗留关系；与书籍移动、分组删除同事务提交。
-            let sql = """
-                UPDATE group_book
-                SET is_deleted = 1, updated_date = ?
-                WHERE group_id = ? AND is_deleted = 0
-                """
-            try db.execute(sql: sql, arguments: [finalDeleteAt, id])
+            // 关键过滤：group_id 精确匹配，同时清理历史失效行。
+            // 时间字段：关系物理删除不写时间。
+            // 副作用用途：释放 v48 book_id 唯一键；与书籍移动、分组删除同事务提交。
+            try db.execute(sql: "DELETE FROM group_book WHERE group_id = ?", arguments: [id])
 
             // SQL 目的：按 WebGroupDao.softDelete 软删除分组主记录。
             // 涉及表：`group`。
@@ -520,17 +515,12 @@ nonisolated struct DesktopWebGroupRepository: Sendable {
             db: db
         )
 
-        // SQL 目的：按 WebBookDao.softDeleteGroupBooksByBookId 移除该书的全部有效分组关系。
+        // SQL 目的：物理移除该书的全部分组关系。
         // 涉及表：group_book。
-        // 关键过滤：book_id 精确匹配且关系有效，不只删除当前分组关系。
-        // 时间字段：复用本书移动流程的 updatedAt。
+        // 关键过滤：book_id 精确匹配，同时清理历史失效行，不只删除当前分组关系。
+        // 时间字段：关系物理删除不写时间。
         // 副作用用途：让书籍回到默认书架；与取消置顶、排序更新同事务。
-        let relationSQL = """
-            UPDATE group_book
-            SET is_deleted = 1, updated_date = ?
-            WHERE book_id = ? AND is_deleted = 0
-            """
-        try db.execute(sql: relationSQL, arguments: [updatedAt, id])
+        try db.execute(sql: "DELETE FROM group_book WHERE book_id = ?", arguments: [id])
 
         // SQL 目的：把移出分组书籍放到默认书架边界位置。
         // 涉及表：book。

@@ -6,8 +6,8 @@
 //
 
 /**
- * [INPUT]: 依赖 BookshelfBookListRoute、RepositoryContainer、AppNavigationCoordinator、InteractionMetrics 与外层普通浏览路由闭包
- * [OUTPUT]: 对外提供 BookshelfBookListView，组合本地顶部 chrome、搜索抽屉、BookshelfBookListCollectionView、中性编辑菜单与统一批量标签 Sheet 容器
+ * [INPUT]: 依赖 BookshelfBookListRoute、RepositoryContainer、AppNavigationCoordinator、书架整理 accessory 协调器、系统返回手势桥接、InteractionMetrics 与外层普通浏览路由闭包
+ * [OUTPUT]: 对外提供 BookshelfBookListView，组合本地顶部 chrome、搜索抽屉、BookshelfBookListCollectionView、写入失败反馈、根级底部编辑动作与统一批量标签 Sheet 容器
  * [POS]: Book 模块二级列表页，被 BookRoute.bookshelfList 导航目标消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -81,12 +81,14 @@ private struct BookshelfBookListContentView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
+    @Environment(BookshelfEditingAccessoryCoordinator.self) private var editingAccessoryCoordinator
     @Bindable var viewModel: BookshelfBookListViewModel
     let onOpenRoute: (BookRoute) -> Void
     let onOpenNoteRoute: (NoteRoute) -> Void
     @State private var showsDisplaySettingSheet = false
     @State private var editingPresentation = BookshelfEditingPresentationState()
-    @State private var chromeTransitionTask: Task<Void, Never>?
+    @State private var chromeTransitionID: UUID?
+    @State private var accessoryOwnerID = UUID()
     @State private var browseSearch = BookshelfSearchDrawerState()
     @State private var readLoadingGate = LoadingGate()
 
@@ -124,12 +126,25 @@ private struct BookshelfBookListContentView: View {
         VStack(spacing: Spacing.none) {
             topChrome
                 .zIndex(1)
+            if chromePhase == .normal, viewModel.writeError != nil {
+                XMInlineStatusBanner(
+                    "操作未完成，请稍后重试",
+                    tone: .error,
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .padding(.horizontal, Spacing.screenEdge)
+                .padding(.vertical, Spacing.cozy)
+                .transition(.opacity)
+                .accessibilityIdentifier("bookshelf.booklist.write-error")
+            }
+
             collectionContent
         }
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .background(Color.surfacePage.ignoresSafeArea())
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
+        .navigationPopGuard(canPop: true, onBlockedAttempt: { })
         .onAppear {
             syncReadLoadingGate()
             syncChromePhaseWithEditingState()
@@ -139,6 +154,12 @@ private struct BookshelfBookListContentView: View {
         }
         .onChange(of: viewModel.isEditing) { _, _ in
             syncChromePhaseWithEditingState()
+        }
+        .onChange(of: editingAccessorySnapshot, initial: true) { _, snapshot in
+            publishEditingAccessory(snapshot)
+        }
+        .onChange(of: editingAccessoryCoordinator.pendingCommand) { _, command in
+            handleEditingAccessoryCommand(command)
         }
         .onChange(of: viewModel.hasSearchKeyword) { _, hasSearchKeyword in
             if hasSearchKeyword {
@@ -166,6 +187,8 @@ private struct BookshelfBookListContentView: View {
         .sheet(item: $viewModel.activeBatchSheet) { sheet in
             switch sheet {
             case .tags(
+                mode: let mode,
+                bookIDs: let bookIDs,
                 options: let options,
                 initialSelectedIDs: let initialSelectedIDs,
                 allowsEmptySelection: let allowsEmptySelection,
@@ -173,14 +196,21 @@ private struct BookshelfBookListContentView: View {
                 errorMessage: let errorMessage
             ):
                 BookshelfBatchTagsSheet(
+                    mode: mode,
                     options: options,
-                    selectedCount: viewModel.selectedCount,
+                    selectedCount: bookIDs.count,
                     initialSelectedIDs: initialSelectedIDs,
                     allowsEmptySelection: allowsEmptySelection,
                     isLoading: isLoading,
                     errorMessage: errorMessage,
                     onCreate: viewModel.createBatchTag(named:),
-                    onSave: viewModel.submitBatchTags
+                    onSave: { tagIDs in
+                        await viewModel.submitTagMutation(
+                            bookIDs: bookIDs,
+                            tagIDs: tagIDs,
+                            mode: mode
+                        )
+                    }
                 )
             case .source(options: let options, initialSelectedID: let initialSelectedID):
                 BookshelfBatchSourceSheet(
@@ -232,6 +262,21 @@ private struct BookshelfBookListContentView: View {
                 )
             }
         }
+        .xmSystemAlert(item: $viewModel.activeBatchTagModeConfirmation) { confirmation in
+            XMSystemAlertDescriptor(
+                title: "批量设置标签",
+                message: "请选择对已选 \(confirmation.bookIDs.count) 本书执行的标签操作。",
+                actions: [
+                    XMSystemAlertAction(title: "取消", role: .cancel) { },
+                    XMSystemAlertAction(title: "添加标签") {
+                        viewModel.confirmBatchTagMode(.add, bookIDs: confirmation.bookIDs)
+                    },
+                    XMSystemAlertAction(title: "移除标签") {
+                        viewModel.confirmBatchTagMode(.remove, bookIDs: confirmation.bookIDs)
+                    }
+                ]
+            )
+        }
         .xmSystemAlert(item: $viewModel.activeMoveOutConfirmation) { confirmation in
             XMSystemAlertDescriptor(
                 title: "移出分组",
@@ -273,6 +318,7 @@ private struct BookshelfBookListContentView: View {
 
             if chromePhase.showsEditHeader {
                 BookshelfEditChrome(
+                    title: viewModel.navigationTitle,
                     selectedBookCount: viewModel.selectedCount,
                     selectionScope: .booksOnly,
                     isAllVisibleSelected: viewModel.isAllVisibleSelected,
@@ -283,9 +329,7 @@ private struct BookshelfBookListContentView: View {
                     showsBottomDivider: false,
                     onToggleSelectAll: toggleVisibleSelection,
                     onCancel: exitEditingWithChoreography
-                ) {
-                    editBatchMenu
-                }
+                )
                 .frame(height: topBarRowHeight)
                 .transition(BookshelfManagementMotion.bookListTopChromeTransition(reduceMotion: reduceMotion))
             }
@@ -297,30 +341,6 @@ private struct BookshelfBookListContentView: View {
         }
     }
 
-    private var editBatchMenu: some View {
-        Menu {
-            ForEach(viewModel.editActions) { action in
-                Button(role: action.isDestructive ? .destructive : nil) {
-                    viewModel.performEditAction(action)
-                } label: {
-                    Label(action.title, systemImage: action.systemImage)
-                }
-                .disabled(!isEditActionEnabled(action))
-            }
-        } label: {
-            Image(systemName: "ellipsis.circle")
-                .font(AppTypography.body)
-                .foregroundStyle(Color.textPrimary)
-                .frame(
-                    width: InteractionMetrics.minimumTouchTarget,
-                    height: InteractionMetrics.minimumTouchTarget
-                )
-                .contentShape(Rectangle())
-        }
-        .xmMenuNeutralTint()
-        .accessibilityLabel("批量操作")
-    }
-
     private var isEditActionBusy: Bool {
         viewModel.activeWriteAction != nil || viewModel.isLoadingBatchOptions
     }
@@ -328,6 +348,51 @@ private struct BookshelfBookListContentView: View {
     private func isEditActionEnabled(_ action: BookshelfBookListEditAction) -> Bool {
         guard !isEditActionBusy else { return false }
         return !action.requiresSelection || viewModel.selectedCount > 0
+    }
+
+    private var editingAccessorySnapshot: BookshelfEditingAccessorySnapshot? {
+        guard viewModel.isEditing || chromePhase != .normal else { return nil }
+        let actions = viewModel.editActions
+        return BookshelfEditingAccessorySnapshot(
+            ownerID: accessoryOwnerID,
+            source: .bookList,
+            bookshelfTitle: viewModel.navigationTitle,
+            actions: actions,
+            enabledActions: Set(actions.filter(isEditActionEnabled)),
+            selectedCount: viewModel.selectedCount,
+            isBusy: isEditActionBusy
+        )
+    }
+
+    /// 仅向根 Tab 发布当前二级书架的纯值快照，离开页面时按 owner 精确撤销。
+    private func publishEditingAccessory(_ snapshot: BookshelfEditingAccessorySnapshot?) {
+        if let snapshot {
+            if editingAccessoryCoordinator.presentationID(ownedBy: accessoryOwnerID) == nil {
+                editingAccessoryCoordinator.activatePresentation(with: snapshot)
+            } else if editingAccessoryCoordinator.presentationPhase == .exiting {
+                guard chromePhase == .enteringEdit else { return }
+                editingAccessoryCoordinator.activatePresentation(with: snapshot)
+            } else {
+                editingAccessoryCoordinator.updatePayload(snapshot)
+            }
+        } else {
+            guard editingAccessoryCoordinator.presentationPhase != .exiting
+                    || editingAccessoryCoordinator.presentationID(ownedBy: accessoryOwnerID) == nil else {
+                return
+            }
+            editingAccessoryCoordinator.revokeImmediately(ownerID: accessoryOwnerID)
+        }
+    }
+
+    /// 消费属于当前二级书架的瞬时请求，并复用既有动作分发与确认流程。
+    private func handleEditingAccessoryCommand(_ command: BookshelfEditingAccessoryCommand?) {
+        guard let command, command.ownerID == accessoryOwnerID else { return }
+        guard editingAccessoryCoordinator.consume(
+            requestID: command.requestID,
+            ownerID: command.ownerID,
+            presentationID: command.presentationID
+        ) else { return }
+        viewModel.performEditAction(command.action)
     }
 
     private var topBarRowHeight: CGFloat {
@@ -454,36 +519,30 @@ private struct BookshelfBookListContentView: View {
         readLoadingGate.update(intent: isInitialLoading ? .read : .none)
     }
 
-    /// 进入整理模式时切换顶部 chrome，并在状态稳定后完成编辑态交接。
-    /// - Note: 所有展示状态都在 MainActor 修改；阶段任务会被后续进入/退出请求取消，避免旧动画回写新页面状态。
+    /// 进入整理模式时以可反向动画切换顶部 chrome，并同步发布底部 accessory 快照。
+    /// - Note: 所有状态都在 MainActor 修改；每次请求替换 transition ID，过期 completion 无法回写新状态。
     private func enterEditingWithChoreography() {
         guard viewModel.canEnterEditing else { return }
-        chromeTransitionTask?.cancel()
+        let transitionID = UUID()
+        chromeTransitionID = transitionID
         isEditingChoreographyActive = true
         prepareBrowseSearchForEditing()
 
-        withAnimation(BookshelfManagementMotion.modeAnimation(reduceMotion: reduceMotion)) {
+        withAnimation(
+            BookshelfManagementMotion.modeAnimation(reduceMotion: reduceMotion),
+            completionCriteria: .logicallyComplete
+        ) {
             chromePhase = .enteringEdit
             viewModel.enterEditing()
-        }
-
-        guard viewModel.isEditing else {
-            releaseEditPresentationState()
-            return
-        }
-
-        chromeTransitionTask = Task { @MainActor in
-            try? await Task.sleep(for: BookshelfManagementMotion.editBarRevealDelay(reduceMotion: reduceMotion))
-            guard !Task.isCancelled else { return }
+        } completion: {
+            guard chromeTransitionID == transitionID else { return }
             guard viewModel.isEditing else {
                 releaseEditPresentationState()
                 return
             }
-            withAnimation(BookshelfManagementMotion.editBarRevealAnimation(reduceMotion: reduceMotion)) {
-                chromePhase = .editing
-            }
+            chromePhase = .editing
             isEditingChoreographyActive = false
-            chromeTransitionTask = nil
+            chromeTransitionID = nil
         }
     }
 
@@ -567,26 +626,44 @@ private struct BookshelfBookListContentView: View {
         }
     }
 
-    /// 退出整理模式时恢复普通顶部 chrome；业务选择清理由 ViewModel 执行。
+    /// 退出整理模式时同步淡出底部动作与恢复普通顶部 chrome，避免串行形成两段舞台感。
+    /// - Note: 所有状态都在 MainActor 上修改；旧 completion 需同时匹配页面 transition 与 accessory presentation。
     private func exitEditingWithChoreography() {
         guard viewModel.isEditing || chromePhase != .normal else { return }
-        chromeTransitionTask?.cancel()
+        let transitionID = UUID()
+        let accessoryPresentationID = editingAccessoryCoordinator.presentationID(ownedBy: accessoryOwnerID)
+        chromeTransitionID = transitionID
         isEditingChoreographyActive = true
 
-        withAnimation(BookshelfManagementMotion.editBarExitAnimation(reduceMotion: reduceMotion)) {
-            chromePhase = .exitingEdit
+        if let accessoryPresentationID {
+            withAnimation(
+                BookshelfManagementMotion.accessoryExitAnimation(reduceMotion: reduceMotion),
+                completionCriteria: .logicallyComplete
+            ) {
+                editingAccessoryCoordinator.beginExit(
+                    ownerID: accessoryOwnerID,
+                    presentationID: accessoryPresentationID,
+                    transitionID: transitionID
+                )
+            } completion: {
+                editingAccessoryCoordinator.completeExit(
+                    ownerID: accessoryOwnerID,
+                    presentationID: accessoryPresentationID,
+                    transitionID: transitionID
+                )
+            }
         }
 
-        chromeTransitionTask = Task { @MainActor in
-            try? await Task.sleep(for: BookshelfManagementMotion.editExitRestoreDelay(reduceMotion: reduceMotion))
-            guard !Task.isCancelled else { return }
-
-            withAnimation(BookshelfManagementMotion.restoreAnimation(reduceMotion: reduceMotion)) {
-                viewModel.exitEditing()
-                chromePhase = .normal
-            }
+        withAnimation(
+            BookshelfManagementMotion.restoreAnimation(reduceMotion: reduceMotion),
+            completionCriteria: .logicallyComplete
+        ) {
+            viewModel.exitEditing()
+            chromePhase = .normal
+        } completion: {
+            guard chromeTransitionID == transitionID else { return }
             isEditingChoreographyActive = false
-            chromeTransitionTask = nil
+            chromeTransitionID = nil
         }
     }
 
@@ -596,8 +673,7 @@ private struct BookshelfBookListContentView: View {
         if viewModel.isEditing, chromePhase == .normal {
             chromePhase = .editing
         } else if !viewModel.isEditing, chromePhase != .normal {
-            chromeTransitionTask?.cancel()
-            chromeTransitionTask = nil
+            chromeTransitionID = nil
             chromePhase = .normal
             releaseEditPresentationState()
         }
@@ -607,13 +683,13 @@ private struct BookshelfBookListContentView: View {
     private func releaseEditPresentationState() {
         chromePhase = viewModel.isEditing ? .editing : .normal
         isEditingChoreographyActive = false
-        chromeTransitionTask = nil
+        chromeTransitionID = nil
     }
 
-    /// 页面离开时立即清理展示阶段与业务编辑态，避免延迟任务回写已失效页面。
+    /// 页面离开时立即清理展示阶段、accessory owner 与业务编辑态，避免 completion 回写失效页面。
     private func resetEditingPresentationForContextLoss() {
-        chromeTransitionTask?.cancel()
-        chromeTransitionTask = nil
+        chromeTransitionID = nil
+        editingAccessoryCoordinator.revokeImmediately(ownerID: accessoryOwnerID)
         editingPresentation.resetForContextLoss()
         viewModel.exitEditing()
     }
