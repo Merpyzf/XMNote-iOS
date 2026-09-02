@@ -30,6 +30,36 @@
 - TopSwitcher 保持当前分段切换视觉，不强制改为液态玻璃。
 - 阴影、边缘高光保持克制，优先沉浸感与层级清晰度。
 
+### 2.4 自定义 accessory 的前景环境边界
+
+`tabViewBottomAccessory` 只负责把自定义视图放到 TabView 底部的系统玻璃宿主中，不保证自定义内容与原生 Tab 项共享完全相同的 vibrancy 解析路径。XMNote 书架整理案例中，选中书籍后的动态主前景色会随封面滚动在黑白之间重新解析，但玻璃外壳未必同步选择相反明度，从而出现浅色玻璃配白色前景。
+
+当且仅当真实页面能稳定复现这类前景/玻璃失配时，将两条适配路径分开：
+
+- 系统 Liquid Glass 继续跟随局部内容、滚动和辅助功能设置调整材质。
+- 自定义图标与文字在进入 accessory 前捕获根页面 `colorScheme`，并仅向前景子树重新注入。
+- 前景仍使用项目浅色、深色和高对比度语义色，禁止写死黑白色或重做玻璃背景。
+
+```swift
+struct RootTabView: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        TabView {
+            // tabs
+        }
+        .tabViewBottomAccessory {
+            EditingAccessory()
+                .environment(\.colorScheme, colorScheme)
+        }
+    }
+}
+```
+
+这不是所有 Liquid Glass 的默认模板。没有可重复失配证据时，优先保留系统默认环境传播；避免为单个视觉现象全局覆盖 `colorScheme`。
+
+Compose 开发者可将其理解为将 `containerColor` 与 `contentColor` 的 owner 分开：玻璃是由平台持有的动态 container，而批量动作前景由页面外观持有；这是职责对照，不是 API 一对一翻译。
+
 ## 3. SwiftUI iOS26 高相关交互模式
 
 ### 3.1 顶部区域（App Top）
@@ -151,4 +181,3 @@ func onSearchSubmit() {
   https://developer.apple.com/documentation/calltranslation
 - Declared Age Range API  
   https://developer.apple.com/documentation/declaredagerangeapi
-

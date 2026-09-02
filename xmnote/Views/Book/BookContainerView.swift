@@ -6,8 +6,8 @@
 //
 
 /**
- * [INPUT]: 依赖 RepositoryContainer、BookshelfEditingAccessoryCoordinator、HomeSubtabScaffold、InteractionMetrics、BookViewModel 与 BookCollectionListViewModel 驱动书架浏览、书单列表、显示设置与整理操作
- * [OUTPUT]: 对外提供 BookContainerView 与 BookSubTab 枚举，承载书籍/书单二级页切换、书单模式切换视口锚点、外部导入入口定位、顶部编辑摘要、根级底部整理动作、统一批量 Sheet 与删除确认
+ * [INPUT]: 依赖 RepositoryContainer、BookshelfEditingAccessoryCoordinator、HomeSubtabScaffold、InteractionMetrics、BookViewModel 与 BookCollectionListViewModel 驱动书架浏览、书单列表、显示设置、整理操作与活动写入反馈
+ * [OUTPUT]: 对外提供 BookContainerView 与 BookSubTab 枚举，承载书籍/书单二级页切换、书单模式切换视口锚点、外部导入入口定位、顶部编辑摘要、含活动动作的根级底部整理快照、统一批量 Sheet 与删除确认
  * [POS]: Book 模块容器壳层，承载书籍页与书架管理模式编排
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -406,8 +406,43 @@ private struct BookContentView: View {
             actions: actions,
             enabledActions: enabledActions,
             selectedCount: viewModel.selectedBookIDs.count + viewModel.selectedGroupCount,
+            activeAction: editingAccessoryActiveAction,
             isBusy: isEditBatchActionBusy
         )
+    }
+
+    private var editingAccessoryActiveAction: BookshelfBookListEditAction? {
+        guard let action = viewModel.activeWriteAction else { return nil }
+        switch action {
+        case .pin:
+            return .pin
+        case .unpin:
+            return .unpin
+        case .moveToStart:
+            return .moveToStart
+        case .moveToEnd:
+            return .moveToEnd
+        case .moveToGroup:
+            return .moveToGroup
+        case .addToBookList:
+            return .addToBookList
+        case .setTag:
+            return .setTag
+        case .setSource:
+            return .setSource
+        case .setReadStatus:
+            return .setReadStatus
+        case .exportNote:
+            return .exportNote
+        case .exportBook:
+            return .exportBook
+        case .delete:
+            return .deleteBooks
+        case .reorder:
+            return .reorder
+        case .move, .more, .editContributor, .deleteContributor:
+            return nil
+        }
     }
 
     private func isEditingAccessoryActionEnabled(_ action: BookshelfBookListEditAction) -> Bool {

@@ -18,6 +18,7 @@
 - `Components/BookSearchResultRow.swift`: 书籍搜索结果行
 - `Components/BookSearchResultSkeletonRow.swift`: 书籍搜索骨架行
 - `Components/BookCollectionVisualComponents.swift`: 书单列表、详情与封面组合视觉组件
+- `Components/BookshelfEditingAccessory.swift`: 根 Tab 托管的书架整理底部 accessory 状态契约、系统玻璃宿主与页面私有前景/进度映射
 - `Components/BookshelfBookListChromeViews.swift`: 书架二级列表浏览与编辑 chrome
 - `Components/BookshelfBookListCollectionCells.swift`: 书架二级列表 UIKit cell、区头与空态容器
 - `Components/BookshelfBookListCollectionLayoutFactory.swift`: 书架二级列表 compositional layout 工厂

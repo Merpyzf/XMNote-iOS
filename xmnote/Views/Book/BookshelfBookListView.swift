@@ -6,8 +6,8 @@
 //
 
 /**
- * [INPUT]: 依赖 BookshelfBookListRoute、RepositoryContainer、AppNavigationCoordinator、书架整理 accessory 协调器、系统返回手势桥接、InteractionMetrics 与外层普通浏览路由闭包
- * [OUTPUT]: 对外提供 BookshelfBookListView，组合本地顶部 chrome、搜索抽屉、BookshelfBookListCollectionView、写入失败反馈、根级底部编辑动作与统一批量标签 Sheet 容器
+ * [INPUT]: 依赖 BookshelfBookListRoute、RepositoryContainer、AppNavigationCoordinator、含活动写入反馈的书架整理 accessory 协调器、系统返回手势桥接、InteractionMetrics 与外层普通浏览路由闭包
+ * [OUTPUT]: 对外提供 BookshelfBookListView，组合本地顶部 chrome、搜索抽屉、BookshelfBookListCollectionView、写入失败反馈、含活动动作的根级底部编辑快照与统一批量标签 Sheet 容器
  * [POS]: Book 模块二级列表页，被 BookRoute.bookshelfList 导航目标消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -360,6 +360,7 @@ private struct BookshelfBookListContentView: View {
             actions: actions,
             enabledActions: Set(actions.filter(isEditActionEnabled)),
             selectedCount: viewModel.selectedCount,
+            activeAction: viewModel.activeWriteAction,
             isBusy: isEditActionBusy
         )
     }

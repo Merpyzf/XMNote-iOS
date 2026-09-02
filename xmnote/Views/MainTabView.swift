@@ -8,8 +8,8 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖可选 AppRuntimeContext、已原子恢复的 AppSceneSnapshot、scene 级 AppNavigationCoordinator、书架整理 accessory 协调器、阅读日历、外部导入/网页动作与各业务目的页
- * [OUTPUT]: 对外提供 MainTabView（五个类型安全浏览栈、四个 Reicon Filled 业务 Tab 图标、首帧 Tab 稳定显现、回顾同构启动壳层、单一全屏任务栈与恢复表面门控、书架整理稳定宿主/阅读计时交叉淡化底部 accessory、UIKit Zoom 与退场后一次性回流）
+ * [INPUT]: 依赖可选 AppRuntimeContext、已原子恢复的 AppSceneSnapshot、scene 级 AppNavigationCoordinator、系统外观、书架整理 accessory 协调器、阅读日历、外部导入/网页动作与各业务目的页
+ * [OUTPUT]: 对外提供 MainTabView（五个类型安全浏览栈、四个 Reicon Filled 业务 Tab 图标、首帧 Tab 稳定显现、回顾同构启动壳层、单一全屏任务栈与恢复表面门控、按全局外观解析的书架整理稳定宿主/阅读计时交叉淡化底部 accessory、UIKit Zoom 与退场后一次性回流）
  * [POS]: 应用根导航宿主，只消费协调器状态并使用系统 push/cover；恢复目的页提交前不暴露底层根页
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -145,6 +145,7 @@ private struct RestoredNavigationSurface: Hashable {
 struct MainTabView: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(AppState.self) private var appState
     @Environment(SceneStateStore.self) private var sceneStateStore
     @Environment(BookCollectionImportRouter.self) private var bookCollectionImportRouter
@@ -570,7 +571,8 @@ struct MainTabView: View {
                 if let bookshelfPresentationID {
                     BookshelfEditingAccessoryHost(
                         coordinator: bookshelfEditingAccessoryCoordinator,
-                        presentationID: bookshelfPresentationID
+                        presentationID: bookshelfPresentationID,
+                        colorScheme: colorScheme
                     )
                     .id(bookshelfPresentationID)
                 }
