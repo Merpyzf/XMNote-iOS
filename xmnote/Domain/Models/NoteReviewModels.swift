@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Foundation 基础类型，承接 Android 书摘回顾设置与卡片数据语义
- * [OUTPUT]: 对外提供 NoteReviewSettings、NoteReviewCardItem、NoteReviewTagOption 与标签编辑快照等跨层模型
+ * [OUTPUT]: 对外提供 NoteReviewSettings、NoteReviewLaunchPayload、NoteReviewCardItem、NoteReviewTagOption 与标签编辑快照等跨层模型
  * [POS]: Domain/Models 的书摘回顾领域模型，供 Repository、ViewModel 与回顾页面共享
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -274,6 +274,27 @@ nonisolated enum NoteReviewTextAlignment: String, CaseIterable, Codable, Hashabl
     }
 }
 
+/// 沉浸和平铺回顾共享的内容显隐设置；正文始终显示，不在该模型中提供关闭开关。
+nonisolated struct NoteReviewImmersiveDisplaySettings: Codable, Hashable, Sendable {
+    var showsIdea: Bool
+    var showsImages: Bool
+    var showsBookInfo: Bool
+    var showsCreatedDate: Bool
+    var showsChapter: Bool
+    var showsPosition: Bool
+    var showsTags: Bool
+
+    static let defaultValue = NoteReviewImmersiveDisplaySettings(
+        showsIdea: true,
+        showsImages: true,
+        showsBookInfo: true,
+        showsCreatedDate: true,
+        showsChapter: false,
+        showsPosition: false,
+        showsTags: false
+    )
+}
+
 /// 书摘回顾设置快照，集中描述会影响数据读取和外观渲染的全部用户偏好。
 nonisolated struct NoteReviewSettings: Codable, Hashable, Sendable {
     var selectedBookIDs: [Int64]
@@ -288,12 +309,14 @@ nonisolated struct NoteReviewSettings: Codable, Hashable, Sendable {
     var customBackgroundEndHex: UInt32?
     var customTextColorHex: UInt32?
     var fontSelection: NoteReviewFontSelection
+    var favoriteTagID: Int64?
+    var immersiveDisplay: NoteReviewImmersiveDisplaySettings
 
     private enum CodingKeys: String, CodingKey {
         case selectedBookIDs, selectedTagIDs, tagMatchRule, sortRule, palette, textAlignment
         case backgroundMode, backgroundImageURL
         case customBackgroundStartHex, customBackgroundEndHex, customTextColorHex
-        case fontSelection
+        case fontSelection, favoriteTagID, immersiveDisplay
     }
 
     static let defaultValue = NoteReviewSettings(
@@ -308,7 +331,9 @@ nonisolated struct NoteReviewSettings: Codable, Hashable, Sendable {
         customBackgroundStartHex: nil,
         customBackgroundEndHex: nil,
         customTextColorHex: nil,
-        fontSelection: .system
+        fontSelection: .system,
+        favoriteTagID: nil,
+        immersiveDisplay: .defaultValue
     )
 
     init(
@@ -323,7 +348,9 @@ nonisolated struct NoteReviewSettings: Codable, Hashable, Sendable {
         customBackgroundStartHex: UInt32?,
         customBackgroundEndHex: UInt32?,
         customTextColorHex: UInt32?,
-        fontSelection: NoteReviewFontSelection
+        fontSelection: NoteReviewFontSelection,
+        favoriteTagID: Int64? = nil,
+        immersiveDisplay: NoteReviewImmersiveDisplaySettings = .defaultValue
     ) {
         self.selectedBookIDs = selectedBookIDs
         self.selectedTagIDs = selectedTagIDs
@@ -337,6 +364,8 @@ nonisolated struct NoteReviewSettings: Codable, Hashable, Sendable {
         self.customBackgroundEndHex = customBackgroundEndHex
         self.customTextColorHex = customTextColorHex
         self.fontSelection = fontSelection
+        self.favoriteTagID = favoriteTagID
+        self.immersiveDisplay = immersiveDisplay
     }
 
     /// 兼容旧版本只保存范围与配色的设置数据，新字段缺失时回退到 Android 默认语义。
@@ -354,6 +383,11 @@ nonisolated struct NoteReviewSettings: Codable, Hashable, Sendable {
         customBackgroundEndHex = try container.decodeIfPresent(UInt32.self, forKey: .customBackgroundEndHex)
         customTextColorHex = try container.decodeIfPresent(UInt32.self, forKey: .customTextColorHex)
         fontSelection = try container.decodeIfPresent(NoteReviewFontSelection.self, forKey: .fontSelection) ?? .system
+        favoriteTagID = try container.decodeIfPresent(Int64.self, forKey: .favoriteTagID)
+        immersiveDisplay = try container.decodeIfPresent(
+            NoteReviewImmersiveDisplaySettings.self,
+            forKey: .immersiveDisplay
+        ) ?? .defaultValue
     }
 
     /// 当前有效背景起止颜色，图片背景不可用时也作为稳定回退颜色。
@@ -396,6 +430,33 @@ nonisolated struct NoteReviewSettings: Codable, Hashable, Sendable {
             && selectedTagIDs == other.selectedTagIDs
             && tagMatchRule == other.tagMatchRule
             && sortRule == other.sortRule
+    }
+}
+
+/// 从现有卡堆无中间页进入全屏回顾所需的有界启动负载。
+nonisolated struct NoteReviewLaunchPayload: Sendable {
+    let sessionID: UUID
+    let selectedNoteID: Int64
+    let currentIndex: Int
+    let loadedNoteIDs: [Int64]
+    let seedItems: [NoteReviewCardItem]
+    let settings: NoteReviewSettings
+
+    /// 建立一次全屏会话；完整书摘仅携带入口附近的有界缓存，全部身份由轻量 ID 序列表达。
+    init(
+        sessionID: UUID = UUID(),
+        selectedNoteID: Int64,
+        currentIndex: Int,
+        loadedNoteIDs: [Int64],
+        seedItems: [NoteReviewCardItem],
+        settings: NoteReviewSettings
+    ) {
+        self.sessionID = sessionID
+        self.selectedNoteID = selectedNoteID
+        self.currentIndex = currentIndex
+        self.loadedNoteIDs = loadedNoteIDs
+        self.seedItems = seedItems
+        self.settings = settings
     }
 }
 

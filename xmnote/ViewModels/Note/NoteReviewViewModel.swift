@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 NoteRepositoryProtocol 提供书摘回顾设置、分页卡片、标签与书籍回显数据，依赖 ExternalAppIntegrationRepositoryProtocol/AIRepositoryProtocol 提供外部发送与 AI 配置预检，并向页面私有换组宿主提供候选页准备与无动画提交能力
- * [OUTPUT]: 对外提供 NoteReviewContentState 与 NoteReviewViewModel，显式区分首轮结果未知、内容、真实空态和持久失败，并驱动设置 Sheet、分页刷新、随机换组交接、一级操作、AI 局部写回、可取消分享图与外部应用发送反馈状态
+ * [OUTPUT]: 对外提供 NoteReviewContentState 与 NoteReviewViewModel，显式区分首轮结果未知、内容、真实空态和持久失败，并提供全屏回顾有界启动负载、设置 Sheet、分页刷新、随机换组交接、一级操作与分享反馈状态
  * [POS]: ViewModels/Note 的书摘回顾状态编排器，被 NoteReviewView 与 NoteContainerView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -459,6 +459,24 @@ final class NoteReviewViewModel {
     /// 当前卡堆进入通用内容查看器所需的来源上下文，按卡堆顺序保留分页身份。
     func viewerSourceContext() -> ContentViewerSourceContext {
         .noteReview(noteIDs: items.map(\.id))
+    }
+
+    /// 生成从当前首卡直接进入全屏回顾的有界负载；仅携带当前位置附近最多二十条完整数据。
+    func makeFullScreenLaunchPayload() -> NoteReviewLaunchPayload? {
+        guard let currentItem,
+              let selectedIndex = items.firstIndex(where: { $0.id == currentItem.id }) else {
+            return nil
+        }
+        let halfWindow = Constants.pageSize / 2
+        let lowerBound = max(items.startIndex, selectedIndex - halfWindow)
+        let upperBound = min(items.endIndex, lowerBound + Constants.pageSize)
+        return NoteReviewLaunchPayload(
+            selectedNoteID: currentItem.id,
+            currentIndex: selectedIndex,
+            loadedNoteIDs: items.map(\.id),
+            seedItems: Array(items[lowerBound..<upperBound]),
+            settings: settings
+        )
     }
 
     /// 在主线程拉取当前卡片标签编辑快照；取消时不回写错误，失败时通过 errorMessage 交给页面反馈。

@@ -44,10 +44,33 @@ enum ReadingContentTypography {
             minimumPointSize: annotationBaseSize
         )
     }
+    static var uiAnnotationSemibold: UIFont {
+        AppTypography.uiFixed(
+            baseSize: annotationBaseSize,
+            textStyle: .subheadline,
+            weight: .semibold,
+            minimumPointSize: annotationBaseSize
+        )
+    }
     static var metadata: Font {
         AppTypography.fixed(
             baseSize: metadataBaseSize,
             relativeTo: .caption2,
+            minimumPointSize: metadataBaseSize
+        )
+    }
+    static var uiMetadata: UIFont {
+        AppTypography.uiFixed(
+            baseSize: metadataBaseSize,
+            textStyle: .caption2,
+            minimumPointSize: metadataBaseSize
+        )
+    }
+    static var uiMetadataMedium: UIFont {
+        AppTypography.uiFixed(
+            baseSize: metadataBaseSize,
+            textStyle: .caption2,
+            weight: .medium,
             minimumPointSize: metadataBaseSize
         )
     }

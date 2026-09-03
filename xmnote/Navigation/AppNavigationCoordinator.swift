@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 SwiftUI Binding、AppRoute/AppTaskRoute、AppSceneSnapshot、各业务编辑/查看/导入参数与阅读日历初始日期
- * [OUTPUT]: 对外提供 AppNavigationCoordinator、AppFullScreenTaskDestination、五个受控浏览栈、一次性浏览回流与 Tab chrome 抑制票据
+ * [INPUT]: 依赖 SwiftUI Binding、AppRoute/AppTaskRoute、AppSceneSnapshot、书摘回顾启动负载、各业务编辑/查看/导入参数与阅读日历初始日期
+ * [OUTPUT]: 对外提供 AppNavigationCoordinator、AppFullScreenTaskDestination、全屏书摘回顾会话、五个受控浏览栈、一次性浏览回流与 Tab chrome 抑制票据
  * [POS]: Navigation 模块的 scene 级唯一导航 owner，统一约束浏览 push/pop、深链替换与临时全屏任务
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -42,6 +42,7 @@ enum AppFullScreenTaskDestination: Hashable {
         keyword: String
     )
     case readCalendar(initialDate: Date?)
+    case noteReview(sessionID: UUID)
     case dataImport(DataImportTaskDestination)
 }
 
@@ -87,6 +88,7 @@ final class AppNavigationCoordinator {
     private var addBookCompletion: ((BookPickerBook) -> Void)?
     private var bookEditorCompletion: ((Int64) -> Void)?
     private var tabChromeSuppressionTokens: [UUID: AppTab] = [:]
+    private var noteReviewPayloads: [UUID: NoteReviewLaunchPayload] = [:]
 
     /// 只要任一可见沉浸页仍持有票据，根 Tab Bar 与底部附件就保持收起。
     var isTabChromeSuppressed: Bool {
@@ -242,6 +244,22 @@ final class AppNavigationCoordinator {
         }
     }
 
+    /// 登记有界启动负载并打开全屏回顾；呈现失败时立即回收会话，避免悬挂完整书摘缓存。
+    @discardableResult
+    func presentNoteReview(payload: NoteReviewLaunchPayload) -> Bool {
+        noteReviewPayloads[payload.sessionID] = payload
+        guard present(.noteReview(sessionID: payload.sessionID)) else {
+            noteReviewPayloads.removeValue(forKey: payload.sessionID)
+            return false
+        }
+        return true
+    }
+
+    /// 返回全屏回顾控制器的启动负载；调用方只读，生命周期仍由协调器统一释放。
+    func noteReviewPayload(for sessionID: UUID) -> NoteReviewLaunchPayload? {
+        noteReviewPayloads[sessionID]
+    }
+
     /// 收口新增书籍结果；根任务关闭 cover，任务子步骤只返回上一层编辑现场。
     func completeAddBook(_ book: BookPickerBook) {
         let completion = addBookCompletion
@@ -290,6 +308,7 @@ final class AppNavigationCoordinator {
         isTaskDismissalInFlight = false
         addBookCompletion = nil
         bookEditorCompletion = nil
+        noteReviewPayloads.removeAll(keepingCapacity: false)
         defer { pendingBrowseNavigation = nil }
         return pendingBrowseNavigation
     }
