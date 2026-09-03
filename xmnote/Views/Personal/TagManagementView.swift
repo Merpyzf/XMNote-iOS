@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer 注入 TagManagementRepositoryProtocol，依赖 TagManagementViewModel 驱动标签管理状态，依赖系统 segmented Picker/Toolbar、TagManagementCollectionView、safeAreaBar 与范围栏真实几何高度，并由页面壳层稳定承载导航命令
- * [OUTPUT]: 对外提供 TagManagementView，以几何居中的动态标题、满宽原生范围选择、集合内下拉搜索、延伸至导航层下方的 UIKit 主滚动视图、系统自动顶部边缘过渡和响应式标签直接内容平面承接管理任务
+ * [OUTPUT]: 对外提供 TagManagementView，以几何居中的动态标题、满宽原生范围选择、集合内下拉搜索、延伸至导航层下方的 UIKit 主滚动视图、系统 soft 顶部边缘过渡和响应式标签直接内容平面承接管理任务
  * [POS]: Views/Personal 的标签管理页面壳层，被 PersonalRoute.tagManagement 导航消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -324,7 +324,6 @@ private struct TagManagementContentView: View {
             isDisabled: viewModel.activeWriteAction != nil,
             topBarHeight: scopeSelectorHeight,
             onRetry: viewModel.retryObservation,
-            onScrollEdgeWashEdgesChange: { _ in },
             onSearchTextChange: { viewModel.searchText = $0 },
             onSearchActiveChange: { isInlineSearchActive = $0 },
             onPrimaryAction: { item in handlePrimaryAction(for: item) },

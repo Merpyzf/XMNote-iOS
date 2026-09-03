@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 AppNavigationCoordinator、微信读书导入 ViewModel、WebView、BookPickerView、Photos 与统一反馈组件
- * [OUTPUT]: 对外提供书摘导入入口、授权、分批、WereadImportBatchStatusView、导入预览和单书内容预览页面
+ * [INPUT]: 依赖 AppNavigationCoordinator、DataImportCollectionView、系统 scrollEdgeEffectStyle、微信读书导入 ViewModel、WebView、BookPickerView、Photos 与统一反馈组件
+ * [OUTPUT]: 对外提供支持系统上下滚动边缘过渡、分组/组内排序的书摘导入入口、授权、分批、WereadImportBatchStatusView、导入预览和单书内容预览页面
  * [POS]: Views/Personal/DataImport 的完整微信读书扫码授权导入交互流
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -11,115 +11,71 @@ import UIKit
 
 struct DataImportView: View {
     @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
-    @State private var quickOrder: [String]
-    @State private var fileOrder: [String]
-    @State private var clipboardOrder: [String]
+    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+    @State private var groups: [DataImportGroup]
+    @State private var isEditing = false
 
     init() {
-        _quickOrder = State(initialValue: Self.savedOrder(key: "noteImportQuickOrder", defaults: Self.defaultQuickOrder))
-        _fileOrder = State(initialValue: Self.savedOrder(key: "noteImportFileOrder", defaults: Self.defaultFileOrder))
-        _clipboardOrder = State(initialValue: Self.savedOrder(key: "noteImportClipboardOrder", defaults: Self.defaultClipboardOrder))
+        _groups = State(initialValue: DataImportOrderingStore.loadGroups())
     }
 
     var body: some View {
-        List {
-            Section("快捷导入") {
-                ForEach(quickOrder, id: \.self) { sourceRow($0) }.onMove { move(&quickOrder, from: $0, to: $1, key: "noteImportQuickOrder") }
-            }
-            Section("API 导入") {
-                taskButton("API 导入", destination: .api)
-            }
-            Section("本地文件") {
-                ForEach(fileOrder, id: \.self) { sourceRow($0) }.onMove { move(&fileOrder, from: $0, to: $1, key: "noteImportFileOrder") }
-            }
-            Section("剪贴板") {
-                ForEach(clipboardOrder, id: \.self) { sourceRow($0) }.onMove { move(&clipboardOrder, from: $0, to: $1, key: "noteImportClipboardOrder") }
-            }
-        }
-        .scrollContentBackground(.hidden)
+        DataImportCollectionView(
+            groups: groups,
+            isEditing: isEditing,
+            reducesMotion: accessibilityReduceMotion,
+            onOpen: openImportTask,
+            onCommitGroupOrder: commitGroupOrder,
+            onCommitEntryOrder: commitEntryOrder
+        )
         .background(Color.surfacePage)
+        .ignoresSafeArea(.container, edges: [.top, .bottom])
+        .scrollEdgeEffectStyle(.soft, for: [.top, .bottom])
         .navigationTitle("书摘导入")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar { ToolbarItem(placement: .topBarTrailing) { EditButton() } }
-    }
-
-    private func fileLink(_ title: String, _ parserID: NoteImportParserID) -> some View {
-        taskButton(title, destination: .file(title: title, parserID: parserID))
-    }
-
-    private func clipboardLink(_ title: String, _ parserID: NoteImportParserID) -> some View {
-        taskButton(title, destination: .clipboard(title: title, parserID: parserID))
-    }
-
-    @ViewBuilder private func sourceRow(_ id: String) -> some View {
-        switch id {
-        case "computer": taskButton("从电脑导入", destination: .desktopComputer)
-        case "lifeweek": taskButton("三联生活周刊", destination: .lifeWeek)
-        case "weread-auth": taskButton("微信读书授权导入", destination: .wereadAuthorization)
-        case "kindle": taskButton("Kindle", destination: .kindle)
-        case "koreader": fileLink("KOReader", .koreader)
-        case "boox": taskButton("BOOX", destination: .fileCandidates(title: "BOOX", parserIDs: [.booxOld, .booxNew]))
-        case "legado": fileLink("阅读", .legado)
-        case "apple-books": fileLink("Apple Books", .appleBooks)
-        case "douban-read": fileLink("豆瓣阅读", .doubanRead)
-        case "jd-reader": fileLink("京东读书", .jdReader)
-        case "ireader-file": fileLink("掌阅", .ireaderFile)
-        case "ireader-epub": fileLink("iReader 笔记成书", .ireaderEpub)
-        case "neat": fileLink("Neat Reader", .neatReader)
-        case "koodo": fileLink("Koodo Reader", .koodo)
-        case "hanwang": taskButton("汉王", destination: .hanwang)
-        case "dimo": fileLink("滴墨", .dimo)
-        case "reeden": fileLink("Reeden", .reeden)
-        case "weread-clipboard": taskButton("微信读书", destination: .clipboardCandidates(title: "微信读书", parserIDs: [.wereadOld, .wereadPre830, .weread830]))
-        case "dedao": clipboardLink("得到", .dedao)
-        case "ireader-selected": clipboardLink("掌阅精选", .ireaderSelected)
-        case "moon": clipboardLink("静读天下", .moonReader)
-        case "duokan": clipboardLink("多看", .duokan)
-        case "dangdang": clipboardLink("当当", .dangdang)
-        case "douban-app": clipboardLink("豆瓣阅读 App", .doubanApp)
-        case "reader163": clipboardLink("网易蜗牛", .reader163)
-        case "fanqie": clipboardLink("番茄小说", .fanqie)
-        case "readingo": clipboardLink("Readingo", .readingo)
-        default: EmptyView()
-        }
-    }
-
-    /// 以列表行样式启动独立导入任务，保留目录页与 Tab 的浏览现场。
-    private func taskButton(
-        _ title: String,
-        destination: DataImportTaskDestination
-    ) -> some View {
-        Button {
-            navigationCoordinator.present(.dataImport(destination))
-        } label: {
-            HStack {
-                Text(title)
-                    .foregroundStyle(Color.textPrimary)
-                Spacer()
-                Image(systemName: "chevron.forward")
-                    .font(AppTypography.caption)
-                    .foregroundStyle(Color.iconSecondary)
-                    .accessibilityHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(isEditing ? "完成" : "编辑", action: toggleEditing)
+                    .xmToolbarNeutralTint()
             }
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .accessibilityHint("打开导入任务")
     }
 
-    private func move(_ order: inout [String], from source: IndexSet, to destination: Int, key: String) {
-        order.move(fromOffsets: source, toOffset: destination)
-        UserDefaults.standard.set(order, forKey: key)
+    /// 在不改变当前 Tab 浏览栈的前提下启动独立导入任务。
+    private func openImportTask(_ destination: DataImportTaskDestination) {
+        guard !isEditing else { return }
+        navigationCoordinator.present(.dataImport(destination))
     }
 
-    private static func savedOrder(key: String, defaults: [String]) -> [String] {
-        let saved = UserDefaults.standard.stringArray(forKey: key) ?? []
-        return saved.filter(defaults.contains) + defaults.filter { !saved.contains($0) }
+    /// 切换目录编辑状态；实际拖拽过程与收起动画由 UIKit 列表 owner 管理。
+    private func toggleEditing() {
+        isEditing.toggle()
     }
 
-    private static let defaultQuickOrder = ["computer", "lifeweek", "weread-auth"]
-    private static let defaultFileOrder = ["kindle", "koreader", "boox", "legado", "apple-books", "douban-read", "jd-reader", "ireader-file", "ireader-epub", "neat", "koodo", "hanwang", "dimo", "reeden"]
-    private static let defaultClipboardOrder = ["weread-clipboard", "dedao", "ireader-selected", "moon", "duokan", "dangdang", "douban-app", "reader163", "fanqie", "readingo"]
+    /// 提交分组最终顺序并立即持久化；所有子项仍随各自分组保持原有顺序。
+    private func commitGroupOrder(_ orderedIDs: [DataImportGroupID]) {
+        let groupByID = Dictionary(uniqueKeysWithValues: groups.map { ($0.id, $0) })
+        let reorderedGroups = orderedIDs.compactMap { groupByID[$0] }
+        guard reorderedGroups.count == groups.count, reorderedGroups.map(\.id) != groups.map(\.id) else {
+            return
+        }
+        groups = reorderedGroups
+        DataImportOrderingStore.saveGroupOrder(orderedIDs)
+    }
+
+    /// 提交单个分组的条目顺序，拒绝跨组或缺失条目的非完整结果。
+    private func commitEntryOrder(_ groupID: DataImportGroupID, orderedEntryIDs: [String]) {
+        guard let groupIndex = groups.firstIndex(where: { $0.id == groupID }) else { return }
+        let entries = groups[groupIndex].entries
+        let entryByID = Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0) })
+        let reorderedEntries = orderedEntryIDs.compactMap { entryByID[$0] }
+        guard reorderedEntries.count == entries.count,
+              reorderedEntries.map(\.id) != entries.map(\.id) else {
+            return
+        }
+        groups[groupIndex].entries = reorderedEntries
+        DataImportOrderingStore.saveEntryOrder(reorderedEntries.map(\.id), for: groupID)
+    }
 }
 
 struct WereadImportAuthView: View {

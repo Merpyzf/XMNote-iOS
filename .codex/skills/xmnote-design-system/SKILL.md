@@ -58,6 +58,7 @@ description: 为 XMNote 的 iOS/SwiftUI/UIKit 界面提供项目级设计系统�
 - 页面或局部空态、搜索/筛选无结果、加载、失败、内容失效、保留内容错误、状态组件治理或状态视觉评审：读取 [页面状态与反馈](references/state-presentation.md)。
 - 业务 Sheet 的骨架、标题操作、内容边距、卡片、圆角、Detent、退出保护或专项例外：读取 [业务 Sheet](references/sheets.md)。
 - 文本输入焦点、软键盘收起、滚动手势、键盘避让、Sheet 手势冲突或 UIKit 输入桥接：读取 [软键盘与输入焦点](references/keyboard-and-focus.md)。
+- 内容延伸到顶部/底部安全区、系统 Navigation Bar/Toolbar/Tab Bar 渐进模糊、`safeAreaBar`、`scrollEdgeEffectStyle`、UIKit scroll owner 或 `UIViewRepresentable` 沉浸式接入：读取 [安全区与系统滚动边缘](references/safe-area-and-system-scroll-edge.md)。
 - 组件归位、Settings、导航、Toast/Alert、点击热区或滚动：读取 [组件与交互](references/components-and-interaction.md)。
 - 评审、规范缺口、疑似丑陋设计或公共抽象提议：读取 [证据与评审](references/evidence-and-review.md)。
 

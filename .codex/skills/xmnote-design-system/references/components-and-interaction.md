@@ -49,6 +49,7 @@ python3 scripts/design-system/ds.py catalog
 | 内容范围/显示模式的互斥选择 | `XMScopeSelector` | 导航 Tab、独立业务动作或多选条件不用 |
 | 自定义列表/卡片选择标记 | `XMSelectionIndicator` | 系统 Toggle/Picker 能表达时优先系统控件 |
 | 内容区常驻搜索 | `XMInlineSearchField` | 导航栏搜索优先 `.searchable`；全局路由搜索由其 owner 管理 |
+| 系统安全区下的滚动渐进模糊 | SwiftUI 原生 API；UIKit 查询 `XMSystemScrollEdgeRegistration` | 局部非系统视口才查询 `XMScrollEdgeWash` |
 | 纯展示领域标签 | `XMTagLabel` | 筛选、状态、评分、指标和可点击 Capsule 不用 |
 | 书籍封面 | `XMBookCover` | 头像、任意比例图片或普通远程媒体不用 |
 | 普通远程图片、附件、图库、只读富文本 | 分别查询 `XMRemoteImage`、附件、JX Gallery、RichText owner | 不用一个通用图片/富文本组件覆盖不同生命周期 |
@@ -178,11 +179,14 @@ XMSettingsPage {
 
 ## 滚动与边缘
 
+任务涉及内容延伸到顶部/底部安全区、系统 Navigation Bar/Toolbar/Tab Bar 渐进模糊、`safeAreaBar`、UIKit scroll owner 或 `UIViewRepresentable` 时，必须读取 [安全区与系统滚动边缘](safe-area-and-system-scroll-edge.md)。本节只保留场景路由。
+
 - App 自有 SwiftUI `ScrollView/List/Form` 等必须继承全局 always-bounce，或由组件 owner 按有效轴显式使用 `.scrollBounceBehavior(.always)`；已继承时不机械重复 modifier，禁止 `.basedOnSize`。
 - UIKit 按真实滚动轴设置 `alwaysBounceVertical/Horizontal = true`；不显式关闭有效轴向 bounces。
 - 图片缩放画布、明确禁用滚动的静态骨架和第三方 Vendor 组件除外，不为满足列表规则破坏其物理。
-- 系统导航边缘使用原生 scroll-edge effect，不用自定义 blur、gradient 或 material 遮罩模拟。
-- 有固定顶栏/底栏且需要系统边缘协同时查询 `XMScrollEdgeChrome`；固定筛选栏或卡片内滚动视口需要非交互柔化时查询 `XMScrollEdgeWash`。Wash 不模拟系统导航栏，也不承载点击。
+- 系统导航边缘统一使用原生 `.soft` scroll-edge effect，不用自定义 blur、gradient、material、mask 或 `UIVisualEffectView` 模拟。
+- 有自定义固定顶栏/底栏且需要系统边缘协同时查询 `XMScrollEdgeChrome.overlaySoft`；固定筛选栏或卡片内滚动视口需要非交互柔化时查询 `XMScrollEdgeWash`。Wash 不模拟系统导航栏，也不承载点击。
+- UIKit 或 `UIViewRepresentable` 的真实主滚动视图需要被系统栏观察时查询 `XMSystemScrollEdgeRegistration`；纯 SwiftUI 直接使用系统 modifier，内部编辑器和嵌套滚动视图不登记为页面 owner。
 - 需要系统识别主滚动视图时，内容状态下的主滚动容器保持页面根内容的直接滚动主体；固定反馈优先通过系统安全区能力接入，避免额外容器隔断识别。
 
 ## 书籍、媒体与系统桥接
