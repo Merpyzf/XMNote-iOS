@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 DataImportTaskDestination、UserDefaults、UIKit interactive movement、XMSystemScrollEdgeRegistration，以及 XMNote 设计系统令牌
- * [OUTPUT]: 对外提供书摘导入分组模型、兼容旧设置的排序存储，以及支持系统上下滚动边缘过渡和单一视觉载体排序的 DataImportCollectionView
+ * [OUTPUT]: 对外提供书摘导入分组模型、兼容旧设置的排序存储，以及支持系统上下滚动边缘过渡、条目浮动圆角和单一视觉载体排序的 DataImportCollectionView
  * [POS]: Views/Personal/DataImport 的主页排序与视觉承载层，SwiftUI 持有业务状态，UIKit 仅管理可中断拖拽交互
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -364,6 +364,7 @@ final class DataImportCollectionHostView: UICollectionView, UIGestureRecognizerD
     private var areEntriesCollapsed = false
     private var isPerformingStructuralUpdate = false
     private var isInteractiveMovementActive = false
+    private weak var activeEntryDragCell: DataImportCollectionCell?
     private var latestReorderLocation: CGPoint?
     private var pendingGroupFinishCancelled: Bool?
     private var dragGeneration = UUID()
@@ -527,6 +528,7 @@ final class DataImportCollectionHostView: UICollectionView, UIGestureRecognizerD
         if isInteractiveMovementActive {
             cancelInteractiveMovement()
         }
+        resetActiveEntryDragAppearance()
         transitionAnimator?.stopAnimation(true)
         transitionAnimator = nil
         stopLateCellAnimators()
@@ -1089,6 +1091,12 @@ private extension DataImportCollectionHostView {
         originalGroupsBeforeDrag = displayedGroups
         activePayload = .entry(groupID: groupID, entryID: entryID)
         dragGeneration = UUID()
+        guard let sourceCell = cellForItem(at: sourceIndexPath) as? DataImportCollectionCell else {
+            resetDragSession()
+            return
+        }
+        sourceCell.setFloatingEntryAppearance(true)
+        activeEntryDragCell = sourceCell
         guard beginInteractiveMovementForItem(at: sourceIndexPath) else {
             resetDragSession()
             return
@@ -1364,7 +1372,6 @@ private extension DataImportCollectionHostView {
             guard let self, self.dragGeneration == generation else { return }
             if cancelled {
                 self.displayedGroups = self.originalGroupsBeforeDrag
-                self.reloadData()
             }
             let orderedIDs = self.displayedGroups
                 .first(where: { $0.id == groupID })?.entries.map(\.id) ?? []
@@ -1374,6 +1381,14 @@ private extension DataImportCollectionHostView {
             let commit = self.configuration.onCommitEntryOrder
             if shouldCommit {
                 self.adoptDisplayedGroupsAsConfigurationBaseline()
+            }
+            UIView.performWithoutAnimation {
+                self.resetActiveEntryDragAppearance()
+                if cancelled {
+                    self.reloadData()
+                } else {
+                    self.updateVisibleCells()
+                }
             }
             self.resetDragSession()
             if shouldCommit {
@@ -1715,6 +1730,7 @@ private extension DataImportCollectionHostView {
     /// 清理一次会话并应用拖拽期间延迟到达的 SwiftUI 配置。
     func resetDragSession() {
         dragGeneration = UUID()
+        resetActiveEntryDragAppearance()
         transitionAnimator?.stopAnimation(true)
         transitionAnimator = nil
         stopLateCellAnimators()
@@ -1742,6 +1758,12 @@ private extension DataImportCollectionHostView {
             update(with: pendingConfiguration, animated: false)
         }
         applyPendingContentSizeCategoryUpdateIfNeeded()
+    }
+
+    /// 清除条目浮动卡片的临时裁剪，覆盖结束、取消、启动失败与页面拆卸路径。
+    func resetActiveEntryDragAppearance() {
+        activeEntryDragCell?.setFloatingEntryAppearance(false)
+        activeEntryDragCell = nil
     }
 
     /// 会话结束后只补做一次被拖拽延后的字号布局刷新，避免系统设置变化留下旧行高。
@@ -1999,6 +2021,7 @@ private final class DataImportCollectionCell: UICollectionViewCell {
     override func prepareForReuse() {
         super.prepareForReuse()
         removeVisualAnimations()
+        setFloatingEntryAppearance(false)
         showsReorderHandle = false
         allowsHighlight = false
         isContentSuppressed = false
@@ -2009,6 +2032,13 @@ private final class DataImportCollectionCell: UICollectionViewCell {
         compactChromeHostingController.view.alpha = 0
         alpha = 1
         transform = .identity
+    }
+
+    /// 为原生 interactive movement 提供独立卡片轮廓，静止态仍由分组首尾形状负责。
+    func setFloatingEntryAppearance(_ isFloating: Bool) {
+        layer.cornerRadius = isFloating ? CornerRadius.blockLarge : CornerRadius.none
+        layer.cornerCurve = .continuous
+        layer.masksToBounds = isFloating
     }
 
     /// 清除 cell、内容与紧凑附属层的 presentation 动画，供复用和会话收口统一归一。
