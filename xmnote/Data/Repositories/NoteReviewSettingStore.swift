@@ -55,6 +55,9 @@ nonisolated struct NoteReviewSettingStore {
         var copy = settings
         copy.selectedBookIDs = Self.uniquePositiveIDs(copy.selectedBookIDs)
         copy.selectedTagIDs = Self.uniquePositiveIDs(copy.selectedTagIDs)
+        if let favoriteTagID = copy.favoriteTagID, favoriteTagID <= 0 {
+            copy.favoriteTagID = nil
+        }
         return copy
     }
 

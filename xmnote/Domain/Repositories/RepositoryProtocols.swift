@@ -270,6 +270,8 @@ protocol NoteRepositoryProtocol {
     func fetchNoteReviewBackgroundData(remoteURL: URL) async throws -> Data
     /// 按当前回顾设置读取一页书摘卡片，统一承接顺序分页与随机排除语义。
     func fetchNoteReviewPage(request: NoteReviewPageRequest) async throws -> [NoteReviewCardItem]
+    /// 按卡堆完全相同的筛选条件读取轻量书摘身份序列；随机顺序由调用会话在内存中生成。
+    func fetchNoteReviewIDs(settings: NoteReviewSettings) async throws -> [Int64]
     /// 按书摘主键读取单个只读操作上下文，供当日记录菜单复用标签、微信读书、分享和外部发送能力。
     func fetchNoteReviewItem(noteID: Int64) async throws -> NoteReviewCardItem?
     /// 批量读取书摘只读操作上下文，避免重度阅读日期逐条访问数据库。
@@ -280,6 +282,8 @@ protocol NoteRepositoryProtocol {
     func fetchNoteReviewTagEditSnapshot(noteID: Int64) async throws -> NoteReviewTagEditSnapshot
     /// 替换当前回顾卡片的书摘标签，并返回数据库确认后的最新选中标签。
     func replaceNoteReviewTags(noteID: Int64, tags: [NoteEditorTagOption]) async throws -> [NoteEditorTagOption]
+    /// 物理增删单条书摘与指定自定义标签的关系，供爱心快捷操作复用标签体系。
+    func setNoteTagMembership(noteID: Int64, tagID: Int64, isPresent: Bool) async throws
     /// 按已选书籍 ID 读取回显信息，供设置页展示与 BookPicker 预选。
     func fetchNoteReviewSelectedBooks(bookIDs: [Int64]) async throws -> [BookPickerBook]
     /// 按笔记 ID 拉取可编辑详情（正文/想法 HTML 与元信息）。

@@ -8,8 +8,8 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖可选 AppRuntimeContext、已原子恢复的 AppSceneSnapshot、scene 级 AppNavigationCoordinator、书架整理 accessory 协调器、阅读日历、外部导入/网页动作与各业务目的页
- * [OUTPUT]: 对外提供 MainTabView（五个类型安全浏览栈、四个 Reicon Filled 业务 Tab 图标、首帧 Tab 稳定显现、回顾同构启动壳层、单一全屏任务栈与恢复表面门控、书架整理稳定宿主/阅读计时交叉淡化底部 accessory、UIKit Zoom 与退场后一次性回流）
+ * [INPUT]: 依赖可选 AppRuntimeContext、已原子恢复的 AppSceneSnapshot、scene 级 AppNavigationCoordinator、书架整理 accessory 协调器、UIKit 全屏书摘回顾、阅读日历、外部导入/网页动作与各业务目的页
+ * [OUTPUT]: 对外提供 MainTabView（五个类型安全浏览栈、四个 Reicon Filled 业务 Tab 图标、首帧 Tab 稳定显现、UIKit 全屏回顾桥接与同构启动壳层、带根级退出控件的单一全屏任务栈、恢复表面门控、书架整理稳定宿主/阅读计时交叉淡化底部 accessory、UIKit Zoom 与退场后一次性回流）
  * [POS]: 应用根导航宿主，只消费协调器状态并使用系统 push/cover；恢复目的页提交前不暴露底层根页
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -985,6 +985,34 @@ struct MainTabView: View {
                     isVisible: navigationContext == .modalRoot,
                     style: .collapse(accessibilityLabel: "关闭阅读日历")
                 )
+        case .noteReview(let sessionID):
+            if let payload = navigationCoordinator.noteReviewPayload(for: sessionID) {
+                NoteReviewUIKitHost(
+                    payload: payload,
+                    repository: runtime.repositories.noteRepository,
+                    onDismiss: navigationCoordinator.dismissTask,
+                    onOpenDetail: { noteID, noteIDs in
+                        navigationCoordinator.present(
+                            .contentViewer(
+                                source: .noteReview(noteIDs: noteIDs),
+                                initialItemID: .note(noteID),
+                                keyword: ""
+                            )
+                        )
+                    },
+                    onError: { toastCenter.error($0) },
+                    onInfo: { toastCenter.info($0) }
+                )
+                .ignoresSafeArea()
+                .toolbar(.hidden, for: .navigationBar)
+            } else {
+                Color.surfacePage
+                    .ignoresSafeArea()
+                    .task {
+                        toastCenter.error("全屏回顾会话已失效")
+                        navigationCoordinator.dismissTask()
+                    }
+            }
         case .dataImport(let destination):
             dataImportTaskDestination(destination, repositories: runtime.repositories)
                 .appTaskRootDismissControl(

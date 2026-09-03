@@ -6,8 +6,8 @@
 //
 
 /**
- * [INPUT]: 依赖 RepositoryContainer、AppNavigationCoordinator、SceneStateStore 与 NoteViewModel/NoteReviewViewModel，并向回顾页注入关联应用与 AI 仓储
- * [OUTPUT]: 对外提供 NoteContainerView 与 NoteSubTab 枚举，并上抛携带真实章节标题的笔记路由、书籍/目录定位、内容编辑及统一内容查看路由，同时提供方案 A 规格的新增、笔记更多与回顾更多顶部操作
+ * [INPUT]: 依赖 RepositoryContainer、AppNavigationCoordinator、SceneStateStore、ReiconFullscreenOutline 与 NoteViewModel/NoteReviewViewModel，并向回顾页注入关联应用与 AI 仓储
+ * [OUTPUT]: 对外提供 NoteContainerView 与 NoteSubTab 枚举，并上抛携带真实章节标题的笔记路由、书籍/目录定位、内容编辑及统一内容查看路由，同时提供方案 A 规格的新增、排序、笔记更多、全屏回顾与回顾更多顶部操作
  * [POS]: Note 模块容器壳层，承载笔记/回顾二级切换、四分类首页状态保持与下拉搜索入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -159,13 +159,17 @@ private struct NoteContentView: View {
                 titleProvider: \.title
             ) {
                 TopBarActionPill {
-                    AddMenuCircleButton(
-                        onAddBook: onAddBook,
-                        onAddNote: onAddNote,
-                        usesGlassStyle: true,
-                        presentation: .pillSegment,
-                        iconSize: NoteTopBarMetrics.leadingIconSize
-                    )
+                    if selectedSubTab == .notes {
+                        AddMenuCircleButton(
+                            onAddBook: onAddBook,
+                            onAddNote: onAddNote,
+                            usesGlassStyle: true,
+                            presentation: .pillSegment,
+                            iconSize: NoteTopBarMetrics.leadingIconSize
+                        )
+                    } else {
+                        fullScreenReviewButton
+                    }
                 } trailing: {
                     noteActionControl(presentation: .pillSegment)
                 }
@@ -181,6 +185,33 @@ private struct NoteContentView: View {
     }
 
     // MARK: - Segmented Content
+
+    /// 从当前卡堆首卡直接进入全屏回顾，不增加选择页或加载中转节点。
+    private var fullScreenReviewButton: some View {
+        Button {
+            guard let payload = reviewViewModel.makeFullScreenLaunchPayload() else { return }
+            navigationCoordinator.presentNoteReview(payload: payload)
+        } label: {
+            Image(.reiconFullscreenOutline)
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .foregroundStyle(Color.iconPrimary.opacity(0.88))
+                .frame(
+                    width: NoteTopBarMetrics.leadingIconSize,
+                    height: NoteTopBarMetrics.leadingIconSize
+                )
+                .accessibilityHidden(true)
+                .frame(
+                    width: InteractionMetrics.minimumTouchTarget,
+                    height: InteractionMetrics.minimumTouchTarget
+                )
+                .contentShape(Rectangle())
+        }
+        .topBarActionPresentationStyle(.pillSegment)
+        .disabled(reviewViewModel.currentItem == nil)
+        .accessibilityLabel("进入全屏回顾")
+    }
 
     private var segmentedContent: some View {
         KeepAliveSwitcherHost(

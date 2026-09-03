@@ -168,6 +168,13 @@ struct NoteRepository: NoteRepositoryProtocol {
         }
     }
 
+    /// 使用卡堆相同的数据范围读取完整轻量身份序列；随机会话在主键序列之上自行洗牌。
+    func fetchNoteReviewIDs(settings: NoteReviewSettings) async throws -> [Int64] {
+        try await databaseManager.database.dbPool.read { db in
+            try fetchNoteReviewIDs(db, settings: settings)
+        }
+    }
+
     /// 按主键读取单个书摘操作上下文，避免当日记录页为定位一条书摘加载整页回顾数据。
     func fetchNoteReviewItem(noteID: Int64) async throws -> NoteReviewCardItem? {
         try await databaseManager.database.dbPool.read { db in
@@ -235,6 +242,65 @@ struct NoteRepository: NoteRepositoryProtocol {
                 timestamp: Self.currentTimestampMillis
             )
             return try fetchSelectedTags(db, noteId: noteID)
+        }
+    }
+
+    /// 在单一事务中物理增删爱心所绑定的标签关系，不创建独立收藏数据。
+    func setNoteTagMembership(noteID: Int64, tagID: Int64, isPresent: Bool) async throws {
+        try await databaseManager.database.dbPool.write { db in
+            // SQL 目的：确认收藏目标仍是有效书摘，阻止给已删除记录追加标签关系。
+            // 涉及表：note。
+            // 关键过滤：按主键精确命中且 is_deleted = 0。
+            // 时间字段：不读取时间；新增关系使用下方当前 Unix 毫秒时间戳。
+            // 返回字段用途：仅作为事务写入前的存在性门闩。
+            let noteExistsSQL = """
+                SELECT id
+                FROM note
+                WHERE id = ? AND is_deleted = 0
+                LIMIT 1
+                """
+            guard try Int64.fetchOne(db, sql: noteExistsSQL, arguments: [noteID]) != nil else {
+                throw NoteEditorError.noteNotFound
+            }
+
+            // SQL 目的：确认绑定目标为仍有效的自定义书摘标签。
+            // 涉及表：tag。
+            // 关键过滤：按主键精确命中、type = 1 且 is_deleted = 0。
+            // 时间字段：不读取时间字段。
+            // 返回字段用途：仅作为关系写入的外键与业务类型校验。
+            let tagExistsSQL = """
+                SELECT id
+                FROM tag
+                WHERE id = ? AND type = 1 AND is_deleted = 0
+                LIMIT 1
+                """
+            guard try Int64.fetchOne(db, sql: tagExistsSQL, arguments: [tagID]) != nil else {
+                throw NoteEditorError.invalidTagName
+            }
+
+            // SQL 目的：物理移除目标书摘与标签的所有历史关系，既用于取消收藏，也用于新增前清理旧 tombstone。
+            // 涉及表：tag_note。
+            // 关键过滤：同时按 note_id 与 tag_id 精确命中，不区分 is_deleted，确保关系唯一。
+            // 时间字段：不读取或写入时间字段。
+            // 副作用：遵循项目批准的全局硬删除规则；不会影响书摘上的其他标签关系。
+            let deleteMembershipSQL = """
+                DELETE FROM tag_note
+                WHERE note_id = ? AND tag_id = ?
+                """
+            try db.execute(sql: deleteMembershipSQL, arguments: [noteID, tagID])
+
+            guard isPresent else { return }
+            let timestamp = Self.currentTimestampMillis
+            var record = TagNoteRecord(
+                id: nil,
+                tagId: tagID,
+                noteId: noteID,
+                createdDate: timestamp,
+                updatedDate: 0,
+                lastSyncDate: 0,
+                isDeleted: 0
+            )
+            try record.insert(db)
         }
     }
 
@@ -1768,6 +1834,41 @@ private extension NoteRepository {
             .lowercased()
             .replacingOccurrences(of: ".", with: "")
         return normalized.isEmpty ? "jpg" : normalized
+    }
+
+    /// 以卡堆完全相同的书籍与标签条件读取轻量身份序列，避免全屏回顾随数据量持有完整模型。
+    nonisolated func fetchNoteReviewIDs(
+        _ db: Database,
+        settings: NoteReviewSettings
+    ) throws -> [Int64] {
+        var predicates = ["n.is_deleted = 0"]
+        var arguments: [Int64] = []
+
+        if !settings.selectedBookIDs.isEmpty {
+            predicates.append("n.book_id IN (\(Self.placeholders(count: settings.selectedBookIDs.count)))")
+            arguments.append(contentsOf: settings.selectedBookIDs)
+        }
+        if !settings.selectedTagIDs.isEmpty {
+            predicates.append(noteReviewTagPredicate(settings: settings))
+            arguments.append(contentsOf: settings.selectedTagIDs)
+            if settings.tagMatchRule == .all {
+                arguments.append(Int64(settings.selectedTagIDs.count))
+            }
+        }
+
+        // SQL 目的：按现有卡堆筛选范围读取全屏会话所需的轻量书摘身份集合。
+        // 涉及表：note 为主表；标签条件通过 noteReviewTagPredicate 关联 tag_note 与 tag。
+        // 关键过滤：排除 note.is_deleted = 1，并复用书籍 IN 与标签任一/全部匹配语义。
+        // 排序：固定按 book_id DESC、note.id ASC 输出；顺序回顾直接使用，随机回顾在后台按会话种子洗牌。
+        // 时间字段：不读取时间字段，也不做时区转换。
+        // 返回字段用途：只长期保存 Int64 身份，完整正文、富文本、图片与布局均按可见区域加载。
+        let sql = """
+            SELECT n.id
+            FROM note n
+            WHERE \(predicates.joined(separator: "\n              AND "))
+            ORDER BY n.book_id DESC, n.id ASC
+            """
+        return try Int64.fetchAll(db, sql: sql, arguments: StatementArguments(arguments))
     }
 
     nonisolated func fetchNoteReviewPage(_ db: Database, request: NoteReviewPageRequest) throws -> [NoteReviewCardItem] {
