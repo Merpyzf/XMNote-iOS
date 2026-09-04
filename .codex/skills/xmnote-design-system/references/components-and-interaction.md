@@ -100,16 +100,14 @@ XMSettingsPage {
 
 ## 导航、切换与顶部操作
 
-- 当前 Tab 内继续深入：该 Tab 的 `NavigationStack`、route enum 与稳定 path。
-- 必须覆盖 `TabView` 且返回时保留底层现场：根视图 item-driven full-screen cover；cover 内需要继续深入时使用独立 NavigationStack。
-- 只补充当前页面的参数、选择、确认或短信息：Sheet、popover 或 Alert。
-- 三者都不匹配时重新判断页面关系，不自造 overlay 导航和转场系统。
+页面属于 Tab 根、push 子页、模态根、模态内子步骤还是可最小化展开态，以及 Back、Cancel、Close、Done/Save、Collapse 的选择，统一读取 [导航与退出语义](navigation-and-dismissal.md)。本节只维护对应组件与交互能力的归位，不从 presentation 类型或图标外形反推用户语义。
 
 顶部规则：
 
 - 特殊返回拦截使用 `TopBarBackButton`；没有拦截需求时优先保留系统返回，不要手写 `Button + chevron.left`。
-- 普通业务 Sheet 使用 `XMSheetScaffold` 自带关闭入口。当前 `TopBarDismissButton` 含阅读计时专用可访问性文案，不能泛化为任意 modal dismiss。
 - 需要保留系统返回手势并拦截脏状态退出时，查询 `navigationPopGuard`；无拦截需求不接入。
+- 普通业务 Sheet 使用 `XMSheetScaffold` 自带 cancellation/confirmation 入口，不在调用方重复标题栏或关闭按钮。
+- 当前 `TopBarDismissButton` 的真实 owner 与可访问性文案均为阅读计时收起；它不是任意 modal dismiss、Cancel 或 Close 的通用入口。
 - `TopBarActionIcon` 只承载顶部普通 action glyph，本身不是 Button；调用方必须使用原生 Button 并提供正确可访问性标签。它不承担页面内图标或装饰。
 - `TopBarActionPill` 只用于恰好两个同权重顶部 action；单一操作、不同权重或导航栏外胶囊不用。
 - 系统 NavigationBar 已提供外观时，不再给按钮套 glass/material。

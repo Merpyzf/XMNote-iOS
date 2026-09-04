@@ -35,10 +35,14 @@ Apple 官方依据：
 | --- | --- | --- | --- |
 | 业务身份与一级领域 | Reicon | 在读、书籍、笔记、我的等业务 Tab | 建立 XMNote 自有业务识别，保持业务图标家族一致 |
 | 功能入口与领域对象 | Reicon | 阅读日历、网页端、书摘导入、书籍来源、AI 助手 | 表达产品业务语义，不与系统命令混淆 |
-| 系统导航与层级关系 | SF Symbols / 系统组件 | back、close、chevron、disclosure、dismiss | 保留平台熟悉度、自动适配和系统交互行为 |
+| 层级返回 | SF Symbols / 系统组件 | 系统 Back、`chevron.left` | 只表达 pop 到同一任务的父级，保留平台返回手势与 RTL 行为 |
+| 模态关闭 | SF Symbols / 系统组件 | 系统 Close、`xmark` | 只表达关闭无待提交结果的模态根，不伪装成层级返回 |
+| 持续状态收起 | SF Symbols / 已验证 owner | `chevron.down` | 只在状态继续、紧凑形态可见且可重新展开时表达 Collapse |
 | 标准系统动作 | SF Symbols / 系统控件 | add、more、search、share、delete、edit、checkmark | 用户已经形成稳定平台认知，优先使用原生 Button、Menu、Tab 等入口 |
 | 系统状态与控件附件 | SF Symbols / canonical owner | selection、warning、error、info、排序、筛选 | 由系统或已有组件统一状态、渲染和可访问性 |
 | 品牌或独占业务标记 | Reicon 或 feature 私有资产 | 会员皇冠、专项认证标记 | 必须有明确 owner，不推广为普通入口样式 |
+
+返回、取消、关闭、完成与收起的语义选择统一读取 [导航与退出语义](navigation-and-dismissal.md)。页面是 full-screen cover、覆盖 Tab Bar、支持下拉关闭或沿垂直方向转场，都不能单独决定使用 `chevron.down`。
 
 ### 允许与禁止的混用
 
@@ -167,6 +171,7 @@ Filled 只用于：
 ## 直接阻断
 
 - 用 Reicon 替换系统返回、关闭、搜索、分享、删除、编辑、更多、checkmark 或 chevron，只为追求“统一”。
+- 在 dismiss、cancel、stop、clear path 或销毁状态的动作上使用 `chevron.down`，造成仍可从紧凑形态恢复的错误暗示。
 - 在同一组随机混用不同图标库、Outline/Filled、透视、细节密度或颜色。
 - 未经 Reicon MCP 搜索与确认就猜测图标名、复制第三方 SVG、手画近似资源或修改官方路径。
 - 为普通入口增加浅灰圆角底板、彩色圆形底板、高饱和渐变、发光或阴影来制造完成度。

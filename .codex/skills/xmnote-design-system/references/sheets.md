@@ -1,6 +1,6 @@
 # 业务 Sheet
 
-本参考只约束 XMNote 业务 Sheet 的系统级骨架与跨场景设计语言，不规定业务内容必须使用相同的 `VStack` 间距、Section 数量、表单结构、列表形式或文本组合。新增、修改或审查 Sheet 时读取本文件；任务同时涉及骨架之外的组件归位、通用颜色、图标或固定圆角 token 时，再组合读取 [组件与交互](components-and-interaction.md)、[颜色、表层与材质](color-surfaces-and-material.md)、[图标设计与使用](iconography.md) 或 [排版、间距与布局](typography-and-layout.md)。
+本参考只约束 XMNote 业务 Sheet 的系统级骨架与跨场景设计语言，不规定业务内容必须使用相同的 `VStack` 间距、Section 数量、表单结构、列表形式或文本组合。新增、修改或审查 Sheet 时读取本文件；任务涉及 Back、Cancel、Close、Done/Save、Collapse 或退出结果时同时读取 [导航与退出语义](navigation-and-dismissal.md)，涉及骨架之外的组件归位、通用颜色、图标或固定圆角 token 时，再组合读取 [组件与交互](components-and-interaction.md)、[颜色、表层与材质](color-surfaces-and-material.md)、[图标设计与使用](iconography.md) 或 [排版、间距与布局](typography-and-layout.md)。
 
 ## 事实来源与判断顺序
 
@@ -41,10 +41,12 @@
 
 ## 标题与顶部操作
 
+通用退出语义由 [导航与退出语义](navigation-and-dismissal.md) 判定；本节只约束业务 Sheet 中已经确定角色的操作如何进入 scaffold 与系统 placement。
+
 - 静态副标题使用 scaffold 的 `subtitle`，由系统 `navigationSubtitle` 呈现；页面不重建字体、颜色或标题—副标题间距。
 - 只有动态或可交互的短辅助信息才考虑类型安全 `titleSubtitle` 槽位。它是已验证的专项槽位，不是静态 subtitle 的通用替代；新增语义先核对当前生产消费者。该槽位是单行导航 chrome，不承载长说明、错误或复杂状态。
-- 默认关闭位于 `.cancellationAction`，确认位于 `.confirmationAction`；不要按物理左右位置自造按钮壳层。
-- 单步 Sheet 有确认操作时必须同时有关闭或取消路径。多步流程后续页由 Back 替代 Cancel，避免同时出现 Back、Cancel、Done 三种退出语义。
+- 已判定为 Cancel/Close 的入口位于 `.cancellationAction`，已判定为 Done/Save 的入口位于 `.confirmationAction`；不要按物理左右位置自造按钮壳层。
+- 单步 Sheet 有确认操作时必须同时有关闭或取消路径；多步流程后续页按导航语义使用 Back，避免同时出现 Back、Cancel、Done 三种竞争路径。
 - 标题文本区不放 spinner、长错误、双行操作说明或保存状态；标准确认控件可以在原位短时显示加载反馈。
 - 图标按钮必须提供可理解的无障碍 label；不能只依赖 xmark、checkmark 的图形含义。
 - 标准 checkmark 只表达标题上下文已经清楚的“完成编辑/接受选择”等可逆完成语义。恢复、删除、开始、解析、加入等结果特定或不可逆动作必须保留明确动词及 destructive/业务角色；不能为复用标准确认入口把它们抹平成绿色“确认”。当前 scaffold 接口无法表达时报告组件缺口，使用已验证的系统/专项入口，不扩展错误范例。
