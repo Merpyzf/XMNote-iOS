@@ -17,21 +17,31 @@ final class WereadImportAuthViewModel {
         var id: UUID { switch self { case .batches(let value): value.id; case .preview(let value): value.id } }
     }
 
+    enum WorkKind: Equatable {
+        case candidateFetch
+        case backfill
+    }
+
+    enum ErrorContext: Equatable {
+        case authorization
+        case candidateFetch
+        case backfill
+    }
+
     var phase: WereadQRCodePhase = .loading
     var preferences: WereadImportPreferences = .default
     var authorization: WereadAuthorization?
     var qrCodeData: Data?
     var progressText = ""
     var isWorking = false
+    var workKind: WorkKind?
     var destination: Destination?
     var errorMessage: String?
-    var showsUsageTips = false
-    var requestsAutomaticImport = false
+    var errorContext: ErrorContext?
     var webReloadToken = UUID()
     var backfillPrompt: WereadBackfillPrompt?
     var backfillProgressText = ""
     @ObservationIgnored private var task: Task<Void, Never>?
-    @ObservationIgnored private var didAutoImport = false
     @ObservationIgnored private var taskGeneration = 0
     private let repository: any WereadImportRepositoryProtocol
 
@@ -39,7 +49,6 @@ final class WereadImportAuthViewModel {
 
     func load() async {
         preferences = repository.fetchPreferences()
-        showsUsageTips = preferences.showsUsageTips
         if let restored = await repository.restoreAuthorization() {
             authorization = restored; phase = .authorized
             backfillPrompt = try? await repository.fetchBackfillPrompt()
@@ -49,11 +58,6 @@ final class WereadImportAuthViewModel {
 
     func updatePreferences(_ update: (inout WereadImportPreferences) -> Void) {
         update(&preferences); repository.savePreferences(preferences)
-    }
-
-    func dismissTips(permanently: Bool) {
-        showsUsageTips = false
-        if permanently { preferences.showsUsageTips = false; repository.savePreferences(preferences) }
     }
 
     func receiveQRCode(_ data: Data?) { qrCodeData = data; phase = data == nil ? .loading : .available }
@@ -67,10 +71,11 @@ final class WereadImportAuthViewModel {
             await repository.clearAuthorization()
             guard generation == taskGeneration, !Task.isCancelled else { return }
             authorization = nil
-            didAutoImport = false
             phase = .loading
             qrCodeData = nil
             errorMessage = nil
+            errorContext = nil
+            workKind = nil
             webReloadToken = UUID()
         }
     }
@@ -85,19 +90,24 @@ final class WereadImportAuthViewModel {
                 let value = try await repository.validateAuthorization(cookieHeader: cookie)
                 guard generation == taskGeneration, !Task.isCancelled else { return }
                 authorization = value; phase = .authorized
-                if !didAutoImport { didAutoImport = true; requestsAutomaticImport = true }
             } catch is CancellationError { }
             catch {
                 guard generation == taskGeneration else { return }
                 errorMessage = error.localizedDescription
+                errorContext = .authorization
                 if case WereadImportError.authorizationExpired = error { phase = .expired }
             }
         }
     }
 
-    private func startImport(generation: Int) async {
+    /// 获取候选书籍并生成后续路由；通过 generation 丢弃被刷新或取消后的过期回调。
+    private func fetchCandidates(generation: Int) async {
         guard let authorization, !isWorking else { return }
-        isWorking = true; errorMessage = nil; progressText = "正在获取书籍…"
+        isWorking = true
+        workKind = .candidateFetch
+        errorMessage = nil
+        errorContext = nil
+        progressText = "正在获取候选书籍…"
         do {
             let ids = try await repository.fetchImportBookIDs(authorization: authorization, preferences: preferences)
             guard generation == taskGeneration, !Task.isCancelled else { return }
@@ -110,11 +120,12 @@ final class WereadImportAuthViewModel {
                     importsReadingTime: preferences.importsReadingTime,
                     progress: { [weak self] current, total in
                         guard let self, generation == self.taskGeneration else { return }
-                        self.progressText = "书籍加载中（\(current)/\(total)）"
+                        self.progressText = "正在获取候选书籍（\(current)/\(total)）"
                     },
                     warning: { [weak self] message in
                         guard let self, generation == self.taskGeneration else { return }
                         self.errorMessage = message
+                        self.errorContext = .candidateFetch
                     }
                 )
                 books = try await repository.matchLocalBooks(books)
@@ -126,21 +137,31 @@ final class WereadImportAuthViewModel {
             guard generation == taskGeneration else { return }
             if case WereadImportError.authorizationExpired = error {
                 await expireAuthorization()
+                errorContext = .authorization
+            } else {
+                errorContext = .candidateFetch
             }
             errorMessage = error.localizedDescription
         }
         guard generation == taskGeneration else { return }
-        isWorking = false; progressText = ""
+        isWorking = false
+        workKind = nil
+        progressText = ""
     }
 
-    func beginImport() {
+    /// 启动用户明确确认后的候选获取任务；新的请求会取消旧任务并以 generation 防止竞态回写。
+    func beginCandidateFetch() {
         task?.cancel()
         taskGeneration += 1
         let generation = taskGeneration
-        task = Task { await startImport(generation: generation) }
+        task = Task { await fetchCandidates(generation: generation) }
     }
 
-    func consumeAutomaticImportRequest() { requestsAutomaticImport = false }
+    /// 清除已展示的阶段错误，避免旧错误影响下一次授权或获取。
+    func clearError() {
+        errorMessage = nil
+        errorContext = nil
+    }
 
     func postponeBackfill() { backfillPrompt = nil }
 
@@ -148,6 +169,9 @@ final class WereadImportAuthViewModel {
         guard let authorization else { return }
         backfillPrompt = nil
         isWorking = true
+        workKind = .backfill
+        errorMessage = nil
+        errorContext = nil
         task?.cancel()
         task = Task {
             do {
@@ -155,10 +179,18 @@ final class WereadImportAuthViewModel {
                     self?.backfillProgressText = "正在关联历史数据（\(value.current)/\(value.total)）"
                     self?.progressText = self?.backfillProgressText ?? ""
                 }
-                backfillProgressText = ""; progressText = ""; isWorking = false
-                if result.partialFailureCount > 0 { errorMessage = "部分历史数据关联失败，下次授权后可继续重试" }
-            } catch is CancellationError { backfillProgressText = ""; progressText = ""; isWorking = false }
-            catch { backfillProgressText = ""; progressText = ""; isWorking = false; errorMessage = error.localizedDescription }
+                backfillProgressText = ""; progressText = ""; isWorking = false; workKind = nil
+                if result.partialFailureCount > 0 {
+                    errorMessage = "部分历史数据关联失败，下次授权后可继续重试"
+                    errorContext = .backfill
+                }
+            } catch is CancellationError {
+                backfillProgressText = ""; progressText = ""; isWorking = false; workKind = nil
+            } catch {
+                backfillProgressText = ""; progressText = ""; isWorking = false; workKind = nil
+                errorMessage = error.localizedDescription
+                errorContext = .backfill
+            }
         }
     }
 
@@ -170,7 +202,15 @@ final class WereadImportAuthViewModel {
         webReloadToken = UUID()
     }
 
-    func cancel() { task?.cancel(); task = nil; taskGeneration += 1; isWorking = false }
+    func cancel() {
+        task?.cancel()
+        task = nil
+        taskGeneration += 1
+        isWorking = false
+        workKind = nil
+        progressText = ""
+        backfillProgressText = ""
+    }
 }
 
 @MainActor

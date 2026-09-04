@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 AppNavigationCoordinator、DataImportCollectionView、系统 scrollEdgeEffectStyle、微信读书导入 ViewModel、WebView、BookPickerView、Photos 与统一反馈组件
- * [OUTPUT]: 对外提供支持系统上下滚动边缘过渡、分组/组内排序的书摘导入入口、授权、分批、WereadImportBatchStatusView、导入预览和单书内容预览页面
+ * [INPUT]: 依赖 AppNavigationCoordinator、DataImportCollectionView、系统 scrollEdgeEffectStyle、微信读书导入 ViewModel、全屏 WebView、浮动操作面板、BookPickerView、Photos 与统一反馈组件
+ * [OUTPUT]: 对外提供支持系统上下滚动边缘过渡、分组/组内排序的书摘导入入口、非模态授权面板、分批、WereadImportBatchStatusView、导入预览和单书内容预览页面
  * [POS]: Views/Personal/DataImport 的完整微信读书扫码授权导入交互流
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -85,6 +85,11 @@ struct WereadImportAuthView: View {
     @State private var showsError = false
     @State private var showsPremium = false
     @State private var showsBackfillPrompt = false
+    @State private var isActionPanelPresented = true
+    @State private var selectedActionPanelDetent = WereadImportActionPanel.expandedDetent
+    @State private var activeDestination: WereadImportAuthViewModel.Destination?
+    @State private var isSavingQRCode = false
+    @State private var qrCodeSaveTask: Task<Void, Never>?
     let onOpenPremium: () -> Void
 
     init(repository: any WereadImportRepositoryProtocol, onOpenPremium: @escaping () -> Void) {
@@ -92,63 +97,58 @@ struct WereadImportAuthView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: Spacing.section) {
-                WereadAuthorizationWebView(
-                    reloadToken: viewModel.webReloadToken,
-                    onQRCode: viewModel.receiveQRCode,
-                    onCookie: viewModel.receiveCookie,
-                    onExpired: viewModel.markExpired,
-                    onFailed: viewModel.markFailed
-                )
-                .frame(height: 320)
-                .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockLarge))
-
-                VStack(alignment: .leading, spacing: Spacing.base) {
-                    Text("自定义导入").font(AppTypography.title3)
-                    Picker("导入书籍", selection: Binding(get: { viewModel.preferences.recentBookCount }, set: { value in viewModel.updatePreferences { $0.recentBookCount = value } })) {
-                        Text("全部").tag(-1)
-                        ForEach(Self.recentBookOptions, id: \.self) { count in
-                            Text("最近 \(count) 本").tag(count)
-                        }
-                    }
-                    Toggle("导入阅读时长", isOn: Binding(get: { viewModel.preferences.importsReadingTime }, set: { value in
-                        viewModel.updatePreferences { $0.importsReadingTime = value }
-                        if value { toastCenter.info("微信阅读时长不会覆盖已有手工计时记录") }
-                    }))
-                    Toggle("仅导入包含笔记的书籍", isOn: Binding(get: { viewModel.preferences.onlyBooksWithNotes }, set: { value in viewModel.updatePreferences { $0.onlyBooksWithNotes = value } }))
-
-                    Button(action: primaryAction) {
-                        HStack { Spacer(); if viewModel.isWorking { ProgressView().controlSize(.small) }; Text(primaryTitle); Spacer() }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(viewModel.isWorking || phaseIsLoading)
-
-                    Button("导入遇到问题？点击获取帮助") { toastCenter.info("请刷新二维码，确认微信读书已登录，并保持网络连接") }
-                        .font(AppTypography.caption)
-                        .frame(maxWidth: .infinity)
-                }
-                .padding(Spacing.contentEdge)
-                .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge))
-            }
-            .padding(Spacing.screenEdge)
+        GeometryReader { geometry in
+            authorizationContent(bottomSafeAreaInset: geometry.safeAreaInsets.bottom)
         }
+    }
+
+    /// 以页面真实安全区作为 Sheet 折叠基准，避免把 Home Indicator 留白误算为内容位移。
+    private func authorizationContent(bottomSafeAreaInset: CGFloat) -> some View {
+        WereadAuthorizationWebView(
+            reloadToken: viewModel.webReloadToken,
+            onQRCode: viewModel.receiveQRCode,
+            onCookie: viewModel.receiveCookie,
+            onExpired: viewModel.markExpired,
+            onFailed: viewModel.markFailed
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ignoresSafeArea(.container, edges: .bottom)
         .background(Color.surfacePage)
-        .navigationTitle("授权导入")
+        .navigationTitle("微信读书导入")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button { refresh() } label: { Image(systemName: "arrow.clockwise") }.disabled(viewModel.isWorking) } }
-        .task { await viewModel.load() }
-        .onDisappear { viewModel.cancel() }
-        .onChange(of: viewModel.errorMessage) { _, value in showsError = value != nil }
-        .onChange(of: viewModel.showsUsageTips) { _, value in if value { showsUsageTipsAlert = true } }
-        .onChange(of: viewModel.requestsAutomaticImport) { _, requested in
-            guard requested else { return }
-            viewModel.consumeAutomaticImportRequest()
-            guard appState.isPremium else { showsPremium = true; return }
-            viewModel.beginImport()
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("刷新授权页面", systemImage: "arrow.clockwise", action: refresh)
+                    .labelStyle(.iconOnly)
+                    .xmToolbarNeutralTint()
+                    .disabled(viewModel.isWorking || isSavingQRCode)
+            }
         }
+        .sheet(isPresented: $isActionPanelPresented, onDismiss: actionPanelDidDismiss) {
+            actionPanel(bottomSafeAreaInset: bottomSafeAreaInset)
+                .presentationDetents(
+                    WereadImportActionPanel.detents,
+                    selection: $selectedActionPanelDetent
+                )
+                .presentationDragIndicator(.visible)
+                .presentationBackgroundInteraction(.enabled)
+                .presentationContentInteraction(.scrolls)
+                .interactiveDismissDisabled()
+        }
+        .task { await viewModel.load() }
+        .onDisappear(perform: cancelTasks)
+        .onChange(of: viewModel.errorMessage) { _, value in showsError = value != nil }
         .onChange(of: viewModel.backfillPrompt) { _, prompt in showsBackfillPrompt = prompt != nil }
-        .navigationDestination(item: $viewModel.destination) { destination in
+        .onChange(of: viewModel.destination) { _, destination in
+            guard destination != nil else { return }
+            isActionPanelPresented = false
+        }
+        .onChange(of: activeDestination) { _, destination in
+            guard destination == nil, viewModel.destination == nil else { return }
+            selectedActionPanelDetent = WereadImportActionPanel.expandedDetent
+            isActionPanelPresented = true
+        }
+        .navigationDestination(item: $activeDestination) { destination in
             switch destination {
             case .batches(let route): WereadBatchView(route: route)
             case .preview(let route): WereadImportPreviewView(route: route)
@@ -156,22 +156,60 @@ struct WereadImportAuthView: View {
         }
         .xmSystemAlert(isPresented: $showsError, descriptor: errorDescriptor)
         .xmSystemAlert(isPresented: $showsPremium, descriptor: premiumDescriptor)
-        .xmSystemAlert(isPresented: $showsUsageTipsAlert, descriptor: tipsDescriptor)
         .xmSystemAlert(isPresented: $showsBackfillPrompt, descriptor: backfillDescriptor)
     }
 
-    @State private var showsUsageTipsAlert = false
-    private static let recentBookOptions = [5, 10, 20, 30, 60, 100]
     private var phaseIsLoading: Bool { if case .loading = viewModel.phase { return true }; return false }
+
+    private func actionPanel(bottomSafeAreaInset: CGFloat) -> some View {
+        WereadImportActionPanel(
+            selectedDetent: $selectedActionPanelDetent,
+            bottomSafeAreaInset: bottomSafeAreaInset,
+            recentBookCount: viewModel.preferences.recentBookCount,
+            importsReadingTime: viewModel.preferences.importsReadingTime,
+            onlyBooksWithNotes: viewModel.preferences.onlyBooksWithNotes,
+            primaryTitle: primaryTitle,
+            showsPrimaryProgress: showsPrimaryProgress,
+            isPrimaryDisabled: isSavingQRCode || viewModel.isWorking || phaseIsLoading,
+            areSettingsDisabled: viewModel.isWorking,
+            onRecentBookCountChange: { value in
+                viewModel.updatePreferences { $0.recentBookCount = value }
+            },
+            onImportsReadingTimeChange: { value in
+                viewModel.updatePreferences { $0.importsReadingTime = value }
+            },
+            onOnlyBooksWithNotesChange: { value in
+                viewModel.updatePreferences { $0.onlyBooksWithNotes = value }
+            },
+            onPrimaryAction: primaryAction
+        )
+    }
+
     private var primaryTitle: String {
-        if viewModel.isWorking { return viewModel.progressText.isEmpty ? "加载中" : viewModel.progressText }
-        switch viewModel.phase {
-        case .loading: return "加载中"
-        case .available: return "保存二维码"
-        case .expired: return "二维码已失效"
-        case .failed: return "加载失败"
-        case .authorized: return "开始导入"
+        if isSavingQRCode { return "正在保存二维码…" }
+        if viewModel.isWorking {
+            switch viewModel.workKind {
+            case .backfill:
+                return viewModel.backfillProgressText.isEmpty
+                    ? "正在关联历史数据…"
+                    : viewModel.backfillProgressText
+            case .candidateFetch, nil:
+                return viewModel.progressText.isEmpty
+                    ? "正在获取候选书籍…"
+                    : viewModel.progressText
+            }
         }
+        switch viewModel.phase {
+        case .loading: return "正在加载二维码…"
+        case .available: return "保存二维码到相册"
+        case .expired: return "刷新二维码"
+        case .failed: return "重新加载"
+        case .authorized: return "获取候选书籍"
+        }
+    }
+
+    private var showsPrimaryProgress: Bool {
+        isSavingQRCode || viewModel.isWorking || phaseIsLoading
     }
 
     private func primaryAction() {
@@ -180,7 +218,7 @@ struct WereadImportAuthView: View {
         case .expired, .failed: refresh()
         case .authorized:
             guard appState.isPremium else { showsPremium = true; return }
-            viewModel.beginImport()
+            viewModel.beginCandidateFetch()
         case .loading: break
         }
     }
@@ -188,24 +226,63 @@ struct WereadImportAuthView: View {
     private func refresh() { viewModel.beginRefresh() }
 
     private func saveQRCode() {
-        guard let data = viewModel.qrCodeData, let image = UIImage(data: data) else { toastCenter.error("二维码保存失败"); return }
-        Task {
+        guard !isSavingQRCode,
+              let data = viewModel.qrCodeData,
+              let image = UIImage(data: data) else {
+            toastCenter.error("二维码保存失败")
+            return
+        }
+        isSavingQRCode = true
+        qrCodeSaveTask?.cancel()
+        qrCodeSaveTask = Task { @MainActor in
+            defer {
+                isSavingQRCode = false
+                qrCodeSaveTask = nil
+            }
             let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+            guard !Task.isCancelled else { return }
             guard status == .authorized || status == .limited else { toastCenter.error(WereadImportError.photoPermissionDenied.localizedDescription); return }
             let size = CGSize(width: image.size.width + 100, height: image.size.height + 100)
             let renderer = UIGraphicsImageRenderer(size: size)
             let padded = renderer.image { context in UIColor.white.setFill(); context.fill(CGRect(origin: .zero, size: size)); image.draw(at: CGPoint(x: 50, y: 50)) }
+            guard !Task.isCancelled else { return }
             do { try await PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest.creationRequestForAsset(from: padded) }; toastCenter.success("二维码已保存到照片") }
             catch { toastCenter.error("二维码保存失败：\(error.localizedDescription)") }
         }
     }
 
+    /// Sheet 完成程序化收起后再提交导航，避免呈现层与 push 同时竞争。
+    private func actionPanelDidDismiss() {
+        guard let destination = viewModel.destination else { return }
+        viewModel.destination = nil
+        activeDestination = destination
+    }
+
+    /// 页面离开时同时取消 ViewModel 与照片写入任务，阻止过期状态回写当前界面。
+    private func cancelTasks() {
+        qrCodeSaveTask?.cancel()
+        qrCodeSaveTask = nil
+        isSavingQRCode = false
+        viewModel.cancel()
+    }
+
     private var errorDescriptor: XMSystemAlertDescriptor? {
         guard let message = viewModel.errorMessage else { return nil }
-        return .init(title: "导入失败", message: message, actions: [.init(title: "知道了") { viewModel.errorMessage = nil }])
+        return .init(
+            title: errorTitle,
+            message: message,
+            actions: [.init(title: "知道了") { viewModel.clearError() }]
+        )
+    }
+    private var errorTitle: String {
+        switch viewModel.errorContext {
+        case .authorization: "授权失败"
+        case .candidateFetch: "获取候选书籍失败"
+        case .backfill: "历史数据关联失败"
+        case nil: "操作失败"
+        }
     }
     private var premiumDescriptor: XMSystemAlertDescriptor { .init(title: "会员功能", message: "微信读书授权导入是会员功能。", actions: [.init(title: "取消", role: .cancel) {}, .init(title: "升级会员") { onOpenPremium() }]) }
-    private var tipsDescriptor: XMSystemAlertDescriptor { .init(title: "导入提示", message: "1. 在微信中扫描或识别二维码完成授权。\n2. 导入期间请保持网络连接。\n3. 重复导入会自动合并已有内容。", actions: [.init(title: "不再提示") { viewModel.dismissTips(permanently: true) }, .init(title: "知道了", role: .cancel) { viewModel.dismissTips(permanently: false) }]) }
     private var backfillDescriptor: XMSystemAlertDescriptor? {
         guard let prompt = viewModel.backfillPrompt else { return nil }
         return .init(title: "关联历史微信数据", message: "发现 \(prompt.pendingCount) 本历史导入书籍缺少微信关联信息，是否现在补全？", actions: [.init(title: "稍后", role: .cancel) { viewModel.postponeBackfill() }, .init(title: "开始") { viewModel.beginBackfill() }])

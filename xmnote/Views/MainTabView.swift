@@ -2717,6 +2717,7 @@ private struct AppTaskRootDismissControlModifier: ViewModifier {
                             Button(title) {
                                 navigationCoordinator.dismissTask()
                             }
+                            .xmToolbarNeutralTint()
                         case .collapse(let accessibilityLabel):
                             Button {
                                 navigationCoordinator.dismissTask()
