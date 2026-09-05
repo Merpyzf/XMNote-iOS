@@ -1,7 +1,7 @@
 import Foundation
 
 /**
- * [INPUT]: 依赖 Models 与 Services 层的数据类型定义
+ * [INPUT]: 依赖 Models 与 Services 层的数据类型定义，包含三联登录恢复快照
  * [OUTPUT]: 对外提供 Book/Note/Content/GlobalSearch/Backup/S3/AI/图片额度/标签选择布局偏好/TagManagement/BookGroupManagement/SourceManagement/ExternalAppIntegration/Statistics/ReadCalendar/封面主题/Timeline/ReadingDashboard/ReadingTimer 及书籍搜索录入协议
  * [POS]: Domain 层仓储契约，定义 Presentation 获取本地/网络数据的唯一入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -868,8 +868,16 @@ protocol NoteImportRepositoryProtocol {
     func loadKindleClippingsFile(from url: URL) async throws -> Data
     /// 通过仓储读取并解析汉王分享页正文；网络取消由调用任务向 URLSession 传播。
     func fetchHanWangShareContent(from sharedURL: String) async throws -> String
-    /// 通过仓储封装三联中读登录与书摘获取，避免页面直接持有网络 Service。
-    func fetchLifeWeekBooks(phoneNumber: String, password: String) async throws -> [NoteImportDraftBook]
+    /// 在 MainActor 编排三联凭证恢复；Keychain 访问在专属 actor 执行，页面取消后丢弃快照。
+    func loadLifeWeekLoginState() async -> LifeWeekLoginState
+    /// 在 MainActor 编排记住偏好更新，专属 actor 串行删除密码并提交偏好；失败保留先前状态。
+    func setLifeWeekRemembersPassword(_ enabled: Bool) async throws
+    /// 在 MainActor 编排认证与抓取，认证后回报可恢复的存储问题；父任务取消沿请求链传播。
+    func fetchLifeWeekBooks(
+        phoneNumber: String,
+        password: String,
+        onAuthenticated: @MainActor @Sendable (String?) -> Void
+    ) async throws -> [NoteImportDraftBook]
     func matchLocalBook(for draft: NoteImportDraftBook) async throws -> BookPickerBook?
     /// 按 Android `BookDao.queryByIdSuspend` 语义判断显式导入目标是否存在；软删除记录仍是可解析目标。
     func hasImportTargetBook(id: Int64) async throws -> Bool

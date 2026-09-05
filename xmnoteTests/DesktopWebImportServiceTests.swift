@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 DesktopWebImportService、ZIPFoundation 与可控 NoteImportRepositoryProtocol Stub
+ * [INPUT]: 依赖 DesktopWebImportService、ZIPFoundation 与含三联凭证契约的 NoteImportRepositoryProtocol Stub
  * [OUTPUT]: 验证 Android Web 导入来源识别、ZIP 一层扁平化、任务状态和显式目标校验
  * [POS]: iOS App Web 导入编排单元测试；锁定 4 条 Import API 的关键边界语义
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -129,9 +129,16 @@ private final class ImportRepositoryStub: NoteImportRepositoryProtocol {
         ""
     }
 
+    func loadLifeWeekLoginState() async -> LifeWeekLoginState {
+        LifeWeekLoginState()
+    }
+
+    func setLifeWeekRemembersPassword(_: Bool) async throws {}
+
     func fetchLifeWeekBooks(
         phoneNumber _: String,
-        password _: String
+        password _: String,
+        onAuthenticated _: @MainActor @Sendable (String?) -> Void
     ) async throws -> [NoteImportDraftBook] {
         []
     }

@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖统一 NoteImport Draft、GRDB Record 与 DatabaseManager
+ * [INPUT]: 依赖统一 NoteImport Draft、GRDB Record、DatabaseManager 与三联凭证存储
  * [OUTPUT]: 对外提供 NoteImportRepository，完成全来源书摘的本地匹配和逐书增量落库
  * [POS]: Data/Repositories 的统一导入写边界；文件、剪贴板、API 与特殊入口共享此实现
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -14,6 +14,7 @@ final class NoteImportRepository: NoteImportRepositoryProtocol {
     private let databaseManager: DatabaseManager
     private let defaults: UserDefaults
     private let bookSearchRepository: any BookSearchRepositoryProtocol
+    private let lifeWeekCredentialStore = LifeWeekCredentialStore()
 
     init(
         databaseManager: DatabaseManager,
@@ -64,9 +65,29 @@ final class NoteImportRepository: NoteImportRepositoryProtocol {
         return content
     }
 
-    /// 在统一仓储边界内调用三联中读网络 Service；父任务取消由 async 请求链路继续传播。
-    func fetchLifeWeekBooks(phoneNumber: String, password: String) async throws -> [NoteImportDraftBook] {
-        try await LifeWeekImportService().fetchBooks(phoneNumber: phoneNumber, password: password)
+    /// 在 MainActor 编排恢复；实际凭证访问由独立 actor 串行执行，取消后由页面丢弃过期快照。
+    func loadLifeWeekLoginState() async -> LifeWeekLoginState {
+        await lifeWeekCredentialStore.load()
+    }
+
+    /// 在 MainActor 编排偏好写入；凭证 actor 原子完成删除及偏好提交，失败不伪报关闭成功。
+    func setLifeWeekRemembersPassword(_ enabled: Bool) async throws {
+        try await lifeWeekCredentialStore.setRemembersPassword(enabled)
+    }
+
+    /// MainActor 编排认证、凭证保存与抓取；认证失败不触碰存储，取消检查阻止旧任务推进，存储失败不阻断导入。
+    func fetchLifeWeekBooks(
+        phoneNumber: String,
+        password: String,
+        onAuthenticated: @MainActor @Sendable (String?) -> Void
+    ) async throws -> [NoteImportDraftBook] {
+        let service = LifeWeekImportService()
+        let ticket = try await service.login(phoneNumber: phoneNumber, password: password)
+        try Task.checkCancellation()
+        let storageMessage = await lifeWeekCredentialStore.saveAuthenticated(phoneNumber: phoneNumber, password: password)
+        try Task.checkCancellation()
+        onAuthenticated(storageMessage)
+        return try await service.fetchBooks(ticket: ticket)
     }
 
     func matchLocalBook(for draft: NoteImportDraftBook) async throws -> BookPickerBook? {

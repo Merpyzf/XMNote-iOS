@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖三联中读公开 HTTPS 接口与手机号/密码
- * [OUTPUT]: 对外提供登录、全刊笔记抓取和统一 NoteImport Draft 转换
+ * [OUTPUT]: 对仓储分别提供登录票据、全刊笔记抓取和统一 NoteImport Draft 转换
  * [POS]: Services 的三联生活周刊特殊导入边界，对齐 Android LifeWeekRepository
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -17,16 +17,18 @@ nonisolated enum LifeWeekImportError: LocalizedError, Sendable {
     }
 }
 
+/// 三联网络边界，将登录成功与笔记抓取分开，使仓储能在认证完成后保存凭证。
 nonisolated struct LifeWeekImportService: Sendable {
     private let session: URLSession
 
+    /// 默认使用不落盘的网络会话，也允许调用方注入明确的会话。
     init(session: URLSession? = nil) {
         if let session { self.session = session }
         else { let configuration = URLSessionConfiguration.ephemeral; configuration.timeoutIntervalForRequest = 10; self.session = URLSession(configuration: configuration) }
     }
 
-    func fetchBooks(phoneNumber: String, password: String) async throws -> [NoteImportDraftBook] {
-        let ticket = try await login(phoneNumber: phoneNumber, password: password)
+    /// 持有效票据抓取所有期刊笔记；非隔离异步执行，父任务取消沿 URLSession 请求链传播。
+    func fetchBooks(ticket: String) async throws -> [NoteImportDraftBook] {
         let response: MagazineResponse = try await get("https://apis.lifeweek.com.cn/speedReding/note?ticket=\(Self.escaped(ticket))&pageNo=1&pageSize=2147483647&type=5")
         guard response.success, let magazines = response.model?.list else { throw LifeWeekImportError.message(response.resultMsg ?? "获取笔记失败") }
         var books: [NoteImportDraftBook] = []
@@ -47,12 +49,14 @@ nonisolated struct LifeWeekImportService: Sendable {
         return books
     }
 
-    private func login(phoneNumber: String, password: String) async throws -> String {
+    /// 非隔离异步验证凭证，仅在服务端成功并返回票据后完成；父任务取消传播到请求。
+    func login(phoneNumber: String, password: String) async throws -> String {
         let response: LoginResponse = try await get("https://www.lifeweek.com.cn/api/login/login?phone=\(Self.escaped(phoneNumber))&countryCode=86&password=\(Self.escaped(password))")
         guard response.success, let ticket = response.model?.ticket, !ticket.isEmpty else { throw LifeWeekImportError.message(response.resultMsg ?? "登录失败") }
         return ticket
     }
 
+    /// 非隔离异步读取三联响应，校验 HTTP 状态并保持网络取消语义。
     private func get<T: Decodable>(_ value: String) async throws -> T {
         guard let url = URL(string: value) else { throw LifeWeekImportError.message("请求地址无效") }
         let (data, response) = try await session.data(from: url)
@@ -60,6 +64,7 @@ nonisolated struct LifeWeekImportService: Sendable {
         return try JSONDecoder().decode(T.self, from: data)
     }
 
+    /// 保持三联既有接口参数编码方式。
     private nonisolated static func escaped(_ value: String) -> String { value.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? value }
 }
 
