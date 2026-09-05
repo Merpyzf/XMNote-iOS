@@ -1,5 +1,7 @@
 # Using modern SwiftUI API
 
+Apply this reference only to API usage inside the requested review scope. “Always” and “never” describe target-compatible API choices, not permission to migrate unrelated code. Verify relevant platform/deprecation claims through the lookup and fallback policy in `AGENTS.md`; a preferred alternative alone is not evidence of a correctness defect. XMNote's canonical components and the maintained SwiftUI Expert Skill's soft-deprecation scope take precedence over generic examples.
+
 - Always use `foregroundStyle()` instead of `foregroundColor()`.
 - Always use `clipShape(.rect(cornerRadius:))` instead of `cornerRadius()`.
 - Always use the `Tab` API instead of `tabItem()`.

@@ -1,5 +1,7 @@
 # Swift
 
+Use these recommendations for relevant code in the requested review, subject to the actual toolchain, language mode, business semantics, and project conventions. Style alternatives alone are not actionable defects. Verify platform facts as required by `AGENTS.md`, and do not change data formats, search semantics, dependencies, or error presentation merely to match an example.
+
 - Prefer Swift-native string methods over Foundation equivalents: use `replacing("a", with: "b")` not `replacingOccurrences(of: "a", with: "b")`.
 - Prefer modern Foundation API: `URL.documentsDirectory` instead of `FileManager` directory lookups, `appending(path:)` to append strings to a URL.
 - Never use C-style number formatting like `String(format: "%.2f", value)`. Use `Text(value, format: .number.precision(.fractionLength(2)))` or similar `FormatStyle` APIs.

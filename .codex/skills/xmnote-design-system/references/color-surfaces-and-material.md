@@ -99,7 +99,7 @@ Liquid Glass 是导航层和功能层的交互材质，不是内容背景主题�
 - 系统导航栏中的按钮禁止再次包裹 `.glassEffect`、`.buttonStyle(.glass/.glassProminent)` 或自定义 material。
 - 顶部独立 action 或同权 action 组合只有在机器目录返回对应 TopBar glass owner 时才使用项目封装。
 - 阅读正文、普通数据卡、设置分组、状态卡和列表行不使用玻璃作为“升级皮肤”。
-- 多个玻璃元素需要交互融合、过渡或共享容器时，交给 `ios-motion-design` 判断运动关系；平台 API、可用性和参数语义必须通过 `apple-doc-mcp` 查证。
+- 多个玻璃元素需要交互融合、过渡或共享容器时，按 [动效与手势](motion.md) 判断运动关系；平台 API、可用性和参数语义遵守 `AGENTS.md` 的 Apple 查证顺序及官方来源降级规则。
 - 不用 blur、gradient 或 material 遮罩模拟系统 scroll-edge effect。
 - feature 内已经存在的直接 `glassEffect` 默认只是局部成立；除非机器目录明确登记为跨功能入口，不得复制到另一模块。
 

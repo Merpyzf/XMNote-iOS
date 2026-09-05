@@ -2,6 +2,12 @@
 
 > Based on a comparison of Apple's documentation using the Sosumi MCP, we found the latest recommended APIs to use.
 
+## Application scope
+
+The attribution above describes this reference's original source, not a requirement to use Sosumi for every task. Follow `AGENTS.md` for current Apple documentation lookup and permitted fallback sources; verify relevant version and deprecation claims before relying on an entry.
+
+“Always use” below applies when choosing APIs for new code or an explicitly authorized migration, within the actual deployment target and XMNote component rules. It does not authorize changing unrelated existing code. Read [soft-deprecation-scope.md](soft-deprecation-scope.md) for review and feature/bugfix boundaries. Older-target examples are portability guidance, not a request to add unnecessary compatibility branches to XMNote.
+
 ## Table of Contents
 - [Always Use (iOS 15+)](#always-use-ios-15)
 - [When Targeting iOS 16+](#when-targeting-ios-16)
@@ -13,7 +19,7 @@
 
 ## Always Use (iOS 15+)
 
-These APIs have been deprecated long enough that there is no reason to use the old variants.
+Prefer the documented replacements for in-scope API choices when supported by the target; preserve unrelated existing usage and verify the applicable deprecation status rather than treating this heading as migration authorization.
 
 ### Navigation
 

@@ -8,12 +8,24 @@ description: Write, review, or improve SwiftUI code for XMNote using Xcode 26/iO
 ## Overview
 Use this skill to build, review, or improve SwiftUI features with correct state management, optimal view composition, and iOS 26+ Liquid Glass styling. Prioritize native APIs, Apple design guidance, and performance-conscious patterns. This skill focuses on facts and best practices without enforcing specific architectural patterns.
 
-XMNote currently targets Xcode 26 / iOS 26.1. Treat Xcode 27 guidance as either source-compatible SwiftUI practice or a future SDK reference; do not generate SDK 27-only APIs unless the user explicitly asks for Xcode 27 / SDK 27 work or an SDK 27 migration error.
+This directory is the maintained XMNote source for this skill and its references. The `.codex` and `.claude` copies are compatibility entrypoints; resolve reference paths against this directory, not the compatibility entrypoint.
+
+For XMNote interface work, use `xmnote-design-system` to decide the live visual language, component ownership, design-system admission, and evidence gates. This skill owns SwiftUI implementation facts and must not introduce a competing product design language. Repository data-access and architecture rules still apply.
+
+XMNote's baseline is Xcode 26 with iOS 26.1 deployment and Swift 5 language mode. A Swift 6.2 toolchain does not imply Swift 6 language mode. Read the relevant project settings when availability matters; do not upgrade the toolchain, language mode, or deployment target as part of an unrelated task. Treat Xcode 27 guidance as either source-compatible practice or a future SDK reference; use SDK 27-only APIs only for explicitly requested SDK 27 work.
+
+## Task scope and completion
+
+- Explanation and review are read-only: deliver evidence, actionable findings, and verification limits without automatically applying fixes.
+- Implementation and refactoring requests authorize the relevant edits and proportionate verification. Complete that work without asking again when scope is clear; unrelated modernization remains out of scope.
+- The workflow lists and review checklist below are a menu of relevant checks, not a requirement to audit every dimension. Read only references needed for the changed behavior or requested review.
+- Consult `references/latest-apis.md` when choosing or reviewing API usage. Apply its replacements within the current task and target version, together with `references/soft-deprecation-scope.md`; it does not authorize broad migration.
+- Follow `AGENTS.md` for documentation timing, compilation, and App test authorization. A missing optional visual check limits the claim, not completion of independent work.
 
 ## Workflow Decision Tree
 
 ### 1) Review existing SwiftUI code
-- **First, consult `references/latest-apis.md`** to ensure only current, non-deprecated APIs are used
+- For API review, consult `references/latest-apis.md` and report relevant in-scope deprecations
 - Check property wrapper usage against the selection guide (see `references/state-management.md`)
 - Verify view composition follows extraction rules (see `references/view-structure.md`)
 - Check performance patterns are applied (see `references/performance-patterns.md`)
@@ -25,11 +37,11 @@ XMNote currently targets Xcode 26 / iOS 26.1. Treat Xcode 27 guidance as either 
 - Review accessibility: proper grouping, traits, Dynamic Type support (see `references/accessibility-patterns.md`)
 - For macOS targets: verify correct use of macOS-specific APIs and patterns (see `references/macos-scenes.md`, `references/macos-window-styling.md`, `references/macos-views.md`)
 - Inspect Liquid Glass usage for correctness and consistency (see `references/liquid-glass.md`)
-- Validate iOS 26+ availability handling with sensible fallbacks
+- Validate availability against the actual deployment target; require fallbacks only for APIs newer than that target or explicitly shared with older targets
 - When SDK 27 APIs, compiler errors, or availability questions appear, consult `references/sdk27-future-reference.md` before recommending code
 
 ### 2) Improve existing SwiftUI code
-- **First, consult `references/latest-apis.md`** to replace any deprecated APIs with their modern equivalents
+- Consult `references/latest-apis.md` when the authorized change selects or migrates APIs; preserve unrelated existing usages
 - Audit state management for correct wrapper selection (see `references/state-management.md`)
 - Extract complex views into separate subviews (see `references/view-structure.md`)
 - Refactor hot paths to minimize redundant state updates (see `references/performance-patterns.md`)
@@ -44,7 +56,7 @@ XMNote currently targets Xcode 26 / iOS 26.1. Treat Xcode 27 guidance as either 
 - Do not migrate to SDK 27-only APIs unless the user explicitly requests SDK 27 work
 
 ### 3) Implement new SwiftUI feature
-- **First, consult `references/latest-apis.md`** to use only current, non-deprecated APIs for the target deployment version
+- Consult `references/latest-apis.md` for the new feature's API choices and target deployment version
 - Design data flow first: identify owned vs injected state (see `references/state-management.md`)
 - Structure views for optimal diffing (extract subviews early, see `references/view-structure.md`)
 - Keep business logic in services and models for testability (see `references/layout-best-practices.md`)
@@ -54,15 +66,15 @@ XMNote currently targets Xcode 26 / iOS 26.1. Treat Xcode 27 guidance as either 
 - Use `Button` for tappable elements, add accessibility grouping and labels (see `references/accessibility-patterns.md`)
 - For macOS targets: use macOS-specific scenes (see `references/macos-scenes.md`), window styling (see `references/macos-window-styling.md`), and views like HSplitView, Table (see `references/macos-views.md`)
 - Apply glass effects after layout/appearance modifiers (see `references/liquid-glass.md`)
-- Gate iOS 26+ features with `#available` and provide fallbacks
+- Gate APIs newer than the deployment target with `#available` and meaningful fallbacks; do not add pre-iOS-26 branches solely because a portable example shows them
 - Prefer Xcode 26/iOS 26 APIs by default; read `references/sdk27-future-reference.md` only for explicit SDK 27 tasks
 
 ## Core Guidelines
 
 ### Source and Availability Discipline
-- Current default: Xcode 26.2, Swift 6.2.x, iOS 26.1 deployment.
+- Recorded toolchain baseline: Xcode 26.2 / Swift 6.2.x; project deployment: iOS 26.1; project `SWIFT_VERSION`: 5.0. These are distinct settings, not an instruction to change them.
 - Xcode 27 skills are guidance inputs, not an instruction to install or generate SDK 27 APIs by default.
-- If Apple API behavior, availability, deprecation, or platform semantics matters, verify with `apple-doc-mcp` when available, Apple official documentation, or a local Xcode 27 export before changing code.
+- For Apple API behavior, availability, deprecation, or platform semantics, first try `apple-doc-mcp` as required by `AGENTS.md`. If unavailable or insufficient, use Apple official documentation or the relevant local SDK, naming the actual source and version. If still unverified, pause only the dependent claim or edit and continue independent authorized work.
 - Do not copy upstream skill text verbatim into product answers; use these references as concise local decision guides.
 
 ### State Management
@@ -146,7 +158,8 @@ XMNote currently targets Xcode 26 / iOS 26.1. Treat Xcode 27 guidance as either 
 
 ### Liquid Glass Patterns
 ```swift
-// Basic glass effect with fallback
+// Portable example for a target that also supports pre-iOS-26 systems.
+// XMNote's iOS 26.1 target does not need this fallback for iOS 26 APIs.
 if #available(iOS 26, *) {
     content
         .padding()
@@ -171,6 +184,8 @@ Button("Confirm") { }
 ```
 
 ## Review Checklist
+
+Select only sections relevant to the requested review or actual modification. A checklist item is not authorization to modify unrelated code, add tests, or migrate deployment targets.
 
 ### Latest APIs (see `references/latest-apis.md`)
 - [ ] No deprecated modifiers used (check against the quick lookup table)
@@ -263,14 +278,14 @@ Button("Confirm") { }
 - [ ] `HSplitView`/`VSplitView` reserved for IDE-style equal peer panes
 
 ### Liquid Glass (iOS 26+)
-- [ ] `#available(iOS 26, *)` with fallback for Liquid Glass
+- [ ] Availability checks and fallbacks match the actual deployment target
 - [ ] Multiple glass views wrapped in `GlassEffectContainer`
 - [ ] `.glassEffect()` applied after layout/appearance modifiers
 - [ ] `.interactive()` only on user-interactable elements
 - [ ] Shapes and tints consistent across related elements
 
 ## References
-- `references/latest-apis.md` - **Required reading for all workflows.** Version-segmented guide of deprecated-to-modern API transitions (iOS 15+ through iOS 26+)
+- `references/latest-apis.md` - Read for API selection or review; version-segmented deprecated-to-modern transitions, limited to the authorized task and target
 - `references/state-management.md` - Property wrappers and data flow
 - `references/view-structure.md` - View composition, extraction, and container patterns
 - `references/performance-patterns.md` - Performance optimization techniques and anti-patterns

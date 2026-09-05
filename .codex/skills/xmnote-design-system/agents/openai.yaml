@@ -1,7 +1,7 @@
 interface:
   display_name: "XMNote Design System"
-  short_description: "用项目真实令牌、组件和证据守住 XMNote iOS 设计语言"
-  default_prompt: "Use $xmnote-design-system to shape or review this XMNote interface against the live project design system and evidence gates."
+  short_description: "统一 XMNote 界面与动效设计，按需结合 Apple 原则和 Airbnb 产品视角"
+  default_prompt: "使用 $xmnote-design-system 设计或评审 XMNote 界面；涉及动效时按需读取动效专题，遵守当前项目组件、平台事实和证据边界。"
 
 policy:
   allow_implicit_invocation: true
