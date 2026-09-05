@@ -2,6 +2,17 @@
   "schemaVersion": 3,
   "components": [
     {
+      "path": "xmnote/UIComponents/Feedback/XMInlineInfoView.swift",
+      "symbols": ["XMInlineInfoView"],
+      "status": "canonical", "category": "foundationVisual", "layer": "feedback", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "readOnly"],
+      "dependencies": ["DesignSystem", "ReiconInfoCircleOutline"],
+      "useWhen": "表单或页面需要无背景、无交互的常驻辅助说明，使用轻量信息图标与单段文案",
+      "avoidWhen": "警告或错误、可恢复状态横幅、帮助按钮、Toast、标题与正文复合说明",
+      "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Feedback/XMInlineInfoView.swift"},
+      "guidePath": null
+    },
+    {
       "path": "xmnote/UIComponents/Business/Book/XMBookRatingSheet.swift",
       "symbols": ["XMBookRatingSheet"],
       "status": "canonical", "category": "business", "layer": "business", "framework": "swiftui", "usageScope": "crossFeature",
