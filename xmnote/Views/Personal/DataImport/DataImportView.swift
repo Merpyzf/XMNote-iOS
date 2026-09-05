@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 AppNavigationCoordinator、DataImportCollectionView、系统 scrollEdgeEffectStyle、微信读书导入 ViewModel、全屏 WebView、浮动操作面板、BookPickerView、Photos 与统一反馈组件
+ * [INPUT]: 依赖 AppNavigationCoordinator、Kindle 导入方式选择、DataImportCollectionView、系统 scrollEdgeEffectStyle、微信读书导入 ViewModel、全屏 WebView、浮动操作面板、BookPickerView、Photos 与统一反馈组件
  * [OUTPUT]: 对外提供支持系统上下滚动边缘过渡、分组/组内排序的书摘导入入口、非模态授权面板、分批、WereadImportBatchStatusView、导入预览和单书内容预览页面
  * [POS]: Views/Personal/DataImport 的完整微信读书扫码授权导入交互流
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -14,6 +14,8 @@ struct DataImportView: View {
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
     @State private var groups: [DataImportGroup]
     @State private var isEditing = false
+    @State private var showsKindleMethods = false
+    @State private var pendingKindleEntryPoint: KindleImportEntryPoint?
 
     init() {
         _groups = State(initialValue: DataImportOrderingStore.loadGroups())
@@ -39,12 +41,34 @@ struct DataImportView: View {
                     .xmToolbarNeutralTint()
             }
         }
+        .sheet(isPresented: $showsKindleMethods, onDismiss: kindleMethodsDidDismiss) {
+            KindleImportMethodSheet(onSelect: selectKindleMethod)
+        }
     }
 
-    /// 在不改变当前 Tab 浏览栈的前提下启动独立导入任务。
+    /// 在不改变当前 Tab 浏览栈的前提下启动任务；Kindle 先选择导入方式。
     private func openImportTask(_ destination: DataImportTaskDestination) {
         guard !isEditing else { return }
-        navigationCoordinator.present(.dataImport(destination))
+        if case .kindle = destination {
+            pendingKindleEntryPoint = nil
+            showsKindleMethods = true
+        } else {
+            navigationCoordinator.present(.dataImport(destination))
+        }
+    }
+
+    /// 主线程仅记录选择并关闭弹层，避免与全屏任务争用呈现时机。
+    private func selectKindleMethod(_ entryPoint: KindleImportEntryPoint) {
+        guard pendingKindleEntryPoint == nil else { return }
+        pendingKindleEntryPoint = entryPoint
+        showsKindleMethods = false
+    }
+
+    /// 弹层完全退出后消费一次选择；手势关闭或取消不会启动任务。
+    private func kindleMethodsDidDismiss() {
+        guard let entryPoint = pendingKindleEntryPoint else { return }
+        pendingKindleEntryPoint = nil
+        navigationCoordinator.present(.dataImport(.kindle(entryPoint)))
     }
 
     /// 切换目录编辑状态；实际拖拽过程与收起动画由 UIKit 列表 owner 管理。

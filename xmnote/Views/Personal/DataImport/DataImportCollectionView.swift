@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 DataImportTaskDestination、UserDefaults、UIKit interactive movement、XMSystemScrollEdgeRegistration，以及 XMNote 设计系统令牌
+ * [INPUT]: 依赖带 Kindle 入口参数的 DataImportTaskDestination、UserDefaults、UIKit interactive movement、XMSystemScrollEdgeRegistration，以及 XMNote 设计系统令牌
  * [OUTPUT]: 对外提供书摘导入分组模型、兼容旧设置的排序存储，以及支持系统上下滚动边缘过渡、条目浮动圆角和单一视觉载体排序的 DataImportCollectionView
  * [POS]: Views/Personal/DataImport 的主页排序与视觉承载层，SwiftUI 持有业务状态，UIKit 仅管理可中断拖拽交互
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -130,7 +130,7 @@ enum DataImportOrderingStore {
             id: .file,
             title: "本地文件",
             entries: [
-                DataImportEntry(id: "kindle", title: "Kindle", destination: .kindle),
+                DataImportEntry(id: "kindle", title: "Kindle", destination: .kindle(.manualFile)),
                 DataImportEntry(id: "koreader", title: "KOReader", destination: .file(title: "KOReader", parserID: .koreader)),
                 DataImportEntry(id: "boox", title: "BOOX", destination: .fileCandidates(title: "BOOX", parserIDs: [.booxOld, .booxNew])),
                 DataImportEntry(id: "legado", title: "阅读", destination: .file(title: "阅读", parserID: .legado)),

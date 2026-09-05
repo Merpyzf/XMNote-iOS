@@ -246,6 +246,7 @@
       ],
       "allowedPaths": [
         "xmnote/Utilities/DesignSystem/AppTypography.swift",
+        "xmnote/Views/Personal/DataImport/NoteImportTypography.swift",
         "xmnote/Utilities/DesignSystem/SharedContentTypography.swift",
         "xmnote/UIComponents/Charts/CalendarHeatmap.swift",
         "xmnote/UIComponents/Charts/HeatmapChart.swift",
