@@ -13,6 +13,219 @@ import Testing
 @MainActor
 struct NoteReviewCanvasTests {
     @Test
+    func stackCapacityDecodesIndependentlyAndInvalidValueDoesNotResetCardWidth() throws {
+        var settings = NoteReviewSettings.defaultValue
+        settings.desktopGroupCapacity = 64
+        settings.desktopCardWidth = 277
+        let data = try JSONEncoder().encode(settings)
+        var json = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        for bad: Any in [17, "broken"] {
+            json["desktopGroupCapacity"] = bad
+            let decoded = try JSONDecoder().decode(NoteReviewSettings.self, from: JSONSerialization.data(withJSONObject: json))
+            #expect(decoded.desktopGroupCapacity == 96 && decoded.desktopCardWidth == 277)
+        }
+        json.removeValue(forKey: "desktopGroupCapacity")
+        #expect(try JSONDecoder().decode(NoteReviewSettings.self,
+            from: JSONSerialization.data(withJSONObject: json)).desktopGroupCapacity == 96)
+        #expect(try JSONDecoder().decode(NoteReviewSettings.self, from: data).desktopGroupCapacity == 64)
+    }
+
+    @Test
+    func stalePreviewIdentityTerminatesWorkerWithoutAnyRead() async throws {
+        let controller = NoteReviewCanvasOverviewController()
+        controller.automaticallyPreparesOverview = false
+        controller.loadViewIfNeeded()
+        defer { controller.disposeCanvas() }
+        let model = try await previewFixture(controller: controller, count: 2)
+        controller.preparedModel = model
+        controller.previewDemand = [999]
+        controller.previewVisibleDemand = [999]
+        var reads = 0
+        controller.sourceReader = { _, _ in reads += 1; return [] }
+        controller.startPreviewWorker(model: model)
+        await waitUntil { controller.previewTask == nil }
+        #expect(reads == 0 && controller.previewAttemptedIDs.isEmpty)
+    }
+
+    @Test(arguments: [false, true])
+    func realStackSceneDoesNotCommitReadingUntilExpansionFinishes(reverse: Bool) async throws {
+        let controller = NoteReviewCanvasOverviewController(startStackAnimation: { $0.pauseAnimation() })
+        controller.automaticallyPreparesOverview = false
+        controller.loadViewIfNeeded()
+        controller.view.frame = CGRect(x: 0, y: 0, width: 402, height: 874)
+        controller.view.layoutIfNeeded()
+        defer { controller.disposeCanvas() }
+        controller.stackAllIDs = Array(1...192)
+        controller.selectedCount = 192
+        controller.sourceReader = { ids, _ in ids.map(Self.previewSource) }
+        let model = try await previewFixture(controller: controller, count: 96)
+        controller.activeDirectoryRegion = controller.fixtureStack(containing: 24)?.region
+        controller.commit(model: model, preservingCurrentID: 24, animatesEnvironmentChange: false)
+        var currentEvents: [Int64] = []
+        controller.onCurrentChanged = { currentEvents.append($0) }
+        let originalZoom = controller.desktopScrollView.zoomScale
+        let originalOffset = controller.desktopScrollView.contentOffset
+        controller.presentStackBrowser()
+        await controller.stackTask?.value
+        let session = try #require(controller.stackSession)
+        let opening = try #require(session.animator)
+        opening.stopAnimation(false); opening.finishAnimation(at: .end)
+        await controller.stackNeighborTask?.value
+        #expect(controller.currentNoteID == 24 && currentEvents.isEmpty)
+        let browser = try #require(controller.stackBrowser)
+        let controls = try #require(browser.scrollView.accessibilityElements as? [UIControl])
+        #expect(!controls.isEmpty)
+        #expect(controls.allSatisfy { browser.scrollView.touchesShouldCancel(in: $0) })
+        #expect(controls.compactMap(\.accessibilityIdentifier) == browser.previews.map { "review-stack-\($0.group.id.bucket)" })
+        // A late callback from the now hidden real scroll surface must not replace the reading anchor.
+        controller.desktopScrollView.contentOffset = .zero
+        controller.scrollViewDidEndDecelerating(controller.desktopScrollView)
+        #expect(controller.currentNoteID == 24 && currentEvents.isEmpty)
+        controller.desktopScrollView.contentOffset = originalOffset
+        #expect(controller.preparedModel?.canvasGeometry.indexByID.count == 96)
+        #expect(controller.stackPreviews.count <= 5)
+        #expect(controller.stackPreviews.reduce(0, { $0 + $1.pixelBytes }) <= CanvasStackContentRenderer.previewBudget)
+        let next = try #require(controller.stackPreviews.first(where: { $0.group.id != session.group.id }))
+        let rtl = CanvasStackBrowserView(frame: browser.bounds, reduced: true)
+        rtl.semanticContentAttribute = .forceRightToLeft
+        rtl.apply(controller.stackPreviews, preserving: session.group.id)
+        #expect(rtl.focusedID == session.group.id)
+        let currentPose = try #require(rtl.poses(for: session.group.id, in: rtl).values.first)
+        let nextPose = try #require(rtl.poses(for: next.group.id, in: rtl).values.first)
+        #expect(nextPose.center.x < currentPose.center.x)
+        rtl.focus(next.group.id) {}
+        #expect(rtl.focusedID == next.group.id)
+        controller.expandStack(next.group.id)
+        await controller.stackTask?.value
+        #expect(currentEvents.isEmpty)
+        let closing = try #require(session.animator)
+        closing.fractionComplete = 0.5
+        closing.stopAnimation(false); closing.finishAnimation(at: reverse ? .start : .end)
+        if reverse {
+            #expect(controller.stackBrowser != nil && controller.currentNoteID == 24)
+            #expect(currentEvents.isEmpty)
+            #expect(abs(controller.desktopScrollView.zoomScale - originalZoom) < 0.001)
+            #expect(abs(controller.desktopScrollView.contentOffset.x - originalOffset.x) < 2)
+            #expect(abs(controller.desktopScrollView.contentOffset.y - originalOffset.y) < 2)
+        } else {
+            #expect(controller.stackBrowser == nil && controller.currentNoteID == next.group.noteIDs.first)
+            #expect(currentEvents == [try #require(next.group.noteIDs.first)])
+            #expect(controller.transitionPreviewPins.isEmpty && controller.stackSession == nil)
+        }
+    }
+
+    @Test(arguments: [1, 24])
+    func productionParentCapturesRealReadingInkWithoutBakingScrollEdges(repetitions: Int) throws {
+        let repository = RepositoryContainer(sheetPreviewDatabaseManager: DatabaseManager(database: try AppDatabase.empty()),
+            userDefaults: try #require(UserDefaults(suiteName: "handoff-tests-\(UUID().uuidString)")))
+        let item = NoteReviewCardItem(id: 7, bookID: 1, bookTitle: "交接验证", bookAuthor: "", bookCoverURL: "",
+            chapterTitle: "真实父页面", contentHTML: "<p>" + String(repeating: "纸张中的文字始终保持清晰，回到原处继续阅读。", count: repetitions) + "</p>",
+            ideaHTML: "", position: "", positionUnit: 0, includeTime: false, createdDate: 1,
+            imageURLs: [], tags: [], weReadOriginalURL: nil)
+        let parent = NoteReviewViewController(payload: NoteReviewLaunchPayload(selectedNoteID: 7, currentIndex: 0,
+            loadedNoteIDs: [7], seedItems: [item], settings: .defaultValue), repositories: repository,
+            toastCenter: XMToastCenter(), onDismiss: {}, onOpenDetail: { _, _ in }, onError: { _ in })
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 402, height: 874))
+        window.rootViewController = parent
+        window.isHidden = false
+        defer { parent.disposeReviewSession(); window.isHidden = true; window.rootViewController = nil }
+        parent.view.layoutIfNeeded()
+        func findCell(_ view: UIView) -> NoteReviewCollectionCell? {
+            if let cell = view as? NoteReviewCollectionCell { return cell }
+            return view.subviews.lazy.compactMap(findCell).first
+        }
+        let cell = try #require(findCell(parent.view))
+        let scroll = cell.activeContentScrollView
+        if repetitions > 1 { scroll.setContentOffset(CGPoint(x: 0, y: 100), animated: false) }
+        let offset = scroll.contentOffset
+        let endpoint = try #require(cell.immersiveTransitionEndpoint(in: parent.view,
+            insets: UIEdgeInsets(top: 132, left: 0, bottom: 98, right: 0), surfaceColor: .white,
+            requestGeneration: 3))
+        #expect(endpoint.identity?.noteID == 7 && endpoint.identity?.requestGeneration == 3)
+        #expect(scroll.contentOffset == offset)
+        #expect(endpoint.viewportImage != nil && endpoint.viewportFrame == parent.view.bounds)
+        let pixels = try raster(size: endpoint.logicalSize) { context in
+            UIGraphicsPushContext(context)
+            endpoint.image.draw(at: .zero)
+            UIGraphicsPopContext()
+        }
+        let ink = stride(from: 0, to: pixels.count, by: 4).filter {
+            pixels[$0 + 3] > 200 && pixels[$0] < 128 && pixels[$0 + 1] < 128 && pixels[$0 + 2] < 128
+        }.count
+        #expect(ink > 100, "The production parent with native scroll edges must supply real opaque reading pixels.")
+    }
+
+    @Test
+    func readingIdentityRejectsAnotherNoteOrRequestButAllowsDifferentLayoutVersions() {
+        let source = NoteReviewCanvasReadingEndpoint.Identity(noteID: 7, requestGeneration: 3, contentVersion: 10, appearanceVersion: 2)
+        #expect(source.belongsToSameRequest(as: .init(noteID: 7, requestGeneration: 3, contentVersion: 11, appearanceVersion: 6)))
+        #expect(!source.belongsToSameRequest(as: .init(noteID: 8, requestGeneration: 3, contentVersion: 10, appearanceVersion: 2)))
+        #expect(!source.belongsToSameRequest(as: .init(noteID: 7, requestGeneration: 4, contentVersion: 10, appearanceVersion: 2)))
+    }
+
+    @Test
+    func coordinatorRevealsLiveOwnerBeforeRemovingProxyAndNotifiesOnlyAfterHandoff() {
+        let coordinator = NoteReviewCanvasModeCoordinator()
+        var handedOff = false
+        var notified = false
+        coordinator.request(.desktop)
+        coordinator.onSurfaceChanged = {
+            #expect(handedOff && coordinator.settledMode == .desktop)
+            #expect(coordinator.state == .settling)
+            notified = true
+        }
+        coordinator.settle(.desktop) {
+            #expect(coordinator.state == .settling)
+            handedOff = true
+        }
+        #expect(notified && coordinator.state == .idle && coordinator.requestedMode == nil)
+        coordinator.dispose()
+    }
+
+    @Test(arguments: [CGFloat(0.3), 0.5, 0.8])
+    func interruptedSceneKeepsRawPixelsSeparateFromOneNativeEdgeOwner(progress: CGFloat) throws {
+        let host = UIViewController()
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 402, height: 740))
+        window.rootViewController = host
+        window.isHidden = false
+        defer { window.isHidden = true; window.rootViewController = nil }
+        let (source, target) = readingEndpoints()
+        let scene = NoteReviewCanvasReadingScene(source: source, target: target, clip: host.view.bounds,
+            sourceBackground: nil, targetBackground: nil)
+        host.view.addSubview(scene)
+        scene.render(progress)
+        host.view.layoutIfNeeded()
+        let frozen = try #require(scene.frozenContentSurface(in: host.view))
+        host.view.addSubview(frozen)
+        #expect(scene.paper.superview === scene.renderingContent)
+        #expect(frozen.frame == scene.frame && frozen.contentOffset == .zero)
+        let paper = NoteReviewCanvasReadingEndpoint.capture(scene.paper, in: host.view,
+            backdropColor: scene.backgroundColor ?? .clear, surfaceColor: scene.paperColor ?? .clear,
+            cornerRadius: scene.paperCornerRadius)
+        let raw = frozen.contentForHandoff()
+        #expect(!descendants(of: raw).contains { $0 is UIScrollView })
+        let image = try #require((raw.subviews.first as? UIImageView)?.image)
+        let pixels = try raster(size: image.size) { context in
+            UIGraphicsPushContext(context)
+            image.draw(at: .zero)
+            UIGraphicsPopContext()
+        }
+        #expect(stride(from: 3, to: pixels.count, by: 4).contains { pixels[$0] > 200 })
+        let continuation = NoteReviewCanvasReadingScene(source: paper, target: target, clip: host.view.bounds,
+            sourceBackground: raw, targetBackground: nil)
+        host.view.addSubview(continuation)
+        scene.removeFromSuperview()
+        frozen.removeFromSuperview()
+        continuation.render(0)
+        expectColor(try #require(continuation.backgroundColor), matches: try #require(scene.backgroundColor))
+        expectColor(try #require(continuation.paperColor), matches: try #require(scene.paperColor))
+        #expect(continuation.paperCornerRadius == scene.paperCornerRadius)
+        #expect(raw.superview === continuation.renderingContent)
+        #expect(abs(continuation.paper.center.x - paper.frame.midX) < 0.001)
+        #expect(abs(continuation.paper.center.y - paper.frame.midY) < 0.001)
+    }
+
+    @Test
     func explicitTaskViewerDoesNotRestoreOrReplaceAnOlderSceneSelection() {
         let source = ContentViewerSourceContext.noteReview(noteIDs: [7, 8, 9])
         let oldSelection = ContentViewerSceneSnapshot(source: source, selectedItemID: .note(8))
@@ -1989,13 +2202,15 @@ struct NoteReviewCanvasTests {
 
 /// Only the review surface is implemented; unexpected business access fails the scoped test immediately.
 @MainActor
-private final class CanvasTestNoteRepository: NoteRepositoryProtocol {
+final class CanvasTestNoteRepository: NoteRepositoryProtocol {
     var settings = NoteReviewSettings.defaultValue
     var saves = 0
     var sourceReads = 0
     var reviewIDs: [Int64]?
     var idReads = 0
     var idReader: (() async throws -> [Int64])?
+    var directory: (any NoteReviewDirectory)?
+    var directoryOpens = 0
     var reviewItems: [NoteReviewCardItem]?
     var itemReads: [[Int64]] = []
     var itemReader: (([Int64]) async throws -> [NoteReviewCardItem])?
@@ -2026,6 +2241,13 @@ private final class CanvasTestNoteRepository: NoteRepositoryProtocol {
         idReads += 1
         if let idReader { return try await idReader() }
         return reviewIDs ?? [item.id]
+    }
+    func openNoteReviewDirectory(request: NoteReviewDirectoryRequest, cacheID: UUID,
+                                 schedule: @escaping NoteReviewDirectoryReadScheduling,
+                                 progress: @escaping @Sendable (NoteReviewDirectoryPreparation) async -> Void) async throws -> any NoteReviewDirectory {
+        directoryOpens += 1
+        guard let directory else { throw NoteReviewDirectoryError.unavailable }
+        return directory
     }
     func fetchNoteReviewOverviewLayoutSources(noteIDs: [Int64]) async throws -> [NoteReviewOverviewLayoutSource] { sourceReads += 1; return [] }
     func fetchNoteReviewItem(noteID: Int64) async throws -> NoteReviewCardItem? { fatalError("Unexpected repository access") }

@@ -3,7 +3,7 @@ import GRDB
 
 /**
  * [INPUT]: 依赖 AppDatabase 提供本地数据库连接，依赖 ObservationStream 提供观察流桥接，依赖 UserDefaults/FileManager/S3UploadRepository 承接草稿、暂存图与上传事务
- * [OUTPUT]: 对外提供 NoteRepository（NoteRepositoryProtocol 的 GRDB 实现）、有效章节语义的回顾卡片、纸流轻量布局源及跳过首个观察基线的变化信号，覆盖聚合列表、章节范围、批量写入、合并、编辑草稿与保存事务
+ * [OUTPUT]: 对外提供 NoteRepository（NoteRepositoryProtocol 的 GRDB 实现）、可恢复无正文回顾目录、有效章节语义的回顾卡片、轻量布局源及变化信号，覆盖聚合列表、章节范围、批量写入、合并、编辑草稿与保存事务
  * [POS]: Data 层笔记仓储实现，统一收口书摘读取、iOS 已批准硬删除、关系替换、跨书章节迁移与合并原子事务
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -173,6 +173,23 @@ struct NoteRepository: NoteRepositoryProtocol {
         try await databaseManager.database.dbPool.read { db in
             try fetchNoteReviewIDs(db, settings: settings)
         }
+    }
+
+    /// 后台创建一致的只读快照并逐批建立派生目录；源快照只活到准备结束，取消后不再发起后续查询。
+    func openNoteReviewDirectory(request: NoteReviewDirectoryRequest, cacheID: UUID,
+                                 schedule: @escaping NoteReviewDirectoryReadScheduling,
+                                 progress: @escaping @Sendable (NoteReviewDirectoryPreparation) async -> Void) async throws -> any NoteReviewDirectory {
+        let pool = databaseManager.database.dbPool
+        let source = NoteReviewDirectorySourceReader(pool: pool, request: request)
+        try Task.checkCancellation()
+        let cacheRoot = URL.cachesDirectory.appendingPathComponent("NoteReviewDirectory", isDirectory: true)
+        return try await NoteReviewDirectoryIndex.open(at: cacheRoot.appendingPathComponent(cacheID.uuidString + ".sqlite"),
+                                                       request: request, reader: { cursor, limit in
+            try Task.checkCancellation()
+            let batch = try await schedule { try await source.read(after: cursor, limit: limit) }
+            try Task.checkCancellation()
+            return batch
+        }, progress: progress)
     }
 
     /// 异步按输入顺序读取纸流测高字段；数据库等待不占用主线程，读取事务内的每条 SQL 最多绑定 128 个书摘 ID。

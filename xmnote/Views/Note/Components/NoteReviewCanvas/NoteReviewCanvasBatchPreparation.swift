@@ -21,6 +21,8 @@ nonisolated final class CanvasOverviewBatchPreparation: @unchecked Sendable {
     let fixedColumns: Int?
     let anchorID: Int64?
     let initialProtectedIDs: Set<Int64>
+    let preparesWaterfall: Bool
+    let overviewLongEdge: CGFloat
     private var initialDrawingPins: [NoteReviewCanvasResourceLease<CanvasOverviewDrawingPayload>] = []
     private var initialSourcePins: [NoteReviewCanvasResourceLease<CanvasOverviewPreviewPayload>] = []
     var notes: [CanvasOverviewNote] = []
@@ -31,16 +33,19 @@ nonisolated final class CanvasOverviewBatchPreparation: @unchecked Sendable {
     init(count: Int, store: CanvasOverviewPreviewStore, style: CanvasOverviewPaperStyle,
          waterfallStyle: CanvasOverviewPaperStyle, width: CGFloat, size: CGSize, scale: CGFloat,
          packing: CanvasOverviewDesktopPacking, fixedColumns: Int?, anchorID: Int64?,
-         initialProtectedIDs: Set<Int64> = []) {
+         initialProtectedIDs: Set<Int64> = [], preparesWaterfall: Bool = true, overviewLongEdge: CGFloat = 2_048) {
         self.store = store; self.style = style; self.waterfallStyle = waterfallStyle
         self.width = width; self.size = size; self.scale = scale; self.packing = packing
         self.fixedColumns = fixedColumns; self.anchorID = anchorID
+        self.preparesWaterfall = preparesWaterfall
+        self.overviewLongEdge = overviewLongEdge
         self.initialProtectedIDs = initialProtectedIDs.isEmpty ? [] : Set(((anchorID.map { [$0] } ?? [])
             + initialProtectedIDs.filter { $0 != anchorID }).prefix(20))
         waterfallWidth = NoteReviewCanvasWaterfallMetrics(viewport: size,
             accessibility: style.traits.preferredContentSizeCategory.isAccessibilityCategory,
             regularWidth: style.traits.horizontalSizeClass == .regular).cardWidth
-        atlas = CanvasOverviewFallbackAtlas(count: count)
+        atlas = CanvasOverviewFallbackAtlas(count: count, layoutCount: preparesWaterfall ? 2 : 1,
+            maximumSide: overviewLongEdge < 2_048 ? 1_024 : 2_048)
     }
 
     /// 每条转换后立即移交预算缓存并绘制图集；取消在每条之间检查，不再积累全量富文本。
@@ -51,18 +56,21 @@ nonisolated final class CanvasOverviewBatchPreparation: @unchecked Sendable {
                       CanvasOverviewTextFactory.makeRealNotes([source], style: style, cancellation: cancellation).first
                   }) else { return }
             let index = notes.count
-            let (first, second) = CanvasOverviewPreparationMetrics.measure("Measure text") {
-                (CanvasOverviewGeometryBuilder.makeContentGeometry(note: note, width: width),
-                 CanvasOverviewGeometryBuilder.makeContentGeometry(note: note, width: waterfallWidth))
+            let first = CanvasOverviewPreparationMetrics.measure("Measure desktop text") {
+                CanvasOverviewGeometryBuilder.makeContentGeometry(note: note, width: width)
             }
-            let (firstRegion, secondRegion) = CanvasOverviewPreparationMetrics.measure("Raster fallback") {
-                (atlas.append(index: index * 2, note: note, content: first, width: width, style: style),
-                 atlas.append(index: index * 2 + 1, note: note, content: second, width: waterfallWidth, style: waterfallStyle))
+            let firstRegion = CanvasOverviewPreparationMetrics.measure("Raster fallback") {
+                atlas.append(index: index * (preparesWaterfall ? 2 : 1), note: note, content: first, width: width, style: style)
             }
             desktop[index] = first.cached(in: store,
                 key: CanvasOverviewResourceKey(generation: generation, noteID: note.id, width: Int(width)), fallback: firstRegion)
-            waterfall.append(second.cached(in: store,
-                key: CanvasOverviewResourceKey(generation: generation, noteID: note.id, width: -Int(waterfallWidth)), fallback: secondRegion))
+            if preparesWaterfall {
+                let second = CanvasOverviewGeometryBuilder.makeContentGeometry(note: note, width: waterfallWidth)
+                let fallback = atlas.append(index: index * 2 + 1, note: note, content: second,
+                    width: waterfallWidth, style: waterfallStyle)
+                waterfall.append(second.cached(in: store,
+                    key: CanvasOverviewResourceKey(generation: generation, noteID: note.id, width: -Int(waterfallWidth)), fallback: fallback))
+            }
             let retained = note.cached(in: store, generation: generation)
             notes.append(retained)
             // Later batches must not evict the anchor that the pending first screen will display.
@@ -83,7 +91,8 @@ nonisolated final class CanvasOverviewBatchPreparation: @unchecked Sendable {
             CanvasOverviewModelBuilder.build(notes: notes, viewportSize: size, screenScale: scale,
                 style: style, waterfallStyle: waterfallStyle, isRealData: true, desktopCardWidth: width,
                 packing: packing, cancellation: cancellation, desktopContents: desktop,
-                waterfallContents: waterfall, fixedColumns: fixedColumns, anchorID: anchorID)
+                waterfallContents: waterfall, fixedColumns: fixedColumns, anchorID: anchorID,
+                preparesWaterfall: preparesWaterfall, overviewLongEdge: overviewLongEdge)
         }
     }
 }

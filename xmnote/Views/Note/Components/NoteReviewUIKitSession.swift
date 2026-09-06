@@ -53,6 +53,24 @@ final class NoteReviewUIKitSession {
 
     private let repository: any NoteRepositoryProtocol
     private let readScheduler = NoteReviewCanvasReadScheduler()
+    let usesDirectory: Bool
+    private lazy var directoryCursor = NoteReviewCanvasDirectoryCursor { [repository, readScheduler] request, cacheID in
+        try await repository.openNoteReviewDirectory(request: request, cacheID: cacheID,
+            schedule: { operation in
+                try await readScheduler.perform(priority: .utility, operation: operation)
+            }, progress: { _ in })
+    }
+    private var directoryTotalCount: Int?
+    private var directoryFirstOrdinal = 0
+    private var regionalOrdinals: [Int64: Int] = [:]
+    private var waterfallOrdinals: [Int64: Int] = [:]
+    private var directoryPageTask: Task<Void, Never>?
+    private var directoryPageGeneration: UInt64 = 0
+    private var pendingDirectoryPage: NoteReviewDirectoryPage?
+    private var requestedDirectoryPageID: Int64?
+    private(set) var directoryVersion: UInt64 = 0
+    var isReadingInteractionActive = false
+    var canApplyReadingWindow: (() -> Bool)?
     private var isDisposed = false
     private let launchPayload: NoteReviewLaunchPayload
     private let cache = NSCache<NSNumber, ItemBox>()
@@ -105,8 +123,9 @@ final class NoteReviewUIKitSession {
     var onError: ((String) -> Void)?
 
     /// 注入仓储与卡堆启动负载；首条完整内容同步写入有界缓存，避免出现加载中转页。
-    init(payload: NoteReviewLaunchPayload, repository: any NoteRepositoryProtocol) {
+    init(payload: NoteReviewLaunchPayload, repository: any NoteRepositoryProtocol, usesDirectory: Bool = false) {
         self.repository = repository
+        self.usesDirectory = usesDirectory
         self.launchPayload = payload
         self.settings = payload.settings
         self.currentNoteID = payload.selectedNoteID
@@ -128,6 +147,7 @@ final class NoteReviewUIKitSession {
 
     deinit {
         manifestTask?.cancel()
+        directoryPageTask?.cancel()
         overviewLayoutManifestTask?.cancel()
         settingObservationTask?.cancel()
         dataObservationTask?.cancel()
@@ -141,7 +161,14 @@ final class NoteReviewUIKitSession {
         index(of: currentNoteID) ?? 0
     }
 
-    var count: Int { orderedIDs.count }
+    var count: Int { directoryTotalCount ?? orderedIDs.count }
+    var loadedCount: Int { orderedIDs.count }
+    var localCurrentIndex: Int { noteIndexByID[currentNoteID] ?? 0 }
+    var isCurrentReadingWindowReady: Bool { noteIndexByID[currentNoteID] != nil }
+    var detailSource: ContentViewerSourceContext {
+        usesDirectory ? .noteReviewDirectory(.init(id: launchPayload.sessionID, provider: directoryCursor))
+            : .noteReview(noteIDs: orderedIDs)
+    }
 
     /// 主 actor 去重同一目标的删除；仓储事务提交后只由数据观察更新清单，离场后不再交付页面结果。
     func deleteNote(noteID: Int64) async throws {
@@ -189,7 +216,111 @@ final class NoteReviewUIKitSession {
 
     /// 以常数时间返回书摘在当前会话中的稳定索引。
     func index(of noteID: Int64) -> Int? {
-        noteIndexByID[noteID]
+        if let local = noteIndexByID[noteID] { return directoryFirstOrdinal + local }
+        return regionalOrdinals[noteID] ?? waterfallOrdinals[noteID]
+    }
+
+    /// 总览仅取得当前叶子的身份；目录打开共用 Session 任务，取消后不交付陈旧区域。
+    func readDirectoryRegion(noteID: Int64) async throws -> NoteReviewCanvasDirectoryRegion {
+        guard usesDirectory, !isDisposed else { throw CancellationError() }
+        try await directoryCursor.configure(directoryRequest())
+        guard let stack = try await directoryCursor.stack(.containing(noteID, capacity: settings.desktopGroupCapacity)) else {
+            throw NoteBatchMutationError.noteNotFound
+        }
+        let region = stack.region
+        try Task.checkCancellation()
+        guard !isDisposed else { throw CancellationError() }
+        directoryTotalCount = Int(region.totalCount)
+        // Only the resident regional window is retained, never the complete directory.
+        for (index, member) in region.members.enumerated() {
+            regionalOrdinals[member.record.noteID] = Int(region.group.firstOrdinal) + index
+        }
+        return region
+    }
+
+    /// 卡片堆浏览只传递小窗口身份，预览不改变回顾进度；异步返回必须仍属于存活页面。
+    func readDesktopStack(_ request: NoteReviewCanvasStackRequest) async throws -> NoteReviewCanvasStackGroup? {
+        guard usesDirectory, !isDisposed else { throw CancellationError() }
+        try await directoryCursor.configure(directoryRequest())
+        let group = try await directoryCursor.stack(request)
+        try Task.checkCancellation()
+        guard !isDisposed else { throw CancellationError() }
+        return group
+    }
+
+    /// 局部视口归还时释放屏外身份映射；完整阅读窗口拥有自己的独立身份表。
+    func retainDirectoryRegionIDs(_ ids: Set<Int64>) {
+        regionalOrdinals = regionalOrdinals.filter { ids.contains($0.key) || $0.key == currentNoteID }
+    }
+
+    /// 区域窗口仅按叶子身份读取邻区；主 actor 维护有界全局序号，取消不回流旧区域。
+    func readDirectoryRegion(groupID: NoteReviewDirectoryGroupID) async throws -> NoteReviewCanvasDirectoryRegion? {
+        guard usesDirectory, !isDisposed else { throw CancellationError() }
+        let region = try await directoryCursor.region(groupID)
+        try Task.checkCancellation()
+        guard !isDisposed else { throw CancellationError() }
+        if let region {
+            for (index, member) in region.members.enumerated() {
+                regionalOrdinals[member.record.noteID] = Int(region.group.firstOrdinal) + index
+            }
+        }
+        return region
+    }
+
+    /// 全景只取得集合统计，绝不把全景请求转换为正文预取。
+    func readDirectoryCatalog(scope: NoteReviewDirectoryGroupID?, maximumGroups: Int) async throws -> NoteReviewCanvasDirectoryCatalog {
+        guard usesDirectory, !isDisposed else { throw CancellationError() }
+        return try await directoryCursor.catalog(in: scope, currentID: currentNoteID, maximumGroups: maximumGroups)
+    }
+
+    /// 瀑布流独立持有最多 128 项身份，不会挤掉桌面当前九区的动作目标。
+    func readDirectoryWaterfallPage(around id: Int64) async throws -> NoteReviewDirectoryPage? {
+        guard usesDirectory, !isDisposed else { throw CancellationError() }
+        let page = try await directoryCursor.page(around: .noteID(id))
+        try Task.checkCancellation()
+        guard !isDisposed else { throw CancellationError() }
+        if let page {
+            waterfallOrdinals = Dictionary(uniqueKeysWithValues: page.members.enumerated().map {
+                ($0.element.record.noteID, Int(page.firstOrdinal) + $0.offset)
+            })
+        }
+        return page
+    }
+
+    /// 临近窗口边缘时异步准备相邻身份；手势结束后才原子替换集合数据，避免半途改变页码。
+    func prepareReadingWindow(around noteID: Int64) {
+        guard usesDirectory, !isDisposed else { return }
+        if let index = noteIndexByID[noteID] {
+            let hasLeadingRoom = index >= 24 || directoryFirstOrdinal == 0
+            let hasTrailingRoom = index < orderedIDs.count - 24 || directoryFirstOrdinal + loadedCount >= count
+            if hasLeadingRoom && hasTrailingRoom { return }
+        }
+        guard requestedDirectoryPageID != noteID else { return }
+        requestedDirectoryPageID = noteID
+        directoryPageTask?.cancel()
+        directoryPageGeneration &+= 1
+        let token = directoryPageGeneration
+        directoryPageTask = Task { [weak self] in
+            guard let self else { return }
+            defer { if token == directoryPageGeneration { requestedDirectoryPageID = nil } }
+            do {
+                try await directoryCursor.configure(directoryRequest())
+                let page = try await directoryCursor.page(around: .noteID(noteID))
+                try Task.checkCancellation()
+                guard !isDisposed, token == directoryPageGeneration else { return }
+                pendingDirectoryPage = page
+                applyPendingReadingWindow()
+            } catch is CancellationError { return }
+            catch { if !isDisposed { onError?("暂时无法准备下一段回顾") } }
+        }
+    }
+
+    /// 宿主在原生滚动落稳后调用；保留当前身份和它的屏幕位置，不用局部序号代替实际进度。
+    func applyPendingReadingWindow() {
+        guard !isReadingInteractionActive, canApplyReadingWindow?() != false, let page = pendingDirectoryPage,
+              page.members.contains(where: { $0.record.noteID == currentNoteID }) else { return }
+        pendingDirectoryPage = nil
+        applyDirectoryPage(page)
     }
 
     /// 按身份返回纸流测高所需的轻量内容源；清单未完成时允许已到达批次先行使用。
@@ -234,6 +365,15 @@ final class NoteReviewUIKitSession {
         persistSettings()
     }
 
+    /// 设置广播作为唯一布局失效入口，不改变目录或种子。
+    func updateDesktopGroupCapacity(_ capacity: Int) {
+        guard !isDisposed else { return }
+        let value = NoteReviewSettings.validatedDesktopGroupCapacity(capacity)
+        guard value != settings.desktopGroupCapacity else { return }
+        settings.desktopGroupCapacity = value
+        persistSettings()
+    }
+
     /// 页面永久关闭时立即解除任务和观察；已执行的系统读取可以返回，但不得再次提交。
     func dispose() {
         guard !isDisposed else { return }
@@ -241,6 +381,8 @@ final class NoteReviewUIKitSession {
         generation &+= 1
         overviewLayoutManifestGeneration &+= 1
         manifestTask?.cancel()
+        directoryPageTask?.cancel()
+        if usesDirectory { directoryCursor.close() }
         overviewLayoutManifestTask?.cancel()
         settingObservationTask?.cancel()
         dataObservationTask?.cancel()
@@ -251,6 +393,7 @@ final class NoteReviewUIKitSession {
         queuedLoads.removeAll()
         readScheduler.dispose()
         onManifestChanged = nil
+        canApplyReadingWindow = nil
         onOverviewInvalidated = nil
         onOverviewLayoutSourcesChanged = nil
         onOverviewLayoutBatch = nil
@@ -374,6 +517,7 @@ final class NoteReviewUIKitSession {
         refreshPinnedItems()
         cancelUnprotectedPendingLoads()
         requestForegroundItems()
+        prepareReadingWindow(around: noteID)
     }
 
     /// 固定最多二十个当前屏幕项目并按会话顺序补充内容，防止全景布局把全量 ID 长期驻留内存。
@@ -566,6 +710,10 @@ final class NoteReviewUIKitSession {
         guard settings.sortRule == .random else { return }
         sessionSeed = UInt64.random(in: UInt64.min...UInt64.max)
         shouldPreserveLaunchPrefix = false
+        if usesDirectory {
+            reloadDirectory(preserving: nil, refreshesContent: false)
+            return
+        }
         let sourceIDs = lastFetchedIDs.isEmpty ? orderedIDs : lastFetchedIDs
         orderedIDs = makeSessionOrder(from: sourceIDs, settings: settings)
         currentNoteID = orderedIDs.first ?? currentNoteID
@@ -579,6 +727,69 @@ final class NoteReviewUIKitSession {
 }
 
 private extension NoteReviewUIKitSession {
+    /// 外观不进入目录身份；随机前缀只取启动负载，避免分页过程改变全局排列。
+    func directoryRequest() -> NoteReviewDirectoryRequest {
+        .init(settings: settings, seed: sessionSeed,
+              preservedIDs: shouldPreserveLaunchPrefix ? launchPayload.loadedNoteIDs : [])
+    }
+
+    /// 打开无正文目录并交付有界阅读页；源页面在等待期间不清空，也不恢复成全量 ID 读取。
+    func reloadDirectory(preserving noteID: Int64?, refreshesContent: Bool) {
+        manifestTask?.cancel()
+        generation &+= 1
+        let token = generation
+        let request = directoryRequest()
+        let selectionAtRequest = currentNoteID
+        manifestTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await directoryCursor.configure(request,
+                    refresh: refreshesContent && directoryTotalCount != nil)
+                let anchor = noteID.map(NoteReviewDirectoryAnchor.noteID) ?? .ordinal(0)
+                var page = try await directoryCursor.page(around: anchor)
+                if page == nil {
+                    page = try await directoryCursor.page(around: .ordinal(Int64(currentIndex)))
+                }
+                if page == nil { page = try await directoryCursor.page(around: .ordinal(0)) }
+                try Task.checkCancellation()
+                guard !isDisposed, token == generation else { return }
+                if currentNoteID != selectionAtRequest {
+                    page = try await directoryCursor.page(around: .noteID(currentNoteID))
+                }
+                if refreshesContent {
+                    contentGeneration &+= 1
+                    cache.removeAllObjects()
+                    pendingLoads.values.forEach { $0.task.cancel() }
+                    queuedLoads.removeAll()
+                }
+                directoryVersion &+= 1
+                if let page {
+                    if !page.members.contains(where: { $0.record.noteID == currentNoteID }) {
+                        currentNoteID = page.focus?.member.record.noteID ?? page.members.first?.record.noteID ?? 0
+                    }
+                    pendingDirectoryPage = page
+                    applyPendingReadingWindow()
+                } else {
+                    directoryTotalCount = 0; directoryFirstOrdinal = 0
+                    orderedIDs = []; regionalOrdinals = [:]; currentNoteID = 0
+                    onManifestChanged?()
+                }
+                if refreshesContent { onOverviewInvalidated?() }
+            } catch is CancellationError { return }
+            catch { if !isDisposed, token == generation { onError?("暂时无法准备回顾目录") } }
+        }
+    }
+
+    /// 只替换最多 128 个身份；调用者负责在阅读手势外提交，并让真实正文缓存继续被复用。
+    func applyDirectoryPage(_ page: NoteReviewDirectoryPage) {
+        directoryTotalCount = Int(page.totalCount)
+        directoryFirstOrdinal = Int(page.firstOrdinal)
+        orderedIDs = page.members.map(\.record.noteID)
+        refreshPinnedItems()
+        requestForegroundItems()
+        onManifestChanged?()
+    }
+
     /// 把当前书摘及相邻项放进首个轻量批次；只改变读取优先级，不改变用户看到的筛选顺序。
     func prioritizedOverviewLayoutIDs() -> [Int64] {
         guard let currentIndex = noteIndexByID[currentNoteID], !orderedIDs.isEmpty else {
@@ -707,6 +918,10 @@ private extension NoteReviewUIKitSession {
         refreshesContent: Bool = false
     ) {
         guard !isDisposed else { return }
+        if usesDirectory {
+            reloadDirectory(preserving: noteID, refreshesContent: refreshesContent)
+            return
+        }
         manifestTask?.cancel()
         generation &+= 1
         let expectedGeneration = generation

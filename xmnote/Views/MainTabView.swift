@@ -993,10 +993,10 @@ struct MainTabView: View {
                     repositories: runtime.repositories,
                     toastCenter: toastCenter,
                     onDismiss: navigationCoordinator.dismissTask,
-                    onOpenDetail: { noteID, noteIDs in
+                    onOpenDetail: { noteID, source in
                         navigationCoordinator.present(
                             .contentViewer(
-                                source: .noteReview(noteIDs: noteIDs),
+                                source: source,
                                 initialItemID: .note(noteID),
                                 keyword: ""
                             )

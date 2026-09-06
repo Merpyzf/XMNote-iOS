@@ -9,7 +9,7 @@ import UIKit
 extension NoteReviewCanvasOverviewController {
     /// 主 actor 只在静止菜单意图下启动准备；实际选择复用同一代任务，不另建数据会话。
     func beginMenuPrewarming(ids: [Int64], currentID: Int64, settings: NoteReviewSettings) {
-        guard !isDisposed, !isCanvasPaused, !isApplyingDeletion, widthSession == nil,
+        guard stackBrowser == nil, stackTask == nil, !isDisposed, !isCanvasPaused, !isApplyingDeletion, widthSession == nil,
               transitionState == .idle, !activeScrollView.isDragging,
               !activeScrollView.isDecelerating, !desktopScrollView.isZooming else { return }
         isMenuPrewarming = true
@@ -50,6 +50,7 @@ extension NoteReviewCanvasOverviewController {
         guard isMenuPrewarming, !isCanvasPaused, !isDisposed, !isApplyingDeletion,
               menuPrewarmTask == nil, !preparationIsPending, widthSession == nil,
               transitionState == .idle, let model = preparedModel, let id = currentNoteID else { return }
+        guard model.isWaterfallPrepared else { return }
         let token = generation
         prepareTargetSurface(currentMode == .desktop ? .waterfall : .desktop)
         guard let plan = makeTransitionPlan(anchorNoteID: id) else { return }

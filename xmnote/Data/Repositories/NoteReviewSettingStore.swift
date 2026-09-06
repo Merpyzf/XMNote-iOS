@@ -65,6 +65,7 @@ nonisolated struct NoteReviewSettingStore {
         copy.selectedBookIDs = Self.uniquePositiveIDs(copy.selectedBookIDs)
         copy.selectedTagIDs = Self.uniquePositiveIDs(copy.selectedTagIDs)
         copy.desktopCardWidth = NoteReviewSettings.validatedDesktopCardWidth(copy.desktopCardWidth)
+        copy.desktopGroupCapacity = NoteReviewSettings.validatedDesktopGroupCapacity(copy.desktopGroupCapacity)
         if let favoriteTagID = copy.favoriteTagID, favoriteTagID <= 0 {
             copy.favoriteTagID = nil
         }

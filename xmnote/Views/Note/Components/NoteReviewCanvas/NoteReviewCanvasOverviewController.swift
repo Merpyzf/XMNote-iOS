@@ -99,6 +99,48 @@ class NoteReviewCanvasOverviewController: UIViewController {
     let widthRasterQueue = DispatchQueue(label: "com.wangke.xmnote.debug.width-raster", qos: .userInteractive)
     typealias SourceReader = @MainActor ([Int64], TaskPriority) async throws -> [NoteReviewOverviewLayoutSource]
     var sourceReader: SourceReader?
+    var stackGroupReader: (@MainActor (NoteReviewCanvasStackRequest) async throws -> NoteReviewCanvasStackGroup?)?
+    var onGroupCapacityChanged: ((Int) -> Void)?
+    var stackBrowser: CanvasStackBrowserView?
+    var stackSession: CanvasStackBrowsingSession?
+    let startStackAnimation: (UIViewPropertyAnimator) -> Void
+    var stackTask: Task<Void, Never>?
+    var stackNeighborTask: Task<Void, Never>?
+    var stackWork: CanvasOverviewTransitionPreparation?
+    var stackRequestGeneration = 0
+    var stackPreviews: [CanvasStackPreview] = []
+    var stackViewports: [NoteReviewCanvasStackID: CanvasOverviewViewportState] = [:]
+    var stackAllIDs: [Int64] = []
+    var stackFixtureSnapshot = UUID()
+    var selectedGroupCapacity = 96
+    var directoryRegionReader: (@MainActor (Int64) async throws -> NoteReviewCanvasDirectoryRegion)?
+    var directoryNeighborReader: (@MainActor (NoteReviewDirectoryGroupID) async throws -> NoteReviewCanvasDirectoryRegion?)?
+    var directoryCatalogReader: (@MainActor (NoteReviewDirectoryGroupID?, Int) async throws -> NoteReviewCanvasDirectoryCatalog)?
+    var directoryWaterfallPageReader: (@MainActor (Int64) async throws -> NoteReviewDirectoryPage?)?
+    var directoryWaterfallPage: NoteReviewDirectoryPage?
+    var waterfallPageTask: Task<Void, Never>?
+    var waterfallPageWork: CanvasOverviewTransitionPreparation?
+    var waterfallPageGeneration = 0
+    var pendingWaterfallPage: (NoteReviewDirectoryPage, CanvasOverviewWaterfallGeometry)?
+    var directoryCatalog: NoteReviewCanvasDirectoryCatalog?
+    var directoryCatalogTask: Task<Void, Never>?
+    var directoryCatalogGeneration = 0
+    var isCatalogHandoffPending = false
+    var canCommitBackgroundGeometry: (() -> Bool)?
+    let directoryCatalogView = NoteReviewCanvasCatalogView()
+    var onResidentRegionIDs: ((Set<Int64>) -> Void)?
+    var regionalModels: [NoteReviewDirectoryGroupID: CanvasOverviewPreparedModel] = [:]
+    var regionalMetadata: [NoteReviewDirectoryGroupID: NoteReviewCanvasDirectoryRegion] = [:]
+    var regionalWindow: NoteReviewCanvasRegionWindow?
+    var regionalTask: Task<Void, Never>?
+    var regionalWork: CanvasOverviewTransitionPreparation?
+    var regionalRequestGeneration = 0
+    var regionalDesiredIDs: [NoteReviewDirectoryGroupID] = []
+    var regionalUnavailableIDs = Set<NoteReviewDirectoryGroupID>()
+    var regionalLastDemand: CFTimeInterval = 0
+    var directoryInputGeneration: UInt64?
+    var activeDirectoryRegion: NoteReviewCanvasDirectoryRegion?
+    var requestedPreparationMode: Mode = .desktop
     var backgroundReader: (@MainActor (String) async throws -> CGImage?)?
     var preparedBackgroundURL: String?
     var preparedBackgroundImage: CGImage?
@@ -114,6 +156,7 @@ class NoteReviewCanvasOverviewController: UIViewController {
     var onSettledMode: ((Mode) -> Void)?
     var onConfirmedWidth: ((Int) -> Void)?
     var onControlsChanged: (() -> Void)?
+    var onModeTransitionProgress: ((Mode, Mode, CGFloat) -> Void)?
     var onPreparationChanged: ((Bool, String?) -> Void)?
     var onReady: (() -> Void)?
     var onDemand: (([Int64], [Int64]) -> Void)?
@@ -152,7 +195,11 @@ class NoteReviewCanvasOverviewController: UIViewController {
     var lastStableWaterfallOffset: CGPoint = .zero
     var appearanceTraitRegistration: (any UITraitChangeRegistration)?
 
-    init() { super.init(nibName: nil, bundle: nil) }
+    /// 生产默认立即运行原生时间轴；限定测试可注入同步暂停的时钟驱动，不读取任何诊断偏好。
+    init(startStackAnimation: @escaping (UIViewPropertyAnimator) -> Void = { $0.startAnimation() }) {
+        self.startStackAnimation = startStackAnimation
+        super.init(nibName: nil, bundle: nil)
+    }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
@@ -450,6 +497,10 @@ class NoteReviewCanvasOverviewController: UIViewController {
     /// 主 actor 接受输入，后台队列只消费不可变值；每批完成才读取下一批，代次和取消共同保护提交。
     func requestPreparation(count: Int, preservingCurrentID: Int64?) {
         guard !isDisposed, !isCanvasPaused, desktopScrollView.bounds.width > 0 else { return }
+        cancelStackBrowsingImmediately()
+        selectedCount = count
+        cancelRegionalPreparation()
+        cancelWaterfallPagePreparation()
         cancelDeletionUpdate()
         pendingDeletionSnapshot = nil
         cancelProgrammaticPositioning()
@@ -468,6 +519,8 @@ class NoteReviewCanvasOverviewController: UIViewController {
         generation += 1
         let token = generation
         let size = desktopScrollView.bounds.size
+        let previousGroup = activeDirectoryRegion?.stackID
+        let previousColumns = lastPreparedViewportSize == size ? preparedModel?.canvasGeometry.columnCount : nil
         lastPreparedViewportSize = size
         var style = CanvasOverviewPaperStyle(traits: traitCollection, settings: renderingSettings)
         var waterfallStyle = CanvasOverviewPaperStyle(traits: traitCollection,
@@ -481,7 +534,22 @@ class NoteReviewCanvasOverviewController: UIViewController {
         realDataTask = Task(priority: isMenuPrewarming ? .utility : .userInitiated) { [weak self] in
             guard let self else { return }
             do {
-                let ids = try await resolveDataIDs?() ?? dataIDs
+                let ids: [Int64]
+                if let directoryRegionReader, let id = preservingCurrentID {
+                    let region = try await directoryRegionReader(id)
+                    try Task.checkCancellation()
+                    guard generation == token else { return }
+                    activeDirectoryRegion = region
+                    selectedCount = Int(region.totalCount)
+                    ids = region.members.map(\.record.noteID)
+                } else {
+                    let all = try await resolveDataIDs?() ?? (stackAllIDs.isEmpty ? dataIDs : stackAllIDs)
+                    stackAllIDs = all
+                    let group = fixtureStack(containing: preservingCurrentID ?? all.first ?? 0)
+                        ?? all.first.flatMap { self.fixtureStack(containing: $0) }
+                    activeDirectoryRegion = group?.region
+                    ids = group?.noteIDs ?? []
+                }
                 try Task.checkCancellation()
                 guard generation == token else { return }
                 dataIDs = ids
@@ -495,14 +563,20 @@ class NoteReviewCanvasOverviewController: UIViewController {
                 style.backgroundImage = backgroundURL == nil ? nil : preparedBackgroundImage
                 waterfallStyle.backgroundImage = style.backgroundImage
                 let model = try await prepareModel(ids: ids, style: style, waterfallStyle: waterfallStyle,
-                    size: size, scale: scale, width: width, packing: packing, work: work)
+                    size: size, scale: scale, width: width, packing: packing, work: work,
+                    fixedColumns: previousGroup != nil && previousGroup == activeDirectoryRegion?.stackID ? previousColumns : nil,
+                    preparesWaterfall: requestedPreparationMode == .waterfall)
                 try Task.checkCancellation()
                 guard generation == token else { return }
                 modelPreparation = nil
                 realDataTask = nil
                 preparationIsPending = false
-                if let model {
-                    commit(model: model, preservingCurrentID: preservingCurrentID)
+                if var model {
+                    if directoryRegionReader != nil, currentMode == .waterfall, let old = preparedModel {
+                        model.waterfallGeometry = old.waterfallGeometry
+                        model.isWaterfallPrepared = old.isWaterfallPrepared
+                    }
+                    commit(model: seedRegionalWindow(model), preservingCurrentID: preservingCurrentID)
                 } else if ids.isEmpty {
                     preparedModel = nil
                     waterfallLayout.geometry = nil
@@ -530,11 +604,14 @@ class NoteReviewCanvasOverviewController: UIViewController {
     /// 读取入口由宿主注入；此组件不持有 Repository 或业务会话。
     func prepareModel(ids: [Int64], style: CanvasOverviewPaperStyle, waterfallStyle: CanvasOverviewPaperStyle,
         size: CGSize, scale: CGFloat, width: CGFloat, packing: CanvasOverviewDesktopPacking,
-        work: CanvasOverviewTransitionPreparation, fixedColumns: Int? = nil) async throws -> CanvasOverviewPreparedModel? {
+        work: CanvasOverviewTransitionPreparation, fixedColumns: Int? = nil,
+        preparesWaterfall: Bool = true, preparesInitialViewport: Bool = true,
+        requestedAnchor: Int64? = nil) async throws -> CanvasOverviewPreparedModel? {
         guard let sourceReader else { throw CancellationError() }
         let queue = preparationQueue
         let store = previewStore
-        let anchorID = currentNoteID
+        let anchorID = requestedAnchor ?? currentNoteID
+        let overviewLongEdge: CGFloat = ids.count <= 128 ? 1_024 : 2_048
         let anchorIndex = anchorID.flatMap { ids.firstIndex(of: $0) } ?? ids.count / 2
         let protectedStart = max(0, min(anchorIndex - 9, ids.count - 20))
         let initialProtectedIDs = Set(ids[protectedStart..<min(ids.count, protectedStart + 20)])
@@ -542,7 +619,8 @@ class NoteReviewCanvasOverviewController: UIViewController {
             queue.async {
                 continuation.resume(returning: CanvasOverviewBatchPreparation(count: ids.count, store: store, style: style,
                     waterfallStyle: waterfallStyle, width: width, size: size, scale: scale, packing: packing,
-                    fixedColumns: fixedColumns, anchorID: anchorID, initialProtectedIDs: initialProtectedIDs))
+                    fixedColumns: fixedColumns, anchorID: anchorID, initialProtectedIDs: initialProtectedIDs,
+                    preparesWaterfall: preparesWaterfall, overviewLongEdge: overviewLongEdge))
             }
         }
         defer { withExtendedLifetime(builder) {} }
@@ -573,12 +651,12 @@ class NoteReviewCanvasOverviewController: UIViewController {
         var model: CanvasOverviewPreparedModel? = await withCheckedContinuation { continuation in
             queue.async { continuation.resume(returning: autoreleasepool { builder.finish(cancellation: work) }) }
         }
-        if let prepared = model, !prepared.notes.isEmpty {
-            let id = currentNoteID ?? prepared.notes[prepared.notes.count / 2].id
+        if preparesInitialViewport, let prepared = model, !prepared.notes.isEmpty {
+            let id = anchorID ?? prepared.notes[prepared.notes.count / 2].id
             let initialIDs = readablePreviewIDs(model: prepared, mode: .desktop, noteID: id,
                 canvasRect: prepared.initialViewportRect,
                 zoomScale: prepared.canvasGeometry.readableZoomScale(in: size))
-            try await warmPreviews(ids: initialIDs, model: prepared, work: work)
+            try await warmPreviews(ids: initialIDs, model: prepared, work: work, modes: [.desktop])
             let image = await preparedViewportImage(model: prepared, canvasRect: prepared.initialViewportRect,
                                                     size: size, scale: scale)
             try Task.checkCancellation()
@@ -596,8 +674,9 @@ class NoteReviewCanvasOverviewController: UIViewController {
             deferredModel = (model, preservingCurrentID, generation)
             return
         }
+        let wasCatalog = directoryCatalog != nil
         if let id = currentNoteID, preparedModel != nil {
-            saveViewport(for: currentMode, noteID: id)
+            if !wasCatalog, stackBrowser == nil { saveViewport(for: currentMode, noteID: id) }
             if animatesEnvironmentChange, environmentCover == nil {
                 environmentCover = view.snapshotView(afterScreenUpdates: false)
                 if let cover = environmentCover { cover.frame = view.bounds; view.addSubview(cover) }
@@ -605,19 +684,21 @@ class NoteReviewCanvasOverviewController: UIViewController {
         }
         let savedDesktop = restoringWidthViewport ?? desktopViewport
         let savedWaterfall = waterfallViewport
-        let savedFullDesktop = isShowingFullDesktop
+        let savedFullDesktop = !wasCatalog && isShowingFullDesktop
         let modeToRestore = currentMode
         transitionContext?.animator.stopAnimation(true)
         cleanUpTransition(settledMode: currentMode)
         transitionState = .settling
         isPositioningViewport = true
 
+        clearDirectoryCatalogSurface()
+
         preparedModel = model
         zoomContentView.isHidden = false
         selectedDesktopCardWidth = model.canvasGeometry.cardWidth
         desktopPacking = model.canvasGeometry.parameters.packing
         usesRealData = model.isRealData
-        selectedCount = model.notes.count
+        selectedCount = activeDirectoryRegion.map { Int($0.totalCount) } ?? model.notes.count
         let nextID = preservingCurrentID.flatMap { model.canvasGeometry.indexByID[$0] == nil ? nil : $0 }
             ?? (model.isRealData ? model.previewRichNoteIDs.first : nil)
             ?? model.notes[model.notes.count / 2].id
@@ -627,12 +708,13 @@ class NoteReviewCanvasOverviewController: UIViewController {
         zoomContentView.transform = .identity
         zoomContentView.frame = CGRect(origin: .zero, size: model.canvasGeometry.contentSize)
         zoomContentView.layoutIfNeeded()
-        zoomContentView.configure(
-            geometry: model.canvasGeometry,
-            overviewImage: model.overviewImage,
-            style: model.style,
-            viewportSize: desktopScrollView.bounds.size
-        )
+        if model.canvasGeometry.regionSlices.isEmpty {
+            zoomContentView.configure(geometry: model.canvasGeometry, overviewImage: model.overviewImage,
+                style: model.style, viewportSize: desktopScrollView.bounds.size)
+        } else {
+            zoomContentView.configureRegional(geometry: model.canvasGeometry, models: regionalModels,
+                style: model.style, viewportSize: desktopScrollView.bounds.size)
+        }
         desktopScrollView.contentSize = model.canvasGeometry.contentSize
         configureDesktopZoom(for: model.canvasGeometry)
 
@@ -679,12 +761,19 @@ class NoteReviewCanvasOverviewController: UIViewController {
 
         if animatesEnvironmentChange, let cover = environmentCover {
             environmentCover = nil
-            UIView.animate(withDuration: 0.12, animations: { cover.alpha = 0 }) { _ in cover.removeFromSuperview() }
+            isCatalogHandoffPending = wasCatalog
+            UIView.animate(withDuration: 0.12, animations: { cover.alpha = 0 }) { [weak self] _ in
+                cover.removeFromSuperview()
+                guard let self, wasCatalog else { return }
+                isCatalogHandoffPending = false
+                if !isDisposed, !isCanvasPaused { onReady?() }
+            }
         }
         updateCountMenu()
         if let id = currentNoteID {
             saveViewport(for: .desktop, noteID: id)
             saveViewport(for: .waterfall, noteID: id)
+            if wasCatalog { onCurrentChanged?(id) }
         }
     }
 
@@ -842,7 +931,9 @@ class NoteReviewCanvasOverviewController: UIViewController {
     }
 
     @objc func returnToCurrent() {
+        if stackBrowser != nil || stackTask != nil { dismissStackBrowser(); return }
         guard transitionContext == nil, !isPreparingDesktopWidth else { return }
+        if directoryCatalog != nil { restoreDirectoryDesktop(); return }
         switch currentMode {
         case .desktop:
             positionDesktop(on: currentNoteID, zoomScale: desktopScrollView.zoomScale, animated: true)
@@ -852,10 +943,20 @@ class NoteReviewCanvasOverviewController: UIViewController {
     }
 
     @objc func toggleFullDesktop() {
+        if stackBrowser != nil || stackTask != nil { dismissStackBrowser(); return }
         guard currentMode == .desktop,
               !isPreparingDesktopWidth,
               transitionContext == nil,
               let geometry = preparedModel?.canvasGeometry else { return }
+        if hasMultipleStacks {
+            presentStackBrowser()
+            return
+        }
+        toggleLocalDesktopScale(geometry)
+    }
+
+    /// 缩放只作用于当前完整组，双击不再把正文变成抽象目录。
+    func toggleLocalDesktopScale(_ geometry: CanvasOverviewCanvasGeometry) {
         let targetScale = isShowingFullDesktop
             ? geometry.readableZoomScale(in: desktopScrollView.bounds.size)
             : geometry.fitZoomScale(in: desktopScrollView.bounds.size)
@@ -868,6 +969,11 @@ class NoteReviewCanvasOverviewController: UIViewController {
               !isObjectMenuPresented,
               transitionContext == nil,
               let geometry = preparedModel?.canvasGeometry else { return }
+        if directoryCatalog != nil {
+            if let group = directoryCatalogView.group(at: recognizer.location(in: directoryCatalogView)) { expandDirectoryGroup(group) }
+            else { onBlankTap?() }
+            return
+        }
         let point = recognizer.location(in: zoomContentView.canvasView)
         guard let paper = geometry.paper(at: point) else { onBlankTap?(); return }
         setCurrentNoteID(paper.noteID, announce: true)
@@ -883,17 +989,12 @@ class NoteReviewCanvasOverviewController: UIViewController {
               let geometry = preparedModel?.canvasGeometry else { return }
         let point = recognizer.location(in: zoomContentView.canvasView)
         guard geometry.paper(at: point) == nil else { return }
-        toggleFullDesktop()
+        toggleLocalDesktopScale(geometry)
     }
 
     func updateFullDesktopButton() {
-        let imageName = isShowingFullDesktop
-            ? "scope"
-            : "arrow.down.right.and.arrow.up.left"
-        fullDesktopButton.configuration?.image = UIImage(systemName: imageName)
-        fullDesktopButton.accessibilityLabel = isShowingFullDesktop
-            ? "回到当前书摘"
-            : "查看完整桌面"
+        fullDesktopButton.configuration?.image = UIImage(systemName: desktopOverviewIcon)
+        fullDesktopButton.accessibilityLabel = desktopOverviewLabel
     }
 
     // MARK: Position and selection
@@ -983,6 +1084,7 @@ class NoteReviewCanvasOverviewController: UIViewController {
     }
 
     func updateCurrentFromDesktopCenter() {
+        guard directoryCatalog == nil, stackBrowser == nil else { return }
         guard transitionState == .idle, !isPositioningViewport, !isPreparingDesktopWidth,
               !isObjectMenuPresented else { return }
         guard let geometry = preparedModel?.canvasGeometry else { return }
@@ -1037,6 +1139,7 @@ class NoteReviewCanvasOverviewController: UIViewController {
     }
 
     func updateCanvasAccessibility() {
+        guard directoryCatalog == nil else { return }
         guard let geometry = preparedModel?.canvasGeometry else { return }
         zoomContentView.canvasView.onNoteAccessibilityActions = { [weak self] id in
             self?.onNoteAccessibilityActions?(id) ?? []
@@ -1100,6 +1203,9 @@ class NoteReviewCanvasOverviewController: UIViewController {
           cells \(waterfallView.visibleCells.count)
           state \(transitionState.rawValue)
           shared \(lastTransitionParticipantCount) / all \(transitionContext?.scene.plan.cards.count ?? 0)
+          stacks \(stackPreviews.count) / papers \(stackPreviews.reduce(0) { $0 + $1.papers.count })
+          group \(preparedModel?.notes.count ?? 0) / capacity \(selectedGroupCapacity)
+          stack pixels \(String(format: "%.1fMB", Double(stackPreviews.reduce(0) { $0 + $1.pixelBytes }) / 1_048_576))
         """
         if let model = preparedModel { diagnosticsLabel.text! += "\n" + model.canvasGeometry.packingSummary }
         if let s = widthSession {
@@ -1133,6 +1239,7 @@ extension NoteReviewCanvasOverviewController: UIScrollViewDelegate {
     func scrollViewDidZoom(_ scrollView: UIScrollView) {
         guard scrollView === desktopScrollView else { return }
         updateDesktopContentInset()
+        if directoryCatalog != nil { isShowingFullDesktop = true; return }
         isShowingFullDesktop = preparedModel.map {
             abs(scrollView.zoomScale - $0.canvasGeometry.fitZoomScale(in: scrollView.bounds.size)) < 0.015
         } ?? false
@@ -1195,7 +1302,7 @@ extension NoteReviewCanvasOverviewController: UIScrollViewDelegate {
     }
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
-        guard transitionState == .idle, !isPositioningViewport else { return }
+        guard transitionState == .idle, !isPositioningViewport, directoryCatalog == nil else { return }
         if CACurrentMediaTime() - lastPreviewRequestTime > 0.08 { reportDemand() }
         guard scrollView === desktopScrollView else { return }
         let rect = zoomContentView.canvasView.convert(scrollView.bounds, from: scrollView)
@@ -1205,7 +1312,7 @@ extension NoteReviewCanvasOverviewController: UIScrollViewDelegate {
 
 extension NoteReviewCanvasOverviewController: UICollectionViewDataSource, UICollectionViewDelegate {
     func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
-        preparedModel?.notes.count ?? 0
+        preparedModel?.waterfallGeometry.notes.count ?? 0
     }
 
     func collectionView(
@@ -1216,7 +1323,7 @@ extension NoteReviewCanvasOverviewController: UICollectionViewDataSource, UIColl
             withReuseIdentifier: CanvasOverviewWaterfallCell.reuseID,
             for: indexPath
         ) as! CanvasOverviewWaterfallCell
-        if let model = preparedModel, let note = model.notes[safe: indexPath.item] {
+        if let model = preparedModel, let note = model.waterfallGeometry.notes[safe: indexPath.item] {
             cell.configure(note: note, geometry: model.waterfallGeometry.contentGeometries[indexPath.item],
                 size: model.waterfallGeometry.frames[indexPath.item].size, style: model.waterfallStyle)
             cell.accessibilityCustomActions = onNoteAccessibilityActions?(note.id)
@@ -1225,7 +1332,7 @@ extension NoteReviewCanvasOverviewController: UICollectionViewDataSource, UIColl
     }
 
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
-        guard !isObjectMenuPresented, let note = preparedModel?.notes[safe: indexPath.item] else { return }
+        guard !isObjectMenuPresented, let note = preparedModel?.waterfallGeometry.notes[safe: indexPath.item] else { return }
         setCurrentNoteID(note.id, announce: true)
         onActivate?(note.id)
     }
@@ -1236,6 +1343,11 @@ extension NoteReviewCanvasOverviewController: UICollectionViewDataSource, UIColl
 
 extension NoteReviewCanvasOverviewController {
     func requestMode(_ target: Mode) {
+        if stackBrowser != nil {
+            pendingMode = target
+            dismissStackBrowser()
+            return
+        }
         if let session = widthSession {
             modeControl.selectedSegmentIndex = target.rawValue
             session.requestedMode = target
@@ -1283,6 +1395,10 @@ extension NoteReviewCanvasOverviewController {
             return
         }
         guard target != currentMode else { return }
+        if target == .waterfall, !ensureWaterfallPrepared() {
+            pendingMode = target
+            return
+        }
         transitionState = .preparing
         transitionPreviewPins.removeAll()
         onPreparationChanged?(true, nil)
@@ -1395,11 +1511,13 @@ extension NoteReviewCanvasOverviewController {
         let context = CanvasOverviewTransitionContext(from: from, to: to, animator: animator, scene: scene, generation: token)
         transitionContext = context
         onControlsChanged?()
+        onModeTransitionProgress?(from, to, 0)
         lastTransitionParticipantCount = plan.cards.filter { $0.kind == .migrate }.count
         let interval = signposter.beginInterval("Continuous paper reflow")
         animator.addCompletion { [weak self, weak context] position in
             guard let self, let context, self.transitionContext === context else { return }
             context.scene.render(progress: position == .start ? 0 : 1)
+            self.onModeTransitionProgress?(context.fromMode, context.toMode, position == .start ? 0 : 1)
             self.signposter.endInterval("Continuous paper reflow", interval)
             self.cleanUpTransition(settledMode: position == .start ? context.fromMode : context.toMode)
         }
@@ -1462,7 +1580,7 @@ extension NoteReviewCanvasOverviewController {
         }
     }
 
-    func cleanUpTransition(settledMode: Mode) {
+    func cleanUpTransition(settledMode: Mode, commitsMode: Bool = true) {
         transitionState = .settling
         transitionDisplayLink?.invalidate()
         transitionDisplayLink = nil
@@ -1479,6 +1597,7 @@ extension NoteReviewCanvasOverviewController {
         transitionContext?.scene.removeFromSuperview()
         transitionContext = nil
         pendingMode = nil
+        if commitsMode { onSettledMode?(settledMode) }
         transitionState = .idle
         CATransaction.commit()
         setLoadingVisible(false)
@@ -1490,7 +1609,6 @@ extension NoteReviewCanvasOverviewController {
         reportDemand()
         transitionPreviewPins.removeAll()
         releaseHiddenWaterfallProtection()
-        onSettledMode?(settledMode)
         if showsDiagnosticControls, UIAccessibility.isVoiceOverRunning {
             let element: Any? = settledMode == .desktop
                 ? zoomContentView.canvasView.accessibilityElements?.first
@@ -1512,10 +1630,11 @@ extension NoteReviewCanvasOverviewController {
         let position = context.scene.clockView.layer.presentation()?.position.x
             ?? context.animator.fractionComplete
         context.scene.render(progress: context.animator.fractionComplete, physicalProgress: position)
+        onModeTransitionProgress?(context.fromMode, context.toMode, position)
     }
 
     func setSurfaceInteractionEnabled(_ enabled: Bool) {
-        desktopScrollView.isUserInteractionEnabled = enabled && currentMode == .desktop
+        desktopScrollView.isUserInteractionEnabled = enabled && currentMode == .desktop && stackBrowser == nil
         waterfallView.isUserInteractionEnabled = enabled && currentMode == .waterfall
     }
 
@@ -1538,16 +1657,22 @@ extension NoteReviewCanvasOverviewController {
     }
 
     func endpoint(in mode: Mode, noteID: Int64) -> CanvasOverviewRenderEndpoint? {
-        guard let model = preparedModel, let index = model.canvasGeometry.indexByID[noteID],
+        guard let model = preparedModel, let note = model.note(for: noteID),
               let pose = paperPose(in: mode, noteID: noteID) else { return nil }
-        let original = mode == .desktop ? model.canvasGeometry.papers[index]
-            : CanvasOverviewCanvasPaper(index: index, noteID: noteID,
-                frame: CGRect(origin: .zero, size: model.waterfallGeometry.frames[index].size),
-                visualFrame: .zero, rotation: 0, contentGeometry: model.waterfallGeometry.contentGeometries[index])
+        let mapping = mode == .desktop ? model.canvasGeometry.indexByID : model.waterfallGeometry.indexByID
+        guard let index = mapping[noteID] else { return nil }
+        let original: CanvasOverviewCanvasPaper
+        if mode == .desktop { original = model.canvasGeometry.papers[index] }
+        else {
+            guard let flowIndex = model.waterfallGeometry.indexByID[noteID] else { return nil }
+            original = CanvasOverviewCanvasPaper(index: index, noteID: noteID,
+                frame: CGRect(origin: .zero, size: model.waterfallGeometry.frames[flowIndex].size),
+                visualFrame: .zero, rotation: 0, contentGeometry: model.waterfallGeometry.contentGeometries[flowIndex])
+        }
         let local = CanvasOverviewCanvasPaper(index: index, noteID: noteID,
             frame: CGRect(origin: .zero, size: original.frame.size), visualFrame: .zero,
             rotation: 0, contentGeometry: original.contentGeometry.pinned())
-        return CanvasOverviewRenderEndpoint(note: model.notes[index], paper: local, pose: pose,
+        return CanvasOverviewRenderEndpoint(note: note, paper: local, pose: pose,
                                        style: mode == .desktop ? model.style : model.waterfallStyle)
     }
 
@@ -1560,7 +1685,7 @@ extension NoteReviewCanvasOverviewController {
             endpoint(in: .desktop, noteID: model.notes[$0].id)
         }
         let waterfallVisible = model.waterfallGeometry.indexes(in: waterfallView.bounds.insetBy(dx: 0, dy: -24)).compactMap {
-            endpoint(in: .waterfall, noteID: model.notes[$0].id)
+            endpoint(in: .waterfall, noteID: model.waterfallGeometry.notes[$0].id)
         }
         let panorama = anchor.pose.size.width < 116
         let ratio = panorama ? model.canvasGeometry.readableZoomScale(in: clip.size) / desktopScrollView.zoomScale : 1
@@ -1592,8 +1717,12 @@ extension NoteReviewCanvasOverviewController {
         }
         var migrated = 0
         let cards = ordered.compactMap { id -> CanvasOverviewSceneCard? in
-            guard let desktop = endpoint(in: .desktop, noteID: id),
-                  let waterfall = endpoint(in: .waterfall, noteID: id) else { return nil }
+            let actualDesktop = endpoint(in: .desktop, noteID: id)
+            let actualWaterfall = endpoint(in: .waterfall, noteID: id)
+            // A window-only paper has one real endpoint. The unused opposite side carries
+            // the same description; exit/enter never draws or prepares that synthetic side.
+            guard let desktop = actualDesktop ?? actualWaterfall,
+                  let waterfall = actualWaterfall ?? actualDesktop else { return nil }
             let isAnchor = id == anchorNoteID
             var kind: CanvasOverviewSceneCardKind
             if desktopIDs.contains(id), waterfallIDs.contains(id) {
@@ -1640,7 +1769,7 @@ nonisolated struct CanvasOverviewPreparedModel: Sendable {
     let notes: [CanvasOverviewNote]
     let noteByID: [Int64: CanvasOverviewNote]
     let canvasGeometry: CanvasOverviewCanvasGeometry
-    let waterfallGeometry: CanvasOverviewWaterfallGeometry
+    var waterfallGeometry: CanvasOverviewWaterfallGeometry
     let style: CanvasOverviewPaperStyle
     let waterfallStyle: CanvasOverviewPaperStyle
     let isRealData: Bool
@@ -1649,6 +1778,19 @@ nonisolated struct CanvasOverviewPreparedModel: Sendable {
     let overviewImage: UIImage?
     var initialViewportImage: UIImage?
     var initialViewportRect: CGRect
+    var isWaterfallPrepared = true
+    var regionalBackdrops: [NoteReviewDirectoryGroupID: UIImage] = [:]
+
+    /// 两种布局拥有各自有界窗口；跨模式查找只能按业务身份，不能共用数组下标。
+    func note(for id: Int64) -> CanvasOverviewNote? {
+        noteByID[id] ?? waterfallGeometry.indexByID[id].map { waterfallGeometry.notes[$0] }
+    }
+
+    /// 未准备某个模式的端点明确返回 nil，不能拿另一套排版补位。
+    func content(for id: Int64, mode: NoteReviewCanvasOverviewController.Mode) -> CanvasOverviewPaperContentGeometry? {
+        if mode == .desktop { return canvasGeometry.paper(for: id)?.contentGeometry }
+        return waterfallGeometry.indexByID[id].map { waterfallGeometry.contentGeometries[$0] }
+    }
 }
 
 /// 长期只保留身份和无障碍短摘要；完整富文本由页面有界缓存持有。
@@ -1924,6 +2066,7 @@ nonisolated struct CanvasOverviewCanvasGeometry: Sendable {
     let contentSize: CGSize
     let packingSummary: String
     let spatialIndex: NoteReviewCanvasGeometry
+    var regionSlices: [CanvasOverviewRegionSlice] = []
 
     func paper(for noteID: Int64) -> CanvasOverviewCanvasPaper? {
         indexByID[noteID].flatMap { papers[safe: $0] }
@@ -1939,11 +2082,27 @@ nonisolated struct CanvasOverviewCanvasGeometry: Sendable {
     }
 
     func indexes(in rect: CGRect) -> [Int] {
-        spatialIndex.indexes(in: rect.insetBy(dx: -20, dy: -20))
+        let query = rect.insetBy(dx: -20, dy: -20)
+        if !regionSlices.isEmpty {
+            return regionSlices.flatMap { slice in
+                guard slice.frame.intersects(query) else { return [Int]() }
+                return slice.geometry.indexes(in: query.offsetBy(dx: -slice.origin.x, dy: -slice.origin.y))
+                    .map { $0 + slice.indexRange.lowerBound }
+            }
+        }
+        return spatialIndex.indexes(in: query)
     }
 
     func paper(at point: CGPoint) -> CanvasOverviewCanvasPaper? {
-        spatialIndex.hitTest(point).flatMap { paper(for: $0) }
+        if !regionSlices.isEmpty {
+            for slice in regionSlices where slice.frame.contains(point) {
+                if let id = slice.geometry.hitTest(CGPoint(x: point.x - slice.origin.x, y: point.y - slice.origin.y)) {
+                    return paper(for: id)
+                }
+            }
+            return nil
+        }
+        return spatialIndex.hitTest(point).flatMap { paper(for: $0) }
     }
 
     func nearestPaper(to point: CGPoint) -> CanvasOverviewCanvasPaper? {
@@ -2261,6 +2420,8 @@ final class CanvasOverviewTransitionSceneView: NoteReviewCanvasTransitionSurface
     var papers: [CanvasOverviewTransitionPaperView] = []
     let reducedMotion: Bool
     let fromDesktop: Bool
+    private var renderedProgress: CGFloat = 0
+    private var renderedPhysicalProgress: CGFloat?
     var duration: TimeInterval { reducedMotion ? 0.12 : (plan.isPanorama ? 0.64 : 0.48) }
 
     init(plan: CanvasOverviewTransitionPlan, textures: CanvasOverviewSceneTextures, fromDesktop: Bool, reducedMotion: Bool) {
@@ -2276,7 +2437,7 @@ final class CanvasOverviewTransitionSceneView: NoteReviewCanvasTransitionSurface
         for imageView in [desktopBackground, waterfallBackground, desktopFull, waterfallFull] {
             imageView.frame = bounds
             imageView.contentMode = .scaleToFill
-            addSubview(imageView)
+            renderingContent.addSubview(imageView)
         }
         desktopBackground.image = textures.desktopBackground
         waterfallBackground.image = textures.waterfallBackground
@@ -2287,7 +2448,7 @@ final class CanvasOverviewTransitionSceneView: NoteReviewCanvasTransitionSurface
             waterfallFull.isHidden = true
             for (index, card) in plan.cards.enumerated() {
                 let paper = CanvasOverviewTransitionPaperView(card: card, textures: textures.blocks[index], style: plan.style)
-                addSubview(paper)
+                renderingContent.addSubview(paper)
                 papers.append(paper)
             }
             // Fixed ownership and z order; the anchor is never covered by a neighbor.
@@ -2304,7 +2465,17 @@ final class CanvasOverviewTransitionSceneView: NoteReviewCanvasTransitionSurface
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
+    /// 中断复用有界代理与原图，离屏绘制同一进度，不携带滚动容器的系统边缘结果。
+    override func preparedContentImage() -> UIImage? {
+        let copy = CanvasOverviewTransitionSceneView(plan: plan, textures: textures,
+            fromDesktop: fromDesktop, reducedMotion: reducedMotion)
+        copy.render(progress: renderedProgress, physicalProgress: renderedPhysicalProgress)
+        return rasterizePreparedScene(copy)
+    }
+
     func render(progress: CGFloat, physicalProgress: CGFloat? = nil) {
+        renderedProgress = progress
+        renderedPhysicalProgress = physicalProgress
         let u = fromDesktop ? progress : 1 - progress
         let physical = physicalProgress.map { fromDesktop ? $0 : 1 - $0 }
         CATransaction.begin()
@@ -2422,7 +2593,8 @@ nonisolated enum CanvasOverviewModelBuilder {
                       cancellation: CanvasOverviewTransitionPreparation? = nil,
                       desktopContents: [Int: CanvasOverviewPaperContentGeometry] = [:],
                       waterfallContents: [CanvasOverviewPaperContentGeometry]? = nil,
-                      fixedColumns: Int? = nil, anchorID: Int64? = nil) -> CanvasOverviewPreparedModel? {
+                      fixedColumns: Int? = nil, anchorID: Int64? = nil,
+                      preparesWaterfall: Bool = true, overviewLongEdge: CGFloat = 2_048) -> CanvasOverviewPreparedModel? {
         guard !notes.isEmpty, cancellation?.isCancelled != true else { return nil }
         guard let canvasGeometry = CanvasOverviewGeometryBuilder.makeCanvas(
             notes: notes,
@@ -2437,7 +2609,7 @@ nonisolated enum CanvasOverviewModelBuilder {
                 usesAccessibleLayout: style.traits.preferredContentSizeCategory.isAccessibilityCategory)
         ) else { return nil }
         guard let waterfallGeometry = CanvasOverviewGeometryBuilder.makeWaterfall(
-            notes: notes,
+            notes: preparesWaterfall ? notes : [],
             viewportSize: viewportSize,
             traits: style.traits, cancellation: cancellation, preparedContents: waterfallContents
         ) else { return nil }
@@ -2465,11 +2637,12 @@ nonisolated enum CanvasOverviewModelBuilder {
             overviewImage: CanvasOverviewCanvasRasterizer.makeOverview(
                 geometry: canvasGeometry,
                 style: style,
-                maximumLongEdge: 2_048, cancellation: cancellation
+                maximumLongEdge: overviewLongEdge, cancellation: cancellation
             ),
             // The caller warms the actual first neighborhood, then makes this one sharp surface.
             initialViewportImage: nil,
-            initialViewportRect: visibleRect
+            initialViewportRect: visibleRect,
+            isWaterfallPrepared: preparesWaterfall
         )
     }
 
@@ -2480,10 +2653,16 @@ nonisolated enum CanvasOverviewModelBuilder {
                               packing: CanvasOverviewDesktopPacking? = nil) -> CanvasOverviewPreparedModel {
         var parameters = model.canvasGeometry.parameters
         if let packing { parameters.packing = packing }
-        guard let geometry = CanvasOverviewGeometryBuilder.makeCanvas(notes: model.notes, viewportSize: viewportSize, cardWidth: width,
-            fixedColumns: model.canvasGeometry.columnCount, cancellation: cancellation, preparedContents: preparedContents,
-            isRTL: model.canvasGeometry.spatialIndex.isRTL,
-            parameters: parameters) else { return model }
+        let result: CanvasOverviewCanvasGeometry?
+        if model.canvasGeometry.regionSlices.isEmpty {
+            result = CanvasOverviewGeometryBuilder.makeCanvas(notes: model.notes, viewportSize: viewportSize, cardWidth: width,
+                fixedColumns: model.canvasGeometry.columnCount, cancellation: cancellation, preparedContents: preparedContents,
+                isRTL: model.canvasGeometry.spatialIndex.isRTL, parameters: parameters)
+        } else {
+            result = CanvasOverviewRegionalGeometry.reflow(model.canvasGeometry, width: width, viewport: viewportSize,
+                contents: preparedContents, anchorID: anchorID, cancellation: cancellation)
+        }
+        guard let geometry = result else { return model }
         // A cancelled, partial generation is never exposed; avoid expensive raster work on its way out.
         if cancellation?.isCancelled == true { return model }
         let paper = geometry.paper(for: anchorID) ?? geometry.papers[0]
@@ -2498,7 +2677,7 @@ nonisolated enum CanvasOverviewModelBuilder {
             overviewImage: CanvasOverviewCanvasRasterizer.makeOverview(geometry: geometry, style: model.style, maximumLongEdge: 2_048, cancellation: cancellation),
             initialViewportImage: CanvasOverviewCanvasRasterizer.makeViewport(geometry: geometry, style: model.style,
                 canvasRect: visibleRect, outputSize: viewportSize, outputScale: screenScale, cancellation: cancellation),
-            initialViewportRect: visibleRect)
+            initialViewportRect: visibleRect, isWaterfallPrepared: model.isWaterfallPrepared)
     }
 }
 
@@ -2679,7 +2858,8 @@ nonisolated enum CanvasOverviewGeometryBuilder {
     static func makeWaterfall(notes: [CanvasOverviewNote], viewportSize: CGSize,
                                traits: UITraitCollection,
                                cancellation: CanvasOverviewTransitionPreparation? = nil,
-                               preparedContents: [CanvasOverviewPaperContentGeometry]? = nil) -> CanvasOverviewWaterfallGeometry? {
+                               preparedContents: [CanvasOverviewPaperContentGeometry]? = nil,
+                               retainingFrames: [Int64: CGRect] = [:]) -> CanvasOverviewWaterfallGeometry? {
         let accessible = traits.preferredContentSizeCategory.isAccessibilityCategory
         let metrics = NoteReviewCanvasWaterfallMetrics(viewport: viewportSize, accessibility: accessible,
             regularWidth: traits.horizontalSizeClass == .regular)
@@ -2692,6 +2872,7 @@ nonisolated enum CanvasOverviewGeometryBuilder {
             heights: contents.map { $0.chapterRect.maxY + contentInset }, viewport: viewportSize,
             generation: 0, accessibility: accessible, regularWidth: traits.horizontalSizeClass == .regular,
             isRTL: traits.layoutDirection == .rightToLeft,
+            retainingFrames: retainingFrames,
             isCancelled: { cancellation?.isCancelled == true }) else { return nil }
         return CanvasOverviewWaterfallGeometry(notes: notes, frames: spatial.frames, contentGeometries: contents,
             columnIndexes: spatial.columnIndexes, indexByID: spatial.indexByID,
@@ -2904,6 +3085,7 @@ final class CanvasOverviewZoomContentView: UIView {
     let underlayView = UIImageView()
     let viewportUnderlayView = UIImageView()
     var underlayGeneration = -1
+    var regionalUnderlays: [UIImageView] = []
     private(set) var canvasView = NoteReviewCanvasSurfaceView()
 
     override init(frame: CGRect) {
@@ -2935,6 +3117,7 @@ final class CanvasOverviewZoomContentView: UIView {
         style: CanvasOverviewPaperStyle,
         viewportSize: CGSize
     ) {
+        regionalUnderlays.forEach { $0.removeFromSuperview() }; regionalUnderlays.removeAll()
         underlayView.image = overviewImage
         viewportUnderlayView.image = nil
         underlayGeneration = -1
@@ -3352,6 +3535,7 @@ extension NoteReviewCanvasOverviewController {
         guard widthSession == nil, currentMode == .desktop, transitionState == .idle,
               !isPreparingDesktopWidth, environmentCover == nil, let model = preparedModel,
               let id = currentNoteID, let index = model.canvasGeometry.indexByID[id] else { return }
+        cancelRegionalPreparation()
         desktopScrollView.stopScrollingAndZooming()
         guard let pose = paperPose(in: .desktop, noteID: id) else { return }
         let clip = desktopScrollView.convert(desktopScrollView.bounds, to: view)
@@ -3695,8 +3879,34 @@ extension NoteReviewCanvasOverviewController {
                 guard var model = try await prepareModel(ids: seed.model.notes.map(\.id), style: seed.model.style,
                     waterfallStyle: seed.model.waterfallStyle, size: seed.clip.size, scale: seed.screenScale,
                     width: width, packing: seed.model.canvasGeometry.parameters.packing, work: token,
-                    fixedColumns: seed.model.canvasGeometry.columnCount),
+                    fixedColumns: seed.model.canvasGeometry.columnCount, preparesWaterfall: seed.model.canvasGeometry.regionSlices.isEmpty,
+                    preparesInitialViewport: false),
                     !Task.isCancelled, !token.isCancelled else { return }
+                if !seed.model.canvasGeometry.regionSlices.isEmpty {
+                    let freshlyPrepared = model
+                    let reflowAnchor = session.openingViewport.noteID
+                    let rebuilt: (CanvasOverviewCanvasGeometry, [NoteReviewDirectoryGroupID: UIImage])? = await withCheckedContinuation { continuation in
+                        self.preparationQueue.async {
+                            guard let geometry = CanvasOverviewRegionalGeometry.reflow(seed.model.canvasGeometry,
+                                width: width, viewport: seed.clip.size,
+                                contents: Dictionary(uniqueKeysWithValues: freshlyPrepared.canvasGeometry.papers.map { ($0.index, $0.contentGeometry) }),
+                                anchorID: reflowAnchor, cancellation: token, notes: freshlyPrepared.notes) else {
+                                continuation.resume(returning: nil); return
+                            }
+                            var backdrops: [NoteReviewDirectoryGroupID: UIImage] = [:]
+                            for slice in geometry.regionSlices {
+                                guard !token.isCancelled else { continuation.resume(returning: nil); return }
+                                let local = CanvasOverviewRegionalGeometry.local(geometry, slice: slice)
+                                backdrops[slice.id] = CanvasOverviewCanvasRasterizer.makeOverview(geometry: local,
+                                    style: freshlyPrepared.style, maximumLongEdge: 768, cancellation: token)
+                            }
+                            continuation.resume(returning: (geometry, backdrops))
+                        }
+                    }
+                    guard let (geometry, backdrops) = rebuilt, !Task.isCancelled else { return }
+                    model = replacingCanvas(in: seed.model, with: geometry)
+                    model.regionalBackdrops = backdrops
+                }
                 guard let paper = model.canvasGeometry.paper(for: session.openingViewport.noteID) else { return }
                 let rect = CGRect(x: paper.frame.midX - seed.anchor.x / seed.scale,
                     y: paper.frame.midY - seed.anchor.y / seed.scale, width: seed.clip.width / seed.scale,
@@ -3756,12 +3966,18 @@ extension NoteReviewCanvasOverviewController {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         preparedModel = model
+        if !model.canvasGeometry.regionSlices.isEmpty { adoptRegionalWidthModel(model) }
         selectedDesktopCardWidth = model.canvasGeometry.cardWidth
         desktopScrollView.setZoomScale(1, animated: false)
         zoomContentView.transform = .identity
         zoomContentView.frame = CGRect(origin: .zero, size: model.canvasGeometry.contentSize)
-        zoomContentView.configure(geometry: model.canvasGeometry, overviewImage: model.overviewImage,
-                                 style: model.style, viewportSize: session.clip.size)
+        if model.canvasGeometry.regionSlices.isEmpty {
+            zoomContentView.configure(geometry: model.canvasGeometry, overviewImage: model.overviewImage,
+                                     style: model.style, viewportSize: session.clip.size)
+        } else {
+            zoomContentView.configureRegional(geometry: model.canvasGeometry, models: regionalModels,
+                style: model.style, viewportSize: session.clip.size)
+        }
         desktopScrollView.contentSize = model.canvasGeometry.contentSize
         desktopScrollView.minimumZoomScale = min(session.seed.scale, max(0.01, model.canvasGeometry.fitZoomScale(in: session.clip.size) * 0.72))
         desktopScrollView.maximumZoomScale = max(1.55, session.seed.scale)
@@ -3943,6 +4159,21 @@ nonisolated struct CanvasOverviewWidthSeed: @unchecked Sendable {
         self.anchorIndex = anchorIndex
         self.scale = scale
         self.screenScale = screenScale
+        if !model.canvasGeometry.regionSlices.isEmpty {
+            let geometry = model.canvasGeometry
+            let paper = geometry.papers[anchorIndex]
+            let rect = CGRect(x: paper.frame.midX - self.anchor.x / scale,
+                y: paper.frame.midY - self.anchor.y / scale, width: clip.width / scale, height: clip.height / scale)
+            let candidate = rect.insetBy(dx: -rect.width, dy: -rect.height)
+            let slices = geometry.regionSlices.filter { $0.frame.intersects(candidate) || $0.indexRange.contains(anchorIndex) }
+            // Complete regions protect cross-region height propagation. Raster/agents remain bounded.
+            renderIndexes = slices.flatMap { Array($0.indexRange) }
+            rows = 0..<geometry.rows.count
+            groups = 0..<geometry.groups.count
+            columns = 0..<geometry.columnCount
+            rasterMode = renderIndexes.count > 48
+            return
+        }
         let count = model.canvasGeometry.columnCount
         let row = anchorIndex / count
         let column = anchorIndex % count
@@ -3990,6 +4221,7 @@ nonisolated struct CanvasOverviewWidthPreview: @unchecked Sendable {
     let layoutVersion: String
     let textures: [Int: [CanvasOverviewWidthBlock]]
     let textureBytes: Int
+    var regionalGeometry: CanvasOverviewCanvasGeometry?
 }
 
 nonisolated struct CanvasOverviewWidthPaperPose: Sendable {
@@ -4072,9 +4304,16 @@ nonisolated enum CanvasOverviewWidthBuilder {
             }
         }
         guard !cancellation.isCancelled else { return nil }
-        return CanvasOverviewWidthPreview(width: width, contents: contents, groupHeights: groupHeights,
+        var preview = CanvasOverviewWidthPreview(width: width, contents: contents, groupHeights: groupHeights,
                                      layoutVersion: geometry.parameters.version,
                                      textures: textures, textureBytes: bytes)
+        if !geometry.regionSlices.isEmpty {
+            preview.regionalGeometry = original ? geometry : CanvasOverviewRegionalGeometry.reflow(geometry,
+                width: width, viewport: seed.clip.size, contents: contents,
+                anchorID: geometry.papers[seed.anchorIndex].noteID, cancellation: cancellation)
+            guard preview.regionalGeometry != nil else { return nil }
+        }
+        return preview
     }
 
     /// Each preparation task owns its framesetters; parsed immutable attributes and decorations are retained.
@@ -4104,6 +4343,23 @@ nonisolated enum CanvasOverviewWidthBuilder {
     static func poses(seed: CanvasOverviewWidthSeed, width: CGFloat, source: CanvasOverviewWidthPreview,
                       target: CanvasOverviewWidthPreview, progress: CGFloat) -> [CanvasOverviewWidthPaperPose] {
         let geometry = seed.model.canvasGeometry
+        if let first = source.regionalGeometry, let second = target.regionalGeometry {
+            let a = first.papers[seed.anchorIndex].frame.center
+            let b = second.papers[seed.anchorIndex].frame.center
+            let anchor = CanvasOverviewMotion.mix(a, b, progress)
+            let preparedWidth = CanvasOverviewMotion.mix(first.cardWidth, second.cardWidth, progress)
+            let strideRatio = geometry.parameters.stride(width: width) / geometry.parameters.stride(width: preparedWidth)
+            return seed.renderIndexes.map { index in
+                let f = first.papers[index].frame
+                let t = second.papers[index].frame
+                let center = CanvasOverviewMotion.mix(f.center, t.center, progress)
+                return .init(index: index, pose: .init(center: CGPoint(
+                    x: seed.anchor.x + (center.x - anchor.x) * seed.scale * strideRatio,
+                    y: seed.anchor.y + (center.y - anchor.y) * seed.scale),
+                    size: CGSize(width: width * seed.scale, height: CanvasOverviewMotion.mix(f.height, t.height, progress) * seed.scale),
+                    rotation: geometry.papers[index].rotation))
+            }
+        }
         let count = geometry.columnCount
         guard source.layoutVersion == geometry.parameters.version, target.layoutVersion == source.layoutVersion else { return [] }
         let placements = source.groupHeights.indices.map { local -> CanvasOverviewPairPlacement in

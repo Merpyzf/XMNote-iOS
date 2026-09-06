@@ -10,6 +10,7 @@ import os
 /// 位置与密度共同定义同一幅像素，不能用当前书摘身份代替真实视口。
 nonisolated struct CanvasOverviewRasterPreparationKey: Hashable, Sendable {
     enum Kind: Hashable, Sendable {
+        case readingBackdrop(mode: Int)
         case viewport
         case reading(noteID: Int64, mode: Int)
     }

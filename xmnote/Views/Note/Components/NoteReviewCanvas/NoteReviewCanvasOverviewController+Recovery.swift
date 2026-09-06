@@ -8,10 +8,47 @@ import UIKit
 import OSLog
 
 extension NoteReviewCanvasOverviewController {
+    /// 准备不含系统边缘效果的整幅背景；桌面复用高清补底，瀑布流只绘制已准备的可见纸张。
+    /// 主 actor 固定视口与代次，准备队列绘制；取消或几何变化不交付旧背景。
+    func readingTransitionBackground(in container: UIView) async -> UIImageView? {
+        guard let model = preparedModel else { return nil }
+        let token = generation
+        let mode = currentMode
+        let scroll = mode == .desktop ? desktopScrollView : waterfallView
+        let frame = scroll.convert(scroll.bounds, to: container)
+        let image: UIImage?
+        if mode == .desktop {
+            let rect = zoomContentView.canvasView.convert(scroll.bounds, from: scroll)
+            image = await preparedViewportImage(model: model, canvasRect: rect,
+                size: scroll.bounds.size, scale: traitCollection.displayScale)
+        } else {
+            let clip = scroll.convert(scroll.bounds, to: view)
+            let visible = model.waterfallGeometry.indexes(in: waterfallView.bounds).compactMap {
+                endpoint(in: .waterfall, noteID: model.waterfallGeometry.notes[$0].id)
+            }
+            guard visible.allSatisfy({ $0.paper.contentGeometry.preparedBlocks != nil }) else { return nil }
+            let plan = CanvasOverviewTransitionPlan(clip: clip, cards: [], desktopVisible: [],
+                waterfallVisible: visible, style: model.style, isPanorama: false, focusRatio: 1,
+                desktopAnchor: .zero, focusAnchor: .zero, screenScale: traitCollection.displayScale,
+                generation: token, desktopCanvasRect: .zero, model: model)
+            let key = CanvasOverviewRasterPreparationKey(generation: token,
+                modelGeneration: model.notes.first?.key?.generation, kind: .readingBackdrop(mode: mode.rawValue),
+                rect: scroll.bounds, outputSize: frame.size, scale: traitCollection.displayScale)
+            image = await rasterPreparationCache.image(for: key, queue: preparationQueue) { work in
+                guard !work.isCancelled else { return nil }
+                return CanvasOverviewTransitionRasterizer.surface(visible, plan: plan, preparation: work)
+            }
+        }
+        guard let image, token == generation, currentMode == mode, !Task.isCancelled, !isDisposed else { return nil }
+        let background = UIImageView(image: image)
+        background.frame = frame
+        return background
+    }
+
     /// 只准备真实目标首屏；当前可信内容继续受保护，未显示的共享邻卡不再占用恢复预算。
     /// 主 actor 捕获几何，绘制在准备队列完成；取消或 generation 改变后不交付补底。
     func prepareReadableSurface(_ target: Mode, noteID: Int64) async throws {
-        guard let model = preparedModel, model.canvasGeometry.indexByID[noteID] != nil else {
+        guard let model = preparedModel, model.content(for: noteID, mode: target) != nil else {
             throw CanvasOverviewPreviewError.unavailable
         }
         let token = generation

@@ -44,7 +44,8 @@ nonisolated enum CanvasOverviewDeletionModelBuilder {
             canvasGeometry: model.canvasGeometry, waterfallGeometry: model.waterfallGeometry,
             style: model.style, waterfallStyle: model.waterfallStyle, isRealData: model.isRealData,
             richTextNoteCount: model.richTextNoteCount, previewRichNoteIDs: model.previewRichNoteIDs,
-            overviewImage: model.overviewImage, initialViewportImage: nil, initialViewportRect: rect)
+            overviewImage: model.overviewImage, initialViewportImage: nil, initialViewportRect: rect,
+            isWaterfallPrepared: model.isWaterfallPrepared)
     }
 
     /// 存活卡片重用原测量与缓存键，取消、重复或缺失身份不会交付半份模型。
@@ -58,10 +59,12 @@ nonisolated enum CanvasOverviewDeletionModelBuilder {
         for id in survivingIDs {
             guard cancellation?.isCancelled != true,
                   let index = model.canvasGeometry.indexByID[id],
-                  let note = model.noteByID[id],
-                  let waterfallIndex = model.waterfallGeometry.indexByID[id] else { return nil }
+                  let note = model.noteByID[id] else { return nil }
             desktop[notes.count] = model.canvasGeometry.papers[index].contentGeometry
-            waterfall.append(model.waterfallGeometry.contentGeometries[waterfallIndex])
+            if model.isWaterfallPrepared {
+                guard let waterfallIndex = model.waterfallGeometry.indexByID[id] else { return nil }
+                waterfall.append(model.waterfallGeometry.contentGeometries[waterfallIndex])
+            }
             notes.append(note)
         }
         guard Set(survivingIDs).count == notes.count,
@@ -69,7 +72,7 @@ nonisolated enum CanvasOverviewDeletionModelBuilder {
                 cardWidth: model.canvasGeometry.cardWidth, fixedColumns: model.canvasGeometry.columnCount,
                 cancellation: cancellation, preparedContents: desktop,
                 isRTL: model.canvasGeometry.spatialIndex.isRTL, parameters: model.canvasGeometry.parameters),
-              let flow = CanvasOverviewGeometryBuilder.makeWaterfall(notes: notes, viewportSize: viewportSize,
+              let flow = CanvasOverviewGeometryBuilder.makeWaterfall(notes: model.isWaterfallPrepared ? notes : [], viewportSize: viewportSize,
                 traits: model.style.traits, cancellation: cancellation, preparedContents: waterfall),
               let paper = canvas.paper(for: anchorID) else { return nil }
         let zoom = max(0.01, zoomScale)
@@ -83,7 +86,7 @@ nonisolated enum CanvasOverviewDeletionModelBuilder {
             overviewImage: CanvasOverviewCanvasRasterizer.makeOverview(geometry: canvas, style: model.style,
                 maximumLongEdge: 2_048, cancellation: cancellation),
             initialViewportImage: nil,
-            initialViewportRect: rect)
+            initialViewportRect: rect, isWaterfallPrepared: model.isWaterfallPrepared)
     }
 }
 
@@ -389,7 +392,8 @@ nonisolated struct CanvasOverviewDeletionPresentation: @unchecked Sendable {
             let indexes = desktop ? model.canvasGeometry.indexes(in: CGRect(
                 x: -origin.x / zoom, y: -origin.y / zoom, width: size.width / zoom, height: size.height / zoom))
                 : model.waterfallGeometry.indexes(in: bounds.offsetBy(dx: -flowOrigin.x, dy: flow - flowOrigin.y))
-            return indexes.map { model.notes[$0].id }
+            let notes = desktop ? model.notes : model.waterfallGeometry.notes
+            return indexes.map { notes[$0].id }
         }
         /// 把逻辑纸面映射到相同内容容器，缩放仅影响桌面空间变换。
         func pose(_ model: CanvasOverviewPreparedModel, id: Int64, origin: CGPoint, flow: CGFloat) -> CanvasOverviewPaperPose? {

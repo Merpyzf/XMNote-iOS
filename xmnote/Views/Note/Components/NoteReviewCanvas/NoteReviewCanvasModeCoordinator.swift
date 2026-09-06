@@ -28,6 +28,19 @@ struct NoteReviewCanvasReadingSurface {
 
 /// 原始排版尺寸与屏幕纸面分离；动画投影现成像素，不按屏幕宽度重新排版。
 struct NoteReviewCanvasReadingEndpoint {
+    /// 业务身份与准备代次绑定；两种排版分别保存自己的内容和外观版本。
+    struct Identity: Equatable {
+        let noteID: Int64
+        let requestGeneration: Int
+        let contentVersion: Int
+        let appearanceVersion: Int
+
+        /// 两种排版的版本可不同，但必须属于同一业务身份和同一次请求。
+        func belongsToSameRequest(as other: Self) -> Bool {
+            noteID == other.noteID && requestGeneration == other.requestGeneration
+        }
+    }
+    let identity: Identity?
     let image: UIImage
     let frame: CGRect
     let rotation: CGFloat
@@ -35,11 +48,15 @@ struct NoteReviewCanvasReadingEndpoint {
     let surface: NoteReviewCanvasReadingSurface
     let backdropColor: UIColor
     let imageIncludesSurface: Bool
+    let viewportImage: UIImage?
+    let viewportFrame: CGRect?
 
     /// 普通端点传入透明正文；中断捕获明确标记整纸像素，避免再次叠加纸皮。
     init(image: UIImage, frame: CGRect, rotation: CGFloat, logicalSize: CGSize? = nil,
          surface: NoteReviewCanvasReadingSurface = .init(color: .clear),
-         backdropColor: UIColor = .clear, imageIncludesSurface: Bool = false) {
+         backdropColor: UIColor = .clear, imageIncludesSurface: Bool = false,
+         viewportImage: UIImage? = nil, viewportFrame: CGRect? = nil, identity: Identity? = nil) {
+        self.identity = identity
         self.image = image
         self.frame = frame
         self.rotation = rotation
@@ -47,13 +64,16 @@ struct NoteReviewCanvasReadingEndpoint {
         self.surface = surface
         self.backdropColor = backdropColor
         self.imageIncludesSurface = imageIncludesSurface
+        self.viewportImage = viewportImage
+        self.viewportFrame = viewportFrame
     }
 
     /// 端点阴影、圆角与文字共享同一投影倍率，不把原始卡宽误认为屏幕宽度。
     var scale: CGFloat { frame.width / max(1, logicalSize.width) }
 
     /// 从正在显示的代理获取当前纸面；只用于用户中断，不在逐帧路径截屏。
-    @MainActor static func capture(_ paper: UIView, in container: UIView) -> Self {
+    @MainActor static func capture(_ paper: UIView, in container: UIView,
+        backdropColor: UIColor = .clear, surfaceColor: UIColor = .clear, cornerRadius: CGFloat = 0) -> Self {
         let center = paper.superview?.convert(paper.center, to: container) ?? paper.center
         let scale = hypot(paper.transform.a, paper.transform.b)
         let size = CGSize(width: paper.bounds.width * scale, height: paper.bounds.height * scale)
@@ -62,7 +82,8 @@ struct NoteReviewCanvasReadingEndpoint {
         let image = UIGraphicsImageRenderer(size: paper.bounds.size, format: format).image { paper.layer.render(in: $0.cgContext) }
         return Self(image: image, frame: CGRect(x: center.x - size.width / 2, y: center.y - size.height / 2,
             width: size.width, height: size.height), rotation: atan2(paper.transform.b, paper.transform.a),
-            logicalSize: paper.bounds.size, imageIncludesSurface: true)
+            logicalSize: paper.bounds.size, surface: .init(color: surfaceColor, cornerRadius: cornerRadius),
+            backdropColor: backdropColor, imageIncludesSurface: true)
     }
 }
 
@@ -76,6 +97,7 @@ final class NoteReviewCanvasModeCoordinator {
     var isOverviewTransition = false
     var reverseOverview: ((NoteReviewPresentationMode) -> Bool)?
     var onSurfaceChanged: (() -> Void)?
+    var onReadingProgress: ((NoteReviewPresentationMode, NoteReviewPresentationMode, CGFloat) -> Void)?
     var presentationScrollView: UIScrollView? { scene }
     private var sourceMode: NoteReviewPresentationMode?
     private var targetMode: NoteReviewPresentationMode?
@@ -87,6 +109,7 @@ final class NoteReviewCanvasModeCoordinator {
 
     /// 记录最新请求，不把尚未完成的目标写成已落稳模式。
     func request(_ target: NoteReviewPresentationMode) {
+        NoteReviewCanvasHandoffDiagnostics.event("request generation=\(generation) target=\(target.rawValue)")
         requestedMode = target
         state = .preparing
     }
@@ -117,8 +140,10 @@ final class NoteReviewCanvasModeCoordinator {
 
     /// 第三个目标接管实际显示端点；宿主先保留整幅源画面，旧动画完成回调失效。
     func interrupt(in container: UIView) -> NoteReviewCanvasReadingEndpoint? {
-        tick()
-        let endpoint = scene.map { NoteReviewCanvasReadingEndpoint.capture($0.paper, in: container) }
+        // The host already froze the displayed scene. Do not advance one more frame here.
+        let endpoint = scene.map { NoteReviewCanvasReadingEndpoint.capture($0.paper, in: container,
+            backdropColor: $0.backgroundColor ?? .clear, surfaceColor: $0.paperColor ?? .clear,
+            cornerRadius: $0.paperCornerRadius) }
         generation += 1
         dissolve?.cancel(); dissolve = nil
         animator?.stopAnimation(true); animator = nil
@@ -137,20 +162,26 @@ final class NoteReviewCanvasModeCoordinator {
         else if animator?.state == .active { animator?.startAnimation() }
     }
     /// 一次交还显示权后提交结果。
-    func settle(_ mode: NoteReviewPresentationMode) {
+    func settle(_ mode: NoteReviewPresentationMode, handoff: () -> Void = {}) {
         generation += 1
-        dissolve?.cancel(); dissolve = nil
         state = .settling
+        NoteReviewCanvasHandoffDiagnostics.event("handoff generation=\(generation) owner=live mode=\(mode.rawValue)")
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        dissolve?.cancel(); dissolve = nil
         settledMode = mode
         requestedMode = nil
         isOverviewTransition = false
+        // Reveal the prepared live owner before disposing the proxy in this same commit.
+        handoff()
         scene?.removeFromSuperview()
         scene = nil
         animator = nil
         clock?.invalidate()
         clock = nil
-        state = .idle
         onSurfaceChanged?()
+        CATransaction.commit()
+        state = .idle
     }
 
     /// 内容已就绪但共享端点不可用时仍完成用户选择，不让可选动画资源阻断阅读。
@@ -183,6 +214,8 @@ final class NoteReviewCanvasModeCoordinator {
         animator?.stopAnimation(true)
         clock?.invalidate()
         scene?.removeFromSuperview()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         let surface = NoteReviewCanvasReadingScene(source: source, target: destination, clip: clip,
             sourceBackground: sourceBackground, targetBackground: targetBackground)
         scene = surface
@@ -190,13 +223,14 @@ final class NoteReviewCanvasModeCoordinator {
         targetMode = to
         state = .animating
         container.insertSubview(surface, belowSubview: chrome)
+        surface.layoutIfNeeded()
         surface.render(0)
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
+        onReadingProgress?(from, to, 0)
         takeOwnership()
-        CATransaction.commit()
         onSurfaceChanged?()
+        CATransaction.commit()
         let reduced = UIAccessibility.isReduceMotionEnabled || UIAccessibility.prefersCrossFadeTransitions
+        NoteReviewCanvasHandoffDiagnostics.record("proxy-first", view: surface)
         surface.reducedMotion = reduced
         let animation = reduced
             ? UIViewPropertyAnimator(duration: 0.12, curve: .easeInOut)
@@ -205,9 +239,20 @@ final class NoteReviewCanvasModeCoordinator {
         animation.addCompletion { [weak self] position in
             guard let self, generation == token else { return }
             surface.render(position == .start ? 0 : 1)
+            onReadingProgress?(from, to, position == .start ? 0 : 1)
+            NoteReviewCanvasHandoffDiagnostics.record("proxy-last", view: surface, progress: position == .start ? 0 : 1)
             completion(position == .start ? from : to)
         }
         animator = animation
+        if let progress = NoteReviewCanvasHandoffDiagnostics.fixedProgress {
+            animation.startAnimation()
+            animation.pauseAnimation()
+            animation.fractionComplete = progress
+            surface.render(progress)
+            onReadingProgress?(from, to, progress)
+            NoteReviewCanvasHandoffDiagnostics.record("proxy-fixed", view: surface, progress: progress)
+            return
+        }
         let link = CADisplayLink(target: self, selector: #selector(tick))
         link.add(to: .main, forMode: .common)
         clock = link
@@ -217,7 +262,9 @@ final class NoteReviewCanvasModeCoordinator {
     /// 使用实际展示位置驱动文字互补交叉淡变，最后八十毫秒不再改变端点排版。
     @objc private func tick() {
         guard let scene, let animator else { return }
-        scene.render(scene.clock.layer.presentation()?.position.x ?? animator.fractionComplete)
+        let progress = scene.clock.layer.presentation()?.position.x ?? animator.fractionComplete
+        scene.render(progress)
+        if let sourceMode, let targetMode { onReadingProgress?(sourceMode, targetMode, progress) }
     }
 
     /// 永久关闭中止时钟与动画；完成回调不再有提交资格。
@@ -233,6 +280,7 @@ final class NoteReviewCanvasModeCoordinator {
         requestedMode = nil
         reverseOverview = nil
         onSurfaceChanged = nil
+        onReadingProgress = nil
         state = .idle
     }
 }
@@ -291,7 +339,7 @@ final class NoteReviewCanvasReadingScene: NoteReviewCanvasTransitionSurface {
             let (background, endpoint) = entry
             guard let background else { continue }
             background.frame = background.frame.offsetBy(dx: -clip.minX, dy: -clip.minY)
-            addSubview(background)
+            renderingContent.addSubview(background)
             let mask = CAShapeLayer()
             let path = UIBezierPath(rect: background.bounds)
             let shadow = endpoint.surface.skin == nil ? 0 : CanvasOverviewPaperRenderer.shadowPadding * endpoint.scale
@@ -309,7 +357,7 @@ final class NoteReviewCanvasReadingScene: NoteReviewCanvasTransitionSurface {
         }
         paper.backgroundColor = .clear
         paper.clipsToBounds = false
-        addSubview(paper)
+        renderingContent.addSubview(paper)
         paper.addSubview(paperFill)
         paper.addSubview(sourceSkin)
         paper.addSubview(targetSkin)
@@ -329,8 +377,31 @@ final class NoteReviewCanvasReadingScene: NoteReviewCanvasTransitionSurface {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
+    /// 复用同一端点和同一 render 入口，在未挂载的场景中恢复本帧；不复制系统边缘滤镜。
+    override func preparedContentImage() -> UIImage? {
+        func copyBackdrop(_ view: UIView?) -> UIView? {
+            guard let view else { return nil }
+            // Normal backgrounds are prepared UIImageViews; a frozen handoff wraps one such image.
+            guard let image = (view as? UIImageView)?.image ?? (view.subviews.first as? UIImageView)?.image else { return nil }
+            let copy = UIImageView(image: image)
+            copy.frame = view.frame.offsetBy(dx: clip.minX, dy: clip.minY)
+            copy.backgroundColor = view.backgroundColor
+            return copy
+        }
+        let copiedSource = copyBackdrop(sourceBackdrop), copiedTarget = copyBackdrop(targetBackdrop)
+        guard sourceBackdrop == nil || copiedSource != nil, targetBackdrop == nil || copiedTarget != nil else { return nil }
+        let copy = NoteReviewCanvasReadingScene(source: source, target: target, clip: clip,
+            sourceBackground: copiedSource, targetBackground: copiedTarget)
+        copy.reducedMotion = reducedMotion
+        copy.render(lastProgress)
+        return rasterizePreparedScene(copy)
+    }
+
     /// 每帧仅改变几何与透明度，文字图像保持等比与各自真实端点换行。
     func render(_ value: CGFloat) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
         let p = min(1, max(0, value))
         lastProgress = p
         func mix(_ a: CGFloat, _ b: CGFloat) -> CGFloat { a + (b - a) * p }

@@ -76,7 +76,7 @@ final class NoteReviewSingleCanvasTransitionPrototypeController: NoteReviewCanva
                 self.positionDesktop(on: self.currentNoteID, zoomScale: value, animated: true)
             }
         })
-        let isStationary = transitionState == .idle && widthSession == nil && !isPreparingDesktopWidth
+        let isStationary = stackBrowser == nil && stackTask == nil && transitionState == .idle && widthSession == nil && !isPreparingDesktopWidth
             && environmentCover == nil && !desktopScrollView.isTracking && !desktopScrollView.isDragging
             && !desktopScrollView.isDecelerating && !desktopScrollView.isZooming
             && !waterfallView.isDragging && !waterfallView.isDecelerating
@@ -91,7 +91,7 @@ final class NoteReviewSingleCanvasTransitionPrototypeController: NoteReviewCanva
             }
         })
         countButton.menu = UIMenu(children: [UIMenu(options: .displayInline, children: fixtures + [real]),
-                                             UIMenu(options: .displayInline, children: [alternate, nextRich, desktopWidthMenu(), zoom, packingMenu])])
+                                             UIMenu(options: .displayInline, children: [alternate, nextRich, desktopWidthMenu(), desktopGroupMenu(), zoom, packingMenu])])
     }
 
 

@@ -17,7 +17,7 @@ final class NoteReviewViewController: UIViewController {
     private let repositories: RepositoryContainer
     private let toastCenter: XMToastCenter
     private let onDismiss: () -> Void
-    private let onOpenDetail: (Int64, [Int64]) -> Void
+    private let onOpenDetail: (Int64, ContentViewerSourceContext) -> Void
     private let onError: (String) -> Void
     private let immersiveLayout = ImmersiveReviewFlowLayout()
     private lazy var collectionView = NoteReviewCollectionView(frame: .zero, collectionViewLayout: immersiveLayout)
@@ -36,6 +36,7 @@ final class NoteReviewViewController: UIViewController {
     private var transitionTask: Task<Void, Never>?
     private var transitionRequestGeneration = 0
     private var interruptedSource: (endpoint: NoteReviewCanvasReadingEndpoint?, background: UIView)?
+    private var deferredModeAfterHandoff: (mode: NoteReviewPresentationMode, explicit: Bool)?
     private var isPositioning = false
     private var hasPositioned = false
     private var lastSize = CGSize.zero
@@ -77,9 +78,9 @@ final class NoteReviewViewController: UIViewController {
 
     /// 保留原启动负载与业务动作；模式偏好只在显式请求落稳后写入原键。
     init(payload: NoteReviewLaunchPayload, repositories: RepositoryContainer, toastCenter: XMToastCenter,
-         onDismiss: @escaping () -> Void, onOpenDetail: @escaping (Int64, [Int64]) -> Void,
+         onDismiss: @escaping () -> Void, onOpenDetail: @escaping (Int64, ContentViewerSourceContext) -> Void,
          onError: @escaping (String) -> Void) {
-        session = NoteReviewUIKitSession(payload: payload, repository: repositories.noteRepository)
+        session = NoteReviewUIKitSession(payload: payload, repository: repositories.noteRepository, usesDirectory: true)
         self.repositories = repositories
         self.toastCenter = toastCenter
         self.onDismiss = onDismiss
@@ -97,6 +98,7 @@ final class NoteReviewViewController: UIViewController {
     func disposeReviewSession() {
         guard !isDisposed else { return }
         isDisposed = true
+        deferredModeAfterHandoff = nil
         endModePreparationTiming(cancelled: true)
         transitionTask?.cancel()
         interruptedSource?.background.removeFromSuperview(); interruptedSource = nil
@@ -214,6 +216,28 @@ final class NoteReviewViewController: UIViewController {
             guard let session else { throw CancellationError() }
             return try await session.readOverviewSources(noteIDs: ids, priority: priority)
         }
+        overview.directoryRegionReader = { [weak session] id in
+            guard let session else { throw CancellationError() }
+            return try await session.readDirectoryRegion(noteID: id)
+        }
+        overview.stackGroupReader = { [weak session] request in
+            guard let session else { throw CancellationError() }
+            return try await session.readDesktopStack(request)
+        }
+        overview.onGroupCapacityChanged = { [weak session] capacity in session?.updateDesktopGroupCapacity(capacity) }
+        overview.directoryWaterfallPageReader = { [weak session] id in
+            guard let session else { throw CancellationError() }
+            return try await session.readDirectoryWaterfallPage(around: id)
+        }
+        session.canApplyReadingWindow = { [weak self] in
+            guard let self else { return false }
+            return coordinator.state != .animating && coordinator.state != .settling
+        }
+        overview.canCommitBackgroundGeometry = { [weak self] in
+            guard let self else { return false }
+            return coordinator.state == .idle || (coordinator.state == .preparing && transitionTask == nil)
+        }
+        overview.onResidentRegionIDs = { [weak session] ids in session?.retainDirectoryRegionIDs(ids) }
         overview.backgroundReader = { [weak session] value in
             guard let session, let url = URL(string: value) else { return nil }
             let data = try await session.readCanvasBackground(url: url)
@@ -250,6 +274,13 @@ final class NoteReviewViewController: UIViewController {
             self?.updateActiveEdgeEffects()
         }
         coordinator.onSurfaceChanged = { [weak self] in self?.updateActiveEdgeEffects() }
+        coordinator.onReadingProgress = { [weak self] from, to, progress in
+            self?.updateTransitionChrome(from: from, to: to, progress: progress)
+        }
+        overview.onModeTransitionProgress = { [weak self] from, to, progress in
+            self?.updateTransitionChrome(from: from == .desktop ? .desktop : .waterfall,
+                to: to == .desktop ? .desktop : .waterfall, progress: progress)
+        }
         overview.onDemand = { [weak self] visible, predicted in
             guard let self, mode != .immersive else { return }
             session.updateVisibleIDs(visible)
@@ -266,7 +297,10 @@ final class NoteReviewViewController: UIViewController {
                 else if mode != .immersive { failedMode = mode; updateMoreMenu() }
                 return
             }
-            if preparing, coordinator.requestedMode != nil { feedback.setWaiting(true) }
+            if preparing, coordinator.requestedMode != nil || (mode != .immersive && !overview.isMenuPrewarming) {
+                feedback.setWaiting(true)
+            }
+            if !preparing, coordinator.requestedMode == nil { feedback.setWaiting(false) }
             if !preparing, coordinator.isOverviewTransition, overview.transitionState == .animating {
                 endModePreparationTiming(cancelled: false)
                 coordinator.markAnimating()
@@ -327,7 +361,8 @@ final class NoteReviewViewController: UIViewController {
 
     /// 使用原生按钮的图像槽显示等待；菜单收起期间由按钮合并配置，页面始终不被遮罩。
     private func updateModeLoadingIndicator(isVisible: Bool) {
-        moreButton.setReviewLoading(isVisible && !isDisposed && feedback.isWaiting && coordinator.requestedMode != nil)
+        moreButton.setReviewLoading(isVisible && !isDisposed && feedback.isWaiting
+            && (coordinator.requestedMode != nil || overview.stackWork != nil))
     }
 
     private var failedMode: NoteReviewPresentationMode?
@@ -381,6 +416,7 @@ final class NoteReviewViewController: UIViewController {
             }
             feedback.isEmpty = session.count == 0
             updateProgress()
+            continueRequestedMode()
         }
         session.onItemsChanged = { [weak self] ids in
             guard let self, !isDisposed else { return }
@@ -425,14 +461,20 @@ final class NoteReviewViewController: UIViewController {
         feedback.error = nil
         feedback.needsReadingRecovery = false
         if explicit { pendingExplicitMode = target; transientReturnMode = nil }
+        deferredModeAfterHandoff = nil
         if coordinator.reverseIfPossible(to: target) { updateMoreMenu(); return }
+        let cover = coordinator.state == .animating ? contentSnapshotForInterruption() : nil
+        if coordinator.state == .animating, cover == nil {
+            // A failed capture must not remove the only trustworthy displayed scene.
+            deferredModeAfterHandoff = (target, explicit)
+            return
+        }
         endModePreparationTiming(cancelled: true)
         modePreparationInterval = modeSignposter.beginInterval("Mode request to animation")
         modeRequestStartedAt = CACurrentMediaTime()
         transitionRequestGeneration += 1
         transitionTask?.cancel(); transitionTask = nil
         if coordinator.state == .animating {
-            let cover = contentSnapshotForInterruption()
             if let cover { view.insertSubview(cover, belowSubview: topChromeContainer) }
             let wasOverview = coordinator.isOverviewTransition
             let reading = coordinator.interrupt(in: view)
@@ -441,9 +483,11 @@ final class NoteReviewViewController: UIViewController {
             else { cover?.removeFromSuperview() }
         }
         coordinator.request(target)
+        updateActiveEdgeEffects()
         feedback.setWaiting(target != mode || interruptedSource != nil)
         if target != .immersive {
             hasRequestedOverview = true
+            overview.requestedPreparationMode = target == .desktop ? .desktop : .waterfall
             overview.applySnapshot(ids: session.orderedIDs, currentID: session.currentNoteID, settings: session.settings)
         }
         if let width = overview.widthSession {
@@ -458,16 +502,11 @@ final class NoteReviewViewController: UIViewController {
     /// 第三目标只接管正在展示的内容，固定玻璃按钮及模态层不进入冻结像素。
     /// 主 actor 在中断事件中执行一次；正常逐帧动画不截屏，不遍历书摘清单。
     private func contentSnapshotForInterruption() -> UIView? {
-        if let scene = coordinator.presentationScrollView {
-            let snapshot = scene.snapshotView(afterScreenUpdates: false)
-            snapshot?.frame = scene.convert(scene.bounds, to: view)
-            return snapshot
+        if let scene = coordinator.presentationScrollView as? NoteReviewCanvasTransitionSurface {
+            return scene.frozenContentSurface(in: view)
         }
         if coordinator.isOverviewTransition {
-            let surface = overview.presentationScrollView
-            let snapshot = surface.snapshotView(afterScreenUpdates: false)
-            snapshot?.frame = surface.convert(surface.bounds, to: view)
-            return snapshot
+            return (overview.presentationScrollView as? NoteReviewCanvasTransitionSurface)?.frozenContentSurface(in: view)
         }
         // The short recovery dissolve owns sibling content surfaces rather than a paper scene.
         // Compose only siblings below chrome, never a screenshot of the parent screen.
@@ -489,6 +528,11 @@ final class NoteReviewViewController: UIViewController {
               overview.widthSession == nil, let target = coordinator.requestedMode else { return }
         guard transitionTask == nil else { return }
         guard overview.flushDeletionForModeRequest() else { return }
+        if overview.stackBrowser != nil, mode == .desktop {
+            overview.dismissStackBrowser()
+            return
+        }
+        guard !overview.isStackHandoffPending else { return }
         if target == mode, interruptedSource == nil { finishMode(target); return }
         if target != .immersive, overview.preparedModel == nil {
             feedback.setWaiting(true)
@@ -497,7 +541,24 @@ final class NoteReviewViewController: UIViewController {
             }
             return
         }
+        overview.currentNoteID = session.currentNoteID
+        if target == .desktop, overview.preparedModel?.canvasGeometry.indexByID[session.currentNoteID] == nil {
+            feedback.setWaiting(true)
+            if overview.modelPreparation == nil {
+                overview.requestPreparation(count: session.count, preservingCurrentID: session.currentNoteID)
+            }
+            return
+        }
+        if target == .waterfall, !overview.ensureWaterfallPrepared() {
+            feedback.setWaiting(true)
+            return
+        }
         let id = session.currentNoteID
+        if target == .immersive, !session.isCurrentReadingWindowReady {
+            session.prepareReadingWindow(around: id)
+            feedback.setWaiting(true)
+            return
+        }
         session.updateTransitionProtection(noteIDs: [id])
         if target == .immersive, session.item(for: id) == nil {
             feedback.setWaiting(true)
@@ -532,13 +593,17 @@ final class NoteReviewViewController: UIViewController {
                     presentReadingRecovery(); return
                 }
             }
-            let overviewEndpoint = await overview.readingEndpoint(noteID: noteID, in: view)
+            let overviewEndpoint = await overview.readingEndpoint(noteID: noteID, in: view, requestGeneration: requestGeneration)
+            let overviewBackground = await overview.readingTransitionBackground(in: view)
             defer { if transitionRequestGeneration == requestGeneration { transitionTask = nil } }
-            guard !Task.isCancelled, coordinator.requestedMode == target else { return }
-            guard let overviewEndpoint,
-                  let cell = collectionView.cellForItem(at: IndexPath(item: session.currentIndex, section: 0)) as? NoteReviewCollectionCell,
+            guard !Task.isCancelled, !isDisposed, transitionRequestGeneration == requestGeneration,
+                  session.currentNoteID == noteID, coordinator.requestedMode == target else { return }
+            guard let overviewEndpoint, let overviewBackground,
+                  let cell = collectionView.cellForItem(at: IndexPath(item: session.localCurrentIndex, section: 0)) as? NoteReviewCollectionCell,
                   let reading = cell.immersiveTransitionEndpoint(in: view, insets: immersiveChromeInsets,
-                      surfaceColor: session.settings.cardAppearance.uiSurface) else {
+                      surfaceColor: session.settings.cardAppearance.uiSurface, requestGeneration: requestGeneration),
+                  let identity = reading.identity, let overviewIdentity = overviewEndpoint.identity,
+                  identity.belongsToSameRequest(as: overviewIdentity), identity.noteID == noteID else {
                 await startReadingDissolve(to: target, noteID: noteID, requestGeneration: requestGeneration)
                 return
             }
@@ -546,32 +611,33 @@ final class NoteReviewViewController: UIViewController {
             updateModeLoadingIndicator(isVisible: false)
             let source = interruptedSource?.endpoint ?? (from == .immersive ? reading : overviewEndpoint)
             let destination = target == .immersive ? reading : overviewEndpoint
-            let sourceView = from == .immersive ? collectionView : overview.view!
-            let destinationView = target == .immersive ? collectionView : overview.view!
-            let sourceBackground = interruptedSource?.background ?? sourceView.snapshotView(afterScreenUpdates: false)
-            if interruptedSource == nil { sourceBackground?.frame = sourceView.convert(sourceView.bounds, to: view) }
-            // A hidden destination has not contributed pixels yet. Keep an opaque frozen source
-            // above it while UIKit prepares the actual destination snapshot; it must never flash through.
-            guard let sourceBackground else {
+            NoteReviewCanvasHandoffDiagnostics.event("endpoints request=\(requestGeneration) sourceSize=\(source.logicalSize) targetSize=\(destination.logicalSize) sourceFrame=\(source.frame) targetFrame=\(destination.frame) sourceRotation=\(source.rotation) targetRotation=\(destination.rotation) readingContentVersion=\(identity.contentVersion) readingAppearanceVersion=\(identity.appearanceVersion)")
+            NoteReviewCanvasHandoffDiagnostics.save(source.image, stage: "source-ink")
+            NoteReviewCanvasHandoffDiagnostics.save(destination.image, stage: "target-ink")
+            guard let readingImage = reading.viewportImage, let readingFrame = reading.viewportFrame else {
                 await startReadingDissolve(to: target, noteID: noteID, requestGeneration: requestGeneration)
                 return
             }
-            sourceBackground.backgroundColor = view.backgroundColor
-            view.insertSubview(sourceBackground, belowSubview: topChromeContainer)
-            let destinationAlpha = destinationView.alpha
-            destinationView.alpha = 1
-            let destinationBackground = destinationView.snapshotView(afterScreenUpdates: true)
-            destinationView.alpha = destinationAlpha
-            destinationBackground?.frame = destinationView.convert(destinationView.bounds, to: view)
+            let readingBackground = UIImageView(image: readingImage)
+            readingBackground.frame = readingFrame
+            readingBackground.backgroundColor = reading.backdropColor
+            let frozen = interruptedSource?.background as? NoteReviewCanvasTransitionSurface
+            let sourceBackground = frozen?.contentForHandoff() ?? interruptedSource?.background
+                ?? (from == .immersive ? readingBackground : overviewBackground)
+            let destinationBackground = target == .immersive ? readingBackground : overviewBackground
             let clip = view.bounds
             endModePreparationTiming(cancelled: false)
             coordinator.animateReading(from: from, to: target, source: source, destination: destination,
                 sourceBackground: sourceBackground, targetBackground: destinationBackground,
                 clip: clip, container: view, below: topChromeContainer,
                 takeOwnership: { [weak self] in
+                    frozen?.removeFromSuperview()
                     self?.collectionView.alpha = 0; self?.overview.view.alpha = 0
                     self?.collectionView.isUserInteractionEnabled = false; self?.overview.view.isUserInteractionEnabled = false
-                }, completion: { [weak self] result in self?.finishMode(result) })
+                }, completion: { [weak self] result in
+                    guard let self, !isDisposed, transitionRequestGeneration == requestGeneration else { return }
+                    finishMode(result)
+                })
             interruptedSource = nil
             feedback.setWaiting(false)
         }
@@ -585,7 +651,7 @@ final class NoteReviewViewController: UIViewController {
             guard session.item(for: noteID) != nil else { presentReadingRecovery(); return }
             restoreImmersiveAnchor()
             collectionView.layoutIfNeeded()
-            guard let cell = collectionView.cellForItem(at: IndexPath(item: session.currentIndex, section: 0)) as? NoteReviewCollectionCell else {
+            guard let cell = collectionView.cellForItem(at: IndexPath(item: session.localCurrentIndex, section: 0)) as? NoteReviewCollectionCell else {
                 presentReadingRecovery(); return
             }
             configure(cell: cell, noteID: noteID)
@@ -613,28 +679,36 @@ final class NoteReviewViewController: UIViewController {
     /// 落稳后一次提交模式、偏好、需求和无障碍焦点。
     private func finishMode(_ result: NoteReviewPresentationMode) {
         endModePreparationTiming(cancelled: false)
-        coordinator.settle(result)
-        collectionView.alpha = result == .immersive ? 1 : 0
-        collectionView.isUserInteractionEnabled = result == .immersive
-        collectionView.accessibilityElementsHidden = result != .immersive
-        overview.view.alpha = result == .immersive ? 0 : 1
-        overview.view.isUserInteractionEnabled = result != .immersive
-        overview.view.accessibilityElementsHidden = result == .immersive
+        coordinator.settle(result) { [self] in
+            collectionView.alpha = result == .immersive ? 1 : 0
+            collectionView.isUserInteractionEnabled = result == .immersive
+            collectionView.accessibilityElementsHidden = result != .immersive
+            overview.view.alpha = result == .immersive ? 0 : 1
+            overview.view.isUserInteractionEnabled = result != .immersive
+            overview.view.accessibilityElementsHidden = result == .immersive
+            updateModeAppearance()
+        }
         if let explicit = pendingExplicitMode, explicit == result {
             UserDefaults.standard.set(result.rawValue, forKey: Constants.preferredModeKey)
             pendingExplicitMode = nil
         }
         session.cancelTransitionProtection()
+        session.applyPendingReadingWindow()
+        overview.commitDeferredModelIfPossible()
         feedback.setWaiting(false)
         updateModeLoadingIndicator(isVisible: false)
-        updateModeAppearance()
         refreshVisibleRange()
         updateProgress()
         updateActiveEdgeEffects()
+        NoteReviewCanvasHandoffDiagnostics.record("settled-live", view: result == .immersive ? collectionView : overview.view)
         if UIAccessibility.isVoiceOverRunning {
             UIAccessibility.post(notification: .layoutChanged, argument: result == .immersive
-                ? collectionView.cellForItem(at: IndexPath(item: session.currentIndex, section: 0))
+                ? collectionView.cellForItem(at: IndexPath(item: session.localCurrentIndex, section: 0))
                 : overview.focusedAccessibilityElement)
+        }
+        if let deferred = deferredModeAfterHandoff {
+            deferredModeAfterHandoff = nil
+            requestMode(deferred.mode, explicit: deferred.explicit)
         }
     }
 
@@ -668,7 +742,7 @@ final class NoteReviewViewController: UIViewController {
         guard session.count > 0, collectionView.bounds.height > 0 else { return }
         isPositioning = true
         collectionView.layoutIfNeeded()
-        collectionView.setContentOffset(CGPoint(x: 0, y: CGFloat(session.currentIndex) * collectionView.bounds.height), animated: false)
+        collectionView.setContentOffset(CGPoint(x: 0, y: CGFloat(session.localCurrentIndex) * collectionView.bounds.height), animated: false)
         isPositioning = false
     }
 
@@ -708,7 +782,10 @@ final class NoteReviewViewController: UIViewController {
                      state: mode == value ? .on : .off) { [weak self] _ in self?.requestMode(value, explicit: true) }
         }
         var utilities: [UIMenuElement] = []
-        if mode == .desktop, coordinator.state == .idle { utilities.append(overview.desktopWidthMenu()) }
+        if mode == .desktop, coordinator.state == .idle, overview.stackBrowser == nil {
+            utilities.append(overview.desktopWidthMenu())
+            utilities.append(overview.desktopGroupMenu())
+        }
         utilities.append(
             UIAction(title: "显示内容", image: UIImage(systemName: "textformat.size"),
                      attributes: coordinator.state == .animating || coordinator.state == .settling ? .disabled : []) { [weak self] _ in
@@ -718,6 +795,11 @@ final class NoteReviewViewController: UIViewController {
         )
         if coordinator.state == .preparing {
             utilities.append(UIAction(title: "取消切换", image: UIImage(systemName: "xmark")) { [weak self] _ in self?.cancelRequestedMode() })
+        } else if overview.stackWork != nil {
+            utilities.append(UIAction(title: "取消准备", image: UIImage(systemName: "xmark")) { [weak self] _ in
+                self?.overview.cancelStackTargetPreparation()
+                self?.updateMoreMenu()
+            })
         } else if let retryMode = failedMode {
             utilities.append(UIAction(title: "重试切换", image: UIImage(systemName: "arrow.clockwise")) { [weak self] _ in
                 self?.requestMode(retryMode, explicit: true)
@@ -731,25 +813,39 @@ final class NoteReviewViewController: UIViewController {
     }
 
     private func updateModeAppearance() {
+        tagGlass.alpha = 1
+        overviewGlass.alpha = 1
         view.backgroundColor = mode == .immersive ? session.settings.cardAppearance.uiSurface : NoteReviewCanvasAppearance.backgroundColor
         tagGlass.isHidden = mode != .immersive
         overviewGlass.isHidden = mode != .desktop
         closeButton.configuration?.image = UIImage(systemName: mode == .immersive && transientReturnMode != nil ? "chevron.left" : "xmark")
-        overviewButton.configuration?.image = UIImage(systemName: overview.isShowingFullDesktop ? "scope" : "arrow.down.right.and.arrow.up.left")
-        overviewButton.accessibilityLabel = overview.isShowingFullDesktop ? "回到当前书摘" : "查看完整桌面"
+        overviewButton.configuration?.image = UIImage(systemName: overview.desktopOverviewIcon)
+        overviewButton.accessibilityLabel = overview.desktopOverviewLabel
+    }
+
+    /// 固定按钮保留同一实例；仅在已有纸张时间轴内交叉淡变模式专属入口。
+    private func updateTransitionChrome(from: NoteReviewPresentationMode, to: NoteReviewPresentationMode, progress: CGFloat) {
+        let p = min(1, max(0, progress))
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        tagGlass.isHidden = from != .immersive && to != .immersive
+        overviewGlass.isHidden = from != .desktop && to != .desktop
+        tagGlass.alpha = (from == .immersive ? 1 - p : 0) + (to == .immersive ? p : 0)
+        overviewGlass.alpha = (from == .desktop ? 1 - p : 0) + (to == .desktop ? p : 0)
+        CATransaction.commit()
     }
 
     private func updateActiveEdgeEffects() {
-        let scroll = coordinator.presentationScrollView ?? (mode == .immersive
-            ? ((collectionView.cellForItem(at: IndexPath(item: session.currentIndex, section: 0)) as? NoteReviewCollectionCell)?.activeContentScrollView ?? collectionView)
+        let scroll = coordinator.presentationScrollView ?? (interruptedSource?.background as? UIScrollView) ?? (mode == .immersive
+            ? ((collectionView.cellForItem(at: IndexPath(item: session.localCurrentIndex, section: 0)) as? NoteReviewCollectionCell)?.activeContentScrollView ?? collectionView)
             : overview.presentationScrollView)
         if activeEdgeScrollView !== scroll {
             activeEdgeScrollView?.topEdgeEffect.isHidden = true
             activeEdgeScrollView?.bottomEdgeEffect.isHidden = true
         }
         activeEdgeScrollView = scroll
-        scroll.topEdgeEffect.isHidden = areControlsHidden
-        scroll.bottomEdgeEffect.isHidden = areControlsHidden
+        scroll.topEdgeEffect.isHidden = areControlsHidden || NoteReviewCanvasHandoffDiagnostics.disablesEdges
+        scroll.bottomEdgeEffect.isHidden = areControlsHidden || NoteReviewCanvasHandoffDiagnostics.disablesEdges
         scroll.topEdgeEffect.style = .soft
         scroll.bottomEdgeEffect.style = .soft
         topEdgeInteraction.scrollView = scroll
@@ -772,7 +868,7 @@ final class NoteReviewViewController: UIViewController {
     }
 
     private func moveAccessibility(by distance: Int) -> Bool {
-        guard coordinator.state == .idle, let id = session.noteID(at: session.currentIndex + distance) else { return false }
+        guard coordinator.state == .idle, let id = session.noteID(at: session.localCurrentIndex + distance) else { return false }
         session.setCurrentNoteID(id)
         if mode == .immersive { restoreImmersiveAnchor() } else { overview.locate(noteID: id) }
         updateProgress()
@@ -859,7 +955,7 @@ final class NoteReviewViewController: UIViewController {
         deferredNoteAction = { [weak self] in
             guard let self, !isDisposed, session.index(of: noteID) != nil else { return }
             switch action {
-            case .detail: onOpenDetail(noteID, session.orderedIDs)
+            case .detail: onOpenDetail(noteID, session.detailSource)
             case .tags: handleTag(noteID: noteID)
             case .original:
                 if let url = originalURL ?? session.item(for: noteID)?.weReadOriginalURL.flatMap(URL.init(string:)) {
@@ -1255,8 +1351,11 @@ extension NoteReviewViewController: UICollectionViewDataSource, UICollectionView
         }
         if let animator { animator.addCompletion(finish) } else { finish() }
     }
-    func scrollViewWillBeginDragging(_ scrollView: UIScrollView) { cancelSwitchForDirectManipulation() }
-    func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int { session.count }
+    func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        session.isReadingInteractionActive = true
+        cancelSwitchForDirectManipulation()
+    }
+    func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int { session.loadedCount }
     func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
         let cell = collectionView.dequeueReusableCell(withReuseIdentifier: NoteReviewCollectionCell.reuseIdentifier, for: indexPath) as! NoteReviewCollectionCell
         if let id = session.noteID(at: indexPath.item) { configure(cell: cell, noteID: id) }
@@ -1274,14 +1373,20 @@ extension NoteReviewViewController: UICollectionViewDataSource, UICollectionView
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         guard mode == .immersive, !isPositioning, coordinator.state == .idle else { return }
         refreshVisibleRange()
+        if collectionView.bounds.height > 0,
+           let id = session.noteID(at: Int((collectionView.contentOffset.y / collectionView.bounds.height).rounded())) {
+            session.prepareReadingWindow(around: id)
+        }
     }
     func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) { settleReading() }
     func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) { if !decelerate { settleReading() } }
     private func settleReading() {
+        session.isReadingInteractionActive = false
         guard mode == .immersive, coordinator.state == .idle, collectionView.bounds.height > 0 else { return }
         let index = Int((collectionView.contentOffset.y / collectionView.bounds.height).rounded())
         guard let id = session.noteID(at: index) else { return }
         if id != session.currentNoteID { session.setCurrentNoteID(id); selectionFeedback.selectionChanged() }
+        session.applyPendingReadingWindow()
         updateProgress()
         updateActiveEdgeEffects()
     }

@@ -312,13 +312,14 @@ nonisolated struct NoteReviewSettings: Codable, Hashable, Sendable {
     var favoriteTagID: Int64?
     var immersiveDisplay: NoteReviewImmersiveDisplaySettings
     var desktopCardWidth: Int
+    var desktopGroupCapacity: Int
 
     private enum CodingKeys: String, CodingKey {
         case selectedBookIDs, selectedTagIDs, tagMatchRule, sortRule, palette, textAlignment
         case backgroundMode, backgroundImageURL
         case customBackgroundStartHex, customBackgroundEndHex, customTextColorHex
         case fontSelection, favoriteTagID, immersiveDisplay
-        case desktopCardWidth
+        case desktopCardWidth, desktopGroupCapacity
     }
 
     static let defaultValue = NoteReviewSettings(
@@ -353,7 +354,8 @@ nonisolated struct NoteReviewSettings: Codable, Hashable, Sendable {
         fontSelection: NoteReviewFontSelection,
         favoriteTagID: Int64? = nil,
         immersiveDisplay: NoteReviewImmersiveDisplaySettings = .defaultValue,
-        desktopCardWidth: Int = 220
+        desktopCardWidth: Int = 220,
+        desktopGroupCapacity: Int = 96
     ) {
         self.selectedBookIDs = selectedBookIDs
         self.selectedTagIDs = selectedTagIDs
@@ -370,6 +372,7 @@ nonisolated struct NoteReviewSettings: Codable, Hashable, Sendable {
         self.favoriteTagID = favoriteTagID
         self.immersiveDisplay = immersiveDisplay
         self.desktopCardWidth = Self.validatedDesktopCardWidth(desktopCardWidth)
+        self.desktopGroupCapacity = Self.validatedDesktopGroupCapacity(desktopGroupCapacity)
     }
 
     /// 兼容旧版本只保存范围与配色的设置数据，新字段缺失时回退到 Android 默认语义。
@@ -395,11 +398,19 @@ nonisolated struct NoteReviewSettings: Codable, Hashable, Sendable {
         desktopCardWidth = Self.validatedDesktopCardWidth(
             (try? container.decode(Int.self, forKey: .desktopCardWidth)) ?? 220
         )
+        desktopGroupCapacity = Self.validatedDesktopGroupCapacity(
+            (try? container.decode(Int.self, forKey: .desktopGroupCapacity)) ?? 96
+        )
     }
 
     /// 新偏好独立容错；损坏或越界卡宽不能导致配色、字体及筛选设置整份回退。
     static func validatedDesktopCardWidth(_ width: Int) -> Int {
         (180...360).contains(width) ? width : 220
+    }
+
+    /// 容量只是组内工作集偏好；旧设置及单字段损坏不影响其他阅读偏好。
+    static func validatedDesktopGroupCapacity(_ count: Int) -> Int {
+        [32, 64, 96, 128].contains(count) ? count : 96
     }
 
     /// 当前有效背景起止颜色，图片背景不可用时也作为稳定回退颜色。

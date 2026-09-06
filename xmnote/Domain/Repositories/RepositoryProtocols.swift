@@ -2,7 +2,7 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 Models 与 Services 层的数据类型定义
- * [OUTPUT]: 对外提供 Book/Note/Content/GlobalSearch/Backup/S3/AI/图片额度/标签选择布局偏好/TagManagement/BookGroupManagement/SourceManagement/ExternalAppIntegration/Statistics/ReadCalendar/封面主题/Timeline/ReadingDashboard/ReadingTimer、回顾轻量布局清单及书籍搜索录入协议
+ * [OUTPUT]: 对外提供 Book/Note/Content/GlobalSearch/Backup/S3/AI/图片额度/标签选择布局偏好/TagManagement/BookGroupManagement/SourceManagement/ExternalAppIntegration/Statistics/ReadCalendar/封面主题/Timeline/ReadingDashboard/ReadingTimer、回顾分页目录与轻量布局清单及书籍搜索录入协议
  * [POS]: Domain 层仓储契约，定义 Presentation 获取本地/网络数据的唯一入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 */
@@ -272,6 +272,10 @@ protocol NoteRepositoryProtocol {
     func fetchNoteReviewPage(request: NoteReviewPageRequest) async throws -> [NoteReviewCardItem]
     /// 按卡堆完全相同的筛选条件读取轻量书摘身份序列；随机顺序由调用会话在内存中生成。
     func fetchNoteReviewIDs(settings: NoteReviewSettings) async throws -> [Int64]
+    /// 异步构建/验证无正文目录；调用任务取消后停止后续批次，cacheID 标识可恢复的同一会话派生文件。
+    func openNoteReviewDirectory(request: NoteReviewDirectoryRequest, cacheID: UUID,
+                                 schedule: @escaping NoteReviewDirectoryReadScheduling,
+                                 progress: @escaping @Sendable (NoteReviewDirectoryPreparation) async -> Void) async throws -> any NoteReviewDirectory
     /// 按输入身份顺序异步读取纸流测高所需的轻量正文、标题与更新时间；仓储保证单条 SQL 最多包含 128 个 ID，调用方拥有取消与过期结果判定。
     func fetchNoteReviewOverviewLayoutSources(noteIDs: [Int64]) async throws -> [NoteReviewOverviewLayoutSource]
     /// 按书摘主键读取单个只读操作上下文，供当日记录菜单复用标签、微信读书、分享和外部发送能力。

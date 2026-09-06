@@ -14,7 +14,7 @@ enum ContentViewerPresentationStyle {
 
     init(source: ContentViewerSourceContext) {
         switch source {
-        case .bookNotes, .noteReview, .noteExcerpts, .chapterNotes:
+        case .bookNotes, .noteReview, .noteReviewDirectory, .noteExcerpts, .chapterNotes:
             self = .noteOnly
         case .relatedCategory, .allReviews, .bookReviews, .bookRelated:
             self = .general

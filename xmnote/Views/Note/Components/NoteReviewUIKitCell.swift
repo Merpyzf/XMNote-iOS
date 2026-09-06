@@ -538,20 +538,36 @@ final class NoteReviewCollectionCell: UICollectionViewCell {
 
     /// 为跨模式交接捕获真实单条阅读端点；只截取有效阅读区域，不另建字体或富文本排版。
     func immersiveTransitionEndpoint(in container: UIView, insets: UIEdgeInsets,
-                                     surfaceColor: UIColor) -> NoteReviewCanvasReadingEndpoint? {
-        guard mode == .immersive, immersivePlaceholderView.isHidden else { return nil }
+                                     surfaceColor: UIColor, requestGeneration: Int = 0) -> NoteReviewCanvasReadingEndpoint? {
+        guard mode == .immersive, immersivePlaceholderView.isHidden,
+              let signature = configurationSignature else { return nil }
+        layoutIfNeeded()
+        immersiveContainer.layoutIfNeeded()
         let local = bounds.inset(by: insets)
         guard local.width > 0, local.height > 0 else { return nil }
         let format = UIGraphicsImageRendererFormat()
         format.scale = traitCollection.displayScale
         format.opaque = false
-        let image = UIGraphicsImageRenderer(size: local.size, format: format).image { output in
-            output.cgContext.translateBy(x: -local.minX, y: -local.minY)
-            immersiveContainer.layer.render(in: output.cgContext)
+        if representedItem?.imageURLs.isEmpty != false { format.preferredRange = .standard }
+        // The scroll view owns system edge composition. Capture its real content subtree,
+        // not that composition layer: layer.render on it produces nearly transparent ink.
+        let stackFrame = immersiveStack.convert(immersiveStack.bounds, to: self)
+        var complete = false
+        let viewportImage = UIGraphicsImageRenderer(size: bounds.size, format: format).image { output in
+            output.cgContext.translateBy(x: stackFrame.minX, y: stackFrame.minY)
+            complete = immersiveStack.drawHierarchy(in: immersiveStack.bounds, afterScreenUpdates: true)
         }
+        guard complete, let bitmap = viewportImage.cgImage,
+              let crop = bitmap.cropping(to: CGRect(x: local.minX * viewportImage.scale,
+                y: local.minY * viewportImage.scale, width: local.width * viewportImage.scale,
+                height: local.height * viewportImage.scale)) else { return nil }
+        let image = UIImage(cgImage: crop, scale: viewportImage.scale, orientation: .up)
         let color = surfaceColor.resolvedColor(with: traitCollection)
         return NoteReviewCanvasReadingEndpoint(image: image, frame: convert(local, to: container), rotation: 0,
-            logicalSize: local.size, surface: NoteReviewCanvasReadingSurface(color: color), backdropColor: color)
+            logicalSize: local.size, surface: NoteReviewCanvasReadingSurface(color: color), backdropColor: color,
+            viewportImage: viewportImage, viewportFrame: convert(bounds, to: container),
+            identity: .init(noteID: signature.noteID, requestGeneration: requestGeneration,
+                contentVersion: signature.contentRevision, appearanceVersion: signature.appearanceGeneration))
     }
 
     /// 根据真实安全区和浮动控件尺寸更新内容起排边界，旋转和窗口尺寸变化时可重复调用。

@@ -59,10 +59,10 @@ nonisolated final class CanvasOverviewFallbackAtlas: @unchecked Sendable {
     private(set) var image: CGImage?
 
     /// 两种排版共用最多 2048² 像素，不为每条书摘保存一张独立高清图。
-    init(count: Int) {
-        columns = max(1, Int(ceil(sqrt(Double(max(1, count * 2))))))
-        slot = max(1, min(256, 2_048 / columns))
-        side = min(2_048, columns * slot)
+    init(count: Int, layoutCount: Int = 2, maximumSide: Int = 2_048) {
+        columns = max(1, Int(ceil(sqrt(Double(max(1, count * layoutCount))))))
+        slot = max(1, min(256, maximumSide / columns))
+        side = min(maximumSide, columns * slot)
         context = CGContext(data: nil, width: side, height: side, bitsPerComponent: 8, bytesPerRow: 0,
             space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
         context?.translateBy(x: 0, y: CGFloat(side))

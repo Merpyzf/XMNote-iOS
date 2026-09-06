@@ -29,22 +29,26 @@ extension NoteReviewCanvasOverviewController {
 
     /// 父页面切到第三种模式时先捕获代理的当前端点；旧总览的异步准备不再有提交资格。
     func interruptModeTransition(in container: UIView) -> NoteReviewCanvasReadingEndpoint? {
-        updateTransitionContent()
+        // Capture the same displayed frame as the host's frozen background, not the next clock tick.
         let paper = transitionContext?.scene.papers.first { $0.card.isAnchor }
-        let endpoint = paper.map { NoteReviewCanvasReadingEndpoint.capture($0, in: container) }
+        let endpoint = paper.map { NoteReviewCanvasReadingEndpoint.capture($0, in: container,
+            backdropColor: transitionContext?.scene.backgroundColor ?? .clear,
+            surfaceColor: $0.opaquePaper.backgroundColor ?? .clear,
+            cornerRadius: $0.contentClip.layer.cornerRadius) }
         transitionWarmTask?.cancel(); transitionWarmTask = nil
         transitionPreparation?.cancel(); transitionPreparation = nil
         transitionGeneration += 1
         modeDissolve?.cancel(); modeDissolve = nil
         transitionContext?.animator.stopAnimation(true)
-        cleanUpTransition(settledMode: currentMode)
+        cleanUpTransition(settledMode: currentMode, commitsMode: false)
         return endpoint
     }
     /// 手势稳定后才应用完整代次；后到的新请求会清除上一份待提交结果。
     func commitDeferredModelIfPossible() {
+        applyPendingWaterfallPage()
         commitPendingDeletionIfPossible()
         guard !isApplyingDeletion else { return }
-        guard !isCanvasPaused, !isDisposed, !isObjectMenuPresented,
+        guard !isCanvasPaused, !isDisposed, !isObjectMenuPresented, stackBrowser == nil,
               let pending = deferredModel, pending.generation == generation, transitionState == .idle,
               widthSession == nil, !activeScrollView.isDragging, !activeScrollView.isDecelerating,
               !desktopScrollView.isZooming else { return }
@@ -53,7 +57,9 @@ extension NoteReviewCanvasOverviewController {
         onReady?()
     }
     var activeScrollView: UIScrollView { currentMode == .desktop ? desktopScrollView : waterfallView }
-    var presentationScrollView: UIScrollView { transitionContext?.scene ?? widthSession?.scene ?? activeScrollView }
+    var presentationScrollView: UIScrollView {
+        stackSession?.scene ?? stackBrowser?.scrollView ?? transitionContext?.scene ?? widthSession?.scene ?? activeScrollView
+    }
     var focusedAccessibilityElement: Any? {
         guard let id = currentNoteID else { return nil }
         if currentMode == .waterfall, let index = preparedModel?.waterfallGeometry.indexByID[id] {
@@ -66,10 +72,23 @@ extension NoteReviewCanvasOverviewController {
     /// 输入只在身份顺序变化时失效；当前项变化不重建总览。
     func applySnapshot(ids: [Int64], currentID: Int64, settings: NoteReviewSettings) {
         guard !isDisposed else { return }
+        selectedGroupCapacity = settings.desktopGroupCapacity
+        if directoryRegionReader != nil {
+            renderingSettings = settings
+            selectedDesktopCardWidth = CGFloat(settings.desktopCardWidth)
+            currentNoteID = currentID
+            if !requestedInitialPreparation && modelPreparation == nil {
+                requestedInitialPreparation = true
+                requestPreparation(count: selectedCount, preservingCurrentID: currentID)
+            }
+            return
+        }
         if queueDeletionSnapshotIfPossible(ids: ids, currentID: currentID, settings: settings) { return }
         cancelDeletionUpdate()
         pendingDeletionSnapshot = nil
-        let changed = ids != dataIDs
+        let changed = ids != stackAllIDs
+        if changed { cancelStackBrowsingImmediately(); stackViewports.removeAll(); stackFixtureSnapshot = UUID() }
+        stackAllIDs = ids
         dataIDs = ids
         renderingSettings = settings
         selectedDesktopCardWidth = CGFloat(settings.desktopCardWidth)
@@ -83,6 +102,8 @@ extension NoteReviewCanvasOverviewController {
 
     /// 确认卡宽的设置回流不重复重排；其余排版或外观变化准备新端点后才交接。
     func applySettings(_ settings: NoteReviewSettings, previous: NoteReviewSettings) {
+        if settings != previous { cancelStackBrowsingImmediately() }
+        selectedGroupCapacity = settings.desktopGroupCapacity
         renderingSettings = settings
         var old = previous
         old.desktopCardWidth = settings.desktopCardWidth
@@ -90,13 +111,17 @@ extension NoteReviewCanvasOverviewController {
         guard old != settings || !widthAlreadyApplied else { return }
         selectedDesktopCardWidth = CGFloat(settings.desktopCardWidth)
         if let id = currentNoteID { saveViewport(for: currentMode, noteID: id) }
-        requestPreparation(count: dataIDs.count, preservingCurrentID: currentNoteID)
+        requestPreparation(count: selectedCount, preservingCurrentID: currentNoteID)
     }
 
     /// 离场保留可信表面及视口，只取消尚未提交的准备；主 actor 串行阻止迟到提交。
     func pauseCanvas() {
         guard !isCanvasPaused else { return }
+        cancelStackBrowsingImmediately()
         isCanvasPaused = true
+        cancelCatalogPreparation()
+        cancelRegionalPreparation()
+        cancelWaterfallPagePreparation()
         dismissObjectMenu()
         endMenuPrewarming(cancelUnrequestedPreparation: true)
         cancelProgrammaticPositioning()
@@ -174,8 +199,16 @@ extension NoteReviewCanvasOverviewController {
         onNoteActionMenu = nil; onNoteAccessibilityActions = nil; onObjectMenuDidEnd = nil
         zoomContentView.canvasView.onNoteAccessibilityActions = nil
         onSettledMode = nil; onConfirmedWidth = nil; onControlsChanged = nil
+        onModeTransitionProgress = nil
         onPreparationChanged = nil; onWidthEnded = nil; onBlankTap = nil; onMissingIDs = nil
         sourceReader = nil; resolveDataIDs = nil
+        stackGroupReader = nil; onGroupCapacityChanged = nil
+        stackAllIDs = []; stackViewports = [:]
+        directoryRegionReader = nil; directoryNeighborReader = nil; directoryCatalogReader = nil
+        directoryWaterfallPageReader = nil; directoryWaterfallPage = nil
+        canCommitBackgroundGeometry = nil
+        onResidentRegionIDs = nil
+        regionalModels.removeAll(); regionalMetadata.removeAll(); regionalWindow = nil
         backgroundReader = nil; preparedBackgroundImage = nil
         previewDrawingPins.removeAll(); previewSourcePins.removeAll(); transitionPreviewPins.removeAll()
     }
@@ -196,7 +229,7 @@ extension NoteReviewCanvasOverviewController {
 
     /// 定位由稳定身份完成，不跨布局保存 IndexPath。
     func locate(noteID: Int64) {
-        guard preparedModel?.canvasGeometry.indexByID[noteID] != nil else { return }
+        guard preparedModel?.content(for: noteID, mode: currentMode) != nil else { return }
         cancelProgrammaticPositioning()
         currentNoteID = noteID
         let saved = currentMode == .desktop ? desktopViewport : waterfallViewport
@@ -208,7 +241,11 @@ extension NoteReviewCanvasOverviewController {
 
     /// 只查询可见和邻接区域；全景正文需求仍局限于当前焦点邻域。
     func reportDemand() {
-        guard !isCanvasPaused, !isDisposed, !isApplyingDeletion, widthSession == nil, let model = preparedModel, let id = currentNoteID else { return }
+        if pendingWaterfallPage != nil {
+            applyPendingWaterfallPage()
+            if pendingWaterfallPage == nil { return }
+        }
+        guard stackBrowser == nil, directoryCatalog == nil, !isCanvasPaused, !isDisposed, !isApplyingDeletion, widthSession == nil, let model = preparedModel, let id = currentNoteID else { return }
         let visible: [Int]
         let predicted: [Int]
         if currentMode == .desktop {
@@ -220,9 +257,10 @@ extension NoteReviewCanvasOverviewController {
             predicted = model.waterfallGeometry.indexes(in: waterfallView.bounds.insetBy(dx: 0, dy: -waterfallView.bounds.height))
         }
         var seen = Set<Int64>()
-        let visibleIDs = Array(([id] + visible.map { model.notes[$0].id }).filter { seen.insert($0).inserted }.prefix(20))
+        let notes = currentMode == .desktop ? model.notes : model.waterfallGeometry.notes
+        let visibleIDs = Array(([id] + visible.map { notes[$0].id }).filter { seen.insert($0).inserted }.prefix(20))
         let active = Set(visibleIDs)
-        let future = Array(predicted.map { model.notes[$0].id }.filter { !active.contains($0) }.prefix(20))
+        let future = Array(predicted.map { notes[$0].id }.filter { !active.contains($0) }.prefix(20))
         onDemand?(visibleIDs, future)
         lastPreviewRequestTime = CACurrentMediaTime()
         if previewVisibleDemand != visibleIDs { previewRetryAfter = 0 }
@@ -231,6 +269,7 @@ extension NoteReviewCanvasOverviewController {
         previewAttemptedIDs.formIntersection(previewDemand)
         protectPreviewDemand(in: model)
         startPreviewWorker(model: model)
+        requestWaterfallWindowIfNeeded()
     }
 
     /// 主 actor 串行消费最新需求；移动只替换下一批，不取消仍可能完成的当前二十条。
@@ -248,13 +287,26 @@ extension NoteReviewCanvasOverviewController {
             do {
                 while !Task.isCancelled, generation == modelGeneration, !isCanvasPaused, !isDisposed,
                       transitionState == .idle, currentMode == modes.first {
-                    let missingVisible = previewVisibleDemand.filter { !self.previewsAreReady(for: $0, in: model, modes: modes) }
+                    guard previewWorkerGeneration == worker, let live = preparedModel,
+                          live.notes.first?.key?.generation == model.notes.first?.key?.generation else { break }
+                    // Demand can outlive a window. Never feed unknown identities to an empty,
+                    // synchronously successful preparation and spin on the main actor.
+                    let validDemand = previewDemand.filter { live.content(for: $0, mode: self.currentMode) != nil }
+                    let missingVisible = previewVisibleDemand.filter {
+                        validDemand.contains($0) && !self.previewsAreReady(for: $0, in: live, modes: modes)
+                    }
                     let requiresAll = !missingVisible.isEmpty
-                    let candidates = requiresAll ? missingVisible : previewDemand.filter { !self.previewAttemptedIDs.contains($0) }
-                    let batch = Array(candidates.filter { !self.previewsAreReady(for: $0, in: model, modes: modes) }.prefix(20))
+                    let candidates = requiresAll ? missingVisible : validDemand.filter { !self.previewAttemptedIDs.contains($0) }
+                    let batch = Array(candidates.filter { !self.previewsAreReady(for: $0, in: live, modes: modes) }.prefix(20))
                     guard !batch.isEmpty else { break }
                     previewAttemptedIDs.formUnion(batch)
-                    try await warmPreviews(ids: batch, model: model, work: nil, modes: modes, requiresAll: requiresAll)
+                    try await warmPreviews(ids: batch, model: live, work: nil, modes: modes, requiresAll: requiresAll)
+                    guard !Task.isCancelled, previewWorkerGeneration == worker else { break }
+                    if requiresAll, batch.contains(where: { !self.previewsAreReady(for: $0, in: live, modes: modes) }) {
+                        previewRetryAfter = CACurrentMediaTime() + 0.75
+                        break
+                    }
+                    await Task.yield()
                 }
             } catch {
                 // Retain the trusted surface. A subsequent demand retries from actual readiness.
@@ -272,6 +324,9 @@ extension NoteReviewCanvasOverviewController {
 
     /// 父页面取消等待只撤销未显示的准备；旧桌面、已落稳模式和相机位置继续有效。
     func cancelPendingPresentation() {
+        if stackBrowser == nil { cancelStackPreparation() }
+        cancelCatalogPreparation()
+        cancelWaterfallPagePreparation()
         let discardsModelPreparation = modelPreparation != nil || deferredModel != nil
         if discardsModelPreparation { generation += 1 }
         modelPreparation?.cancel(); modelPreparation = nil
@@ -302,15 +357,15 @@ extension NoteReviewCanvasOverviewController {
     /// 两种端点均清晰才算就绪；预览源可以正常淘汰，不影响已准备字形显示。
     func previewsAreReady(for id: Int64, in model: CanvasOverviewPreparedModel,
                           modes: [Mode] = [.desktop, .waterfall]) -> Bool {
-        guard let index = model.canvasGeometry.indexByID[id] else { return true }
-        return modes.allSatisfy {
-            previewContent(at: index, in: model, mode: $0).preparedBlocks != nil
-        }
+        modes.allSatisfy { model.content(for: id, mode: $0)?.preparedBlocks != nil }
     }
 
     /// 单一布局的字形身份，预取不得为了隐藏模式额外绘制另一套排版。
-    func previewContent(at index: Int, in model: CanvasOverviewPreparedModel, mode: Mode) -> CanvasOverviewPaperContentGeometry {
-        mode == .desktop ? model.canvasGeometry.papers[index].contentGeometry : model.waterfallGeometry.contentGeometries[index]
+    func previewContent(at index: Int, in model: CanvasOverviewPreparedModel, mode: Mode) -> CanvasOverviewPaperContentGeometry? {
+        guard model.notes.indices.contains(index) else { return nil }
+        if mode == .desktop { return model.canvasGeometry.papers[index].contentGeometry }
+        guard let flowIndex = model.waterfallGeometry.indexByID[model.notes[index].id] else { return nil }
+        return model.waterfallGeometry.contentGeometries[flowIndex]
     }
 
     /// 仅保护当前布局的可见字形；预测范围只预取源，可回收的未来纸张不能挤占当前高清预算。
@@ -318,12 +373,10 @@ extension NoteReviewCanvasOverviewController {
         var drawingKeys = Set<CanvasOverviewResourceKey>()
         var sourceKeys = Set<CanvasOverviewResourceKey>()
         for id in previewDemand.prefix(40) {
-            guard let index = model.canvasGeometry.indexByID[id] else { continue }
-            if let key = model.notes[index].key { sourceKeys.insert(key) }
+            if let key = model.note(for: id)?.key { sourceKeys.insert(key) }
         }
         for id in previewVisibleDemand.prefix(20) {
-            guard let index = model.canvasGeometry.indexByID[id],
-                  let key = previewContent(at: index, in: model, mode: currentMode).key else { continue }
+            guard let key = model.content(for: id, mode: currentMode)?.key else { continue }
             drawingKeys.insert(key)
         }
         previewDrawingPins = previewDrawingPins.filter { drawingKeys.contains($0.key) }
@@ -365,7 +418,7 @@ extension NoteReviewCanvasOverviewController {
     }
 
     /// 快照在独占准备队列绘制，同一原始排版只按屏幕倍率投影；取消不提交迟到像素。
-    func readingEndpoint(noteID: Int64, in container: UIView) async -> NoteReviewCanvasReadingEndpoint? {
+    func readingEndpoint(noteID: Int64, in container: UIView, requestGeneration: Int = 0) async -> NoteReviewCanvasReadingEndpoint? {
         if let model = preparedModel {
             // Only this paper participates in a reading transition. Unrelated neighbors
             // must not make opening a fully loaded note fail.
@@ -408,7 +461,9 @@ extension NoteReviewCanvasOverviewController {
                 backgroundOverlay: NoteReviewCanvasAppearance.resolvedPaper(endpoint.style.backgroundOverlay)),
             backdropColor: NoteReviewCanvasAppearance.interpolatePaper(from: endpoint.style.canvasBaseColor,
                 to: endpoint.style.canvasTintColor.copy(alpha: 1) ?? endpoint.style.canvasTintColor,
-                progress: endpoint.style.canvasTintColor.alpha))
+                progress: endpoint.style.canvasTintColor.alpha),
+            identity: .init(noteID: noteID, requestGeneration: requestGeneration,
+                contentVersion: token, appearanceVersion: token))
     }
 
     /// 高清需求最多按二十条读取；转换在独占准备队列执行，每批结束释放源并响应取消。
@@ -429,7 +484,7 @@ extension NoteReviewCanvasOverviewController {
         guard let sourceReader else { throw CancellationError() }
         let modelGeneration = generation
         var seen = Set<Int64>()
-        let valid = ids.filter { seen.insert($0).inserted && model.noteByID[$0] != nil }
+        let valid = ids.filter { seen.insert($0).inserted && model.note(for: $0) != nil }
         if protectsTransition { pinTransitionPreviews(ids: valid, model: model, modes: modes) }
         let wanted = valid.filter { !previewsAreReady(for: $0, in: model, modes: modes) }
         // A ready drawing may still sit behind a Tile rasterized earlier from the fallback atlas.
@@ -447,7 +502,7 @@ extension NoteReviewCanvasOverviewController {
                 let batch = requested.filter { !previewsAreReady(for: $0, in: model, modes: modes) }
                 guard !batch.isEmpty else { return }
                 let cached = Dictionary(uniqueKeysWithValues: batch.compactMap { id -> (Int64, NoteReviewCanvasResourceLease<CanvasOverviewPreviewPayload>)? in
-                    guard let note = model.noteByID[id], let key = note.key,
+                    guard let note = model.note(for: id), let key = note.key,
                           let lease = note.store?.previews.lease(for: key) else { return nil }
                     return (id, lease)
                 })
@@ -465,14 +520,13 @@ extension NoteReviewCanvasOverviewController {
                             var missing = 0, stale = 0, rejected = 0
                             for id in batch {
                                 guard !batchWork.isCancelled,
-                                      let index = model.canvasGeometry.indexByID[id],
-                                      let key = model.notes[index].key,
-                                      let store = model.notes[index].store else { continue }
+                                      let original = model.note(for: id), let key = original.key,
+                                      let store = original.store else { continue }
                                 let note: CanvasOverviewNote
                                 if let cached = cached[id] {
-                                    note = model.notes[index].restoringPreview(cached.value)
+                                    note = original.restoringPreview(cached.value)
                                 } else if let source = byID[id],
-                                          model.notes[index].revision == CanvasOverviewSourceRevision(source),
+                                          original.revision == CanvasOverviewSourceRevision(source),
                                           let fresh = CanvasOverviewPreparationMetrics.measure("Parse preview", {
                                               CanvasOverviewTextFactory.makeRealNotes([source], style: model.style,
                                                   cancellation: batchWork).first
@@ -484,8 +538,7 @@ extension NoteReviewCanvasOverviewController {
                                 }
                                 _ = note.cached(in: store, generation: key.generation)
                                 for mode in modes {
-                                    let content = mode == .desktop ? model.canvasGeometry.papers[index].contentGeometry
-                                        : model.waterfallGeometry.contentGeometries[index]
+                                    guard let content = model.content(for: id, mode: mode) else { continue }
                                     guard !batchWork.isCancelled, let drawingKey = content.key,
                                           content.preparedBlocks == nil else { continue }
                                     // Reuse committed rectangles and truncation; sharpening never measures a new height.
@@ -531,9 +584,8 @@ extension NoteReviewCanvasOverviewController {
     /// 转场仅保护会出现在对应端点的排版；所有租约在交还显示权或取消时释放。
     private func pinTransitionPreviews(ids: [Int64], model: CanvasOverviewPreparedModel, modes: [Mode]) {
         for id in ids {
-            guard let index = model.canvasGeometry.indexByID[id] else { continue }
             for mode in modes {
-                guard let key = previewContent(at: index, in: model, mode: mode).key,
+                guard let key = model.content(for: id, mode: mode)?.key,
                       transitionPreviewPins[key] == nil else { continue }
                 transitionPreviewPins[key] = previewStore.drawings.lease(for: key)
             }

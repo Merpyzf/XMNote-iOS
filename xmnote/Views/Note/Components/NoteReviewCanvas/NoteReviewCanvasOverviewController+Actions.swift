@@ -81,6 +81,7 @@ extension NoteReviewCanvasOverviewController {
 
     /// 旋转纸张的包围框只用于索引；圆角以外的空白也不触发对象菜单。
     func desktopActionNoteID(at point: CGPoint) -> Int64? {
+        guard directoryCatalog == nil else { return nil }
         guard let model = preparedModel, let paper = model.canvasGeometry.paper(at: point) else { return nil }
         let delta = CGPoint(x: point.x - paper.frame.midX, y: point.y - paper.frame.midY)
         let local = CGPoint(x: delta.x * cos(paper.rotation) + delta.y * sin(paper.rotation) + paper.frame.width / 2,
@@ -138,9 +139,9 @@ extension NoteReviewCanvasOverviewController {
                         point: CGPoint) -> UIContextMenuConfiguration? {
         guard collectionView === waterfallView, currentMode == .waterfall,
               indexPaths.count == 1, let index = indexPaths.first?.item,
-              let model = preparedModel, model.notes.indices.contains(index),
+              let model = preparedModel, model.waterfallGeometry.notes.indices.contains(index),
               model.waterfallGeometry.frames.indices.contains(index) else { return nil }
-        let note = model.notes[index]
+        let note = model.waterfallGeometry.notes[index]
         let frame = model.waterfallGeometry.frames[index]
         let paperPath = UIBezierPath(roundedRect: frame, cornerRadius: model.waterfallStyle.cornerRadius)
         guard paperPath.contains(point) else { return nil }

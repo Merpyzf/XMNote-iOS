@@ -13,7 +13,7 @@ struct NoteReviewUIKitHost: UIViewControllerRepresentable {
     let repositories: RepositoryContainer
     let toastCenter: XMToastCenter
     let onDismiss: () -> Void
-    let onOpenDetail: (Int64, [Int64]) -> Void
+    let onOpenDetail: (Int64, ContentViewerSourceContext) -> Void
     let onError: (String) -> Void
 
     /// 创建全屏回顾控制器；后续数据和交互均由 UIKit 会话拥有。

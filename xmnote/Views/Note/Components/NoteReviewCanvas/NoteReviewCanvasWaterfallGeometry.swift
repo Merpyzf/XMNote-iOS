@@ -40,6 +40,7 @@ nonisolated struct NoteReviewCanvasWaterfallGeometry: Sendable {
     /// 准备任务每项检查取消；所有高度必须已完成测量，失败不返回部分布局。
     init(ids: [Int64], heights: [CGFloat], viewport: CGSize, generation: UInt64,
          accessibility: Bool = false, regularWidth: Bool = false, isRTL: Bool = false,
+         retainingFrames: [Int64: CGRect] = [:],
          isCancelled: () -> Bool = { false }) throws {
         guard ids.count == heights.count, viewport.width.isFinite, viewport.height.isFinite,
               viewport.width > 32, viewport.height > 0,
@@ -64,6 +65,59 @@ nonisolated struct NoteReviewCanvasWaterfallGeometry: Sendable {
                 y: bottoms[column], width: metrics.cardWidth, height: heights[index]))
             indexes[column].append(index)
             bottoms[column] += heights[index] + metrics.gap
+        }
+        let overlap = ids.indices.filter { retainingFrames[ids[$0]] != nil }
+        if let first = overlap.first, let last = overlap.last,
+           (first...last).allSatisfy({ retainingFrames[ids[$0]] != nil }),
+           overlap.allSatisfy({ abs((retainingFrames[ids[$0]]?.height ?? 0) - heights[$0]) < 0.01
+               && abs((retainingFrames[ids[$0]]?.width ?? 0) - metrics.cardWidth) < 0.01 }) {
+            var tops = Array(repeating: CGFloat.greatestFiniteMagnitude, count: metrics.columns)
+            bottoms = Array(repeating: -CGFloat.greatestFiniteMagnitude, count: metrics.columns)
+            /// Column identity is recovered from committed physical x, including RTL mirroring.
+            func column(for frame: CGRect) -> Int {
+                let x = isRTL ? viewport.width - frame.maxX : frame.minX
+                return min(metrics.columns - 1, max(0, Int(((x - metrics.margin) / (metrics.cardWidth + metrics.gap)).rounded())))
+            }
+            for index in overlap {
+                guard let frame = retainingFrames[ids[index]] else { continue }
+                frames[index] = frame
+                let col = column(for: frame)
+                tops[col] = min(tops[col], frame.minY)
+                bottoms[col] = max(bottoms[col], frame.maxY + metrics.gap)
+            }
+            let top = tops.min() ?? metrics.margin
+            let bottom = bottoms.max() ?? metrics.margin
+            for col in 0..<metrics.columns {
+                if tops[col] == .greatestFiniteMagnitude { tops[col] = top }
+                if bottoms[col] == -.greatestFiniteMagnitude { bottoms[col] = bottom }
+            }
+            for index in (0..<first).reversed() {
+                if isCancelled() { throw NoteReviewCanvasGeometryError.cancelled }
+                let col = tops.indices.max { tops[$0] < tops[$1] } ?? 0
+                let x = metrics.margin + CGFloat(col) * (metrics.cardWidth + metrics.gap)
+                let y = tops[col] - metrics.gap - heights[index]
+                frames[index] = CGRect(x: isRTL ? viewport.width - x - metrics.cardWidth : x,
+                    y: y, width: metrics.cardWidth, height: heights[index])
+                tops[col] = y
+            }
+            for index in (last + 1)..<ids.count {
+                if isCancelled() { throw NoteReviewCanvasGeometryError.cancelled }
+                let col = bottoms.indices.min { bottoms[$0] < bottoms[$1] } ?? 0
+                let x = metrics.margin + CGFloat(col) * (metrics.cardWidth + metrics.gap)
+                frames[index] = CGRect(x: isRTL ? viewport.width - x - metrics.cardWidth : x,
+                    y: bottoms[col], width: metrics.cardWidth, height: heights[index])
+                bottoms[col] += heights[index] + metrics.gap
+            }
+            let translation = metrics.margin - (frames.map(\.minY).min() ?? metrics.margin)
+            frames = frames.map { $0.offsetBy(dx: 0, dy: translation) }
+            bottoms = Array(repeating: metrics.margin, count: metrics.columns)
+            indexes = Array(repeating: [], count: metrics.columns)
+            for index in frames.indices {
+                let col = column(for: frames[index])
+                indexes[col].append(index)
+                bottoms[col] = max(bottoms[col], frames[index].maxY + metrics.gap)
+            }
+            indexes = indexes.map { column in column.sorted { frames[$0].minY < frames[$1].minY } }
         }
         if isCancelled() { throw NoteReviewCanvasGeometryError.cancelled }
         self.generation = generation; self.metrics = metrics

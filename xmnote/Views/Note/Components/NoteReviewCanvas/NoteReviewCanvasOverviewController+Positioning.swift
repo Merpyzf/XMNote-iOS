@@ -75,6 +75,8 @@ extension NoteReviewCanvasOverviewController {
 
     /// 准备期间不锁住可信源内容；宿主在真实手势开始时取消待切换请求，动画期仍由转场持有显示权。
     func userInteractionBegan() {
+        if stackBrowser == nil { cancelStackPreparation() }
+        cancelCatalogPreparation()
         endMenuPrewarming(cancelUnrequestedPreparation: true)
         cancelProgrammaticPositioning()
         onUserInteractionBegan?()
@@ -101,7 +103,8 @@ extension NoteReviewCanvasOverviewController {
             indexes = model.waterfallGeometry.indexes(in: waterfallRect ?? waterfallView.bounds)
         }
         var seen = Set<Int64>()
-        return ([noteID] + indexes.map { model.notes[$0].id }).filter { seen.insert($0).inserted }
+        let notes = mode == .desktop ? model.notes : model.waterfallGeometry.notes
+        return ([noteID] + indexes.map { notes[$0].id }).filter { seen.insert($0).inserted }
     }
 
     /// 所有目标预热共享实际视口尺寸；缩略地图只映射到当前纸张的可读邻域，不读完整地图正文。
