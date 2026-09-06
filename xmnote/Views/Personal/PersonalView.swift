@@ -6,8 +6,8 @@
 //
 
 /**
- * [INPUT]: 依赖 AppState、DesktopWebSessionCoordinator、AppNavigationCoordinator、XMSettingsGroup、PersonalRoute、DebugRoute 与阅读日历根级呈现回调
- * [OUTPUT]: 对外提供 PersonalView，以会员优先、四项常用功能、三组无标题紧凑卡片、16/13pt 设置行层级与页面私有 Reicon Outline 映射承载我的 Tab 核心入口、网页端状态与顶部新增、设置操作
+ * [INPUT]: 依赖 AppState、DesktopWebSessionCoordinator、AppNavigationCoordinator、XMSettingsGroup、字体许可资源、PersonalRoute、DebugRoute 与阅读日历根级呈现回调
+ * [OUTPUT]: 对外提供 PersonalView 与 AboutAppView，承载我的 Tab 核心入口、网页端状态、设置操作及思源宋体开源许可查看
  * [POS]: Personal 模块容器壳层，承载设置列表、网页端与备份入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -496,6 +496,68 @@ extension PersonalView {
         .frame(minHeight: Layout.rowMinHeight)
         .contentShape(Rectangle())
     }
+}
+
+/// 关于应用页提供版本信息和随包分发字体的完整版权许可，避免资源内嵌后缺少用户可达的法律文本。
+struct AboutAppView: View {
+    var body: some View {
+        XMSettingsPage {
+            XMSettingsSection("应用") {
+                XMSettingsGroup(presentation: .singleItem) {
+                    VStack(alignment: .leading, spacing: Spacing.compact) {
+                        Text("纸间书摘")
+                            .font(SettingsTypography.rowTitle)
+                            .foregroundStyle(Color.textPrimary)
+
+                        Text("版本 \(Self.appVersion)")
+                            .font(SettingsTypography.rowDescription)
+                            .foregroundStyle(Color.textSecondary)
+                    }
+                    .frame(minHeight: XMSettingsPageLayout.regularRowMinHeight)
+                }
+            }
+
+            XMSettingsSection("开源许可") {
+                XMSettingsGroup {
+                    DisclosureGroup {
+                        Text(verbatim: Self.sourceHanSerifLicense)
+                            .font(AppTypography.caption)
+                            .foregroundStyle(Color.textSecondary)
+                            .textSelection(.enabled)
+                            .padding(.top, Spacing.base)
+                    } label: {
+                        VStack(alignment: .leading, spacing: Spacing.compact) {
+                            Text(verbatim: "Source Han Serif SC")
+                                .font(SettingsTypography.rowTitle)
+                                .foregroundStyle(Color.textPrimary)
+
+                            Text(verbatim: "SIL Open Font License 1.1")
+                                .font(SettingsTypography.rowDescription)
+                                .foregroundStyle(Color.textSecondary)
+                        }
+                        .frame(minHeight: XMSettingsPageLayout.regularRowMinHeight)
+                    }
+                    .tint(Color.textSecondary)
+                }
+            }
+        }
+        .navigationTitle("关于应用")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private static let appVersion: String = Bundle.main.object(
+        forInfoDictionaryKey: "CFBundleShortVersionString"
+    ) as? String ?? "—"
+
+    private static let sourceHanSerifLicense: String = {
+        guard let url = Bundle.main.url(
+            forResource: "SourceHanSerifSC-LICENSE",
+            withExtension: "txt"
+        ), let text = try? String(contentsOf: url, encoding: .utf8) else {
+            return "Source Han Serif SC\nSIL Open Font License 1.1\n许可文本资源缺失。"
+        }
+        return text
+    }()
 }
 
 private struct PersonalSettingsDivider: View {

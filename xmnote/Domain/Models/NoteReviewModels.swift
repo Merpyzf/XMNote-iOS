@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Foundation 基础类型，承接 Android 书摘回顾设置与卡片数据语义
- * [OUTPUT]: 对外提供 NoteReviewSettings、NoteReviewLaunchPayload、NoteReviewCardItem、NoteReviewTagOption 与标签编辑快照等跨层模型
+ * [OUTPUT]: 对外提供含字体与桌面卡宽偏好的 NoteReviewSettings、NoteReviewLaunchPayload、NoteReviewOverviewLayoutSource、NoteReviewCardItem、NoteReviewTagOption 与标签编辑快照等跨层模型
  * [POS]: Domain/Models 的书摘回顾领域模型，供 Repository、ViewModel 与回顾页面共享
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -212,7 +212,7 @@ nonisolated enum NoteReviewFontSelection: Hashable, Sendable, Codable {
         case .system:
             return "系统默认"
         case .sourceHanSerif:
-            return "衬线字体"
+            return "思源宋体"
         case .local(_, let displayName):
             return displayName
         }
@@ -274,7 +274,7 @@ nonisolated enum NoteReviewTextAlignment: String, CaseIterable, Codable, Hashabl
     }
 }
 
-/// 沉浸和平铺回顾共享的内容显隐设置；正文始终显示，不在该模型中提供关闭开关。
+/// 沉浸与纸流回顾共享的内容显隐设置；正文始终显示，不在该模型中提供关闭开关。
 nonisolated struct NoteReviewImmersiveDisplaySettings: Codable, Hashable, Sendable {
     var showsIdea: Bool
     var showsImages: Bool
@@ -289,7 +289,7 @@ nonisolated struct NoteReviewImmersiveDisplaySettings: Codable, Hashable, Sendab
         showsImages: true,
         showsBookInfo: true,
         showsCreatedDate: true,
-        showsChapter: false,
+        showsChapter: true,
         showsPosition: false,
         showsTags: false
     )
@@ -311,12 +311,14 @@ nonisolated struct NoteReviewSettings: Codable, Hashable, Sendable {
     var fontSelection: NoteReviewFontSelection
     var favoriteTagID: Int64?
     var immersiveDisplay: NoteReviewImmersiveDisplaySettings
+    var desktopCardWidth: Int
 
     private enum CodingKeys: String, CodingKey {
         case selectedBookIDs, selectedTagIDs, tagMatchRule, sortRule, palette, textAlignment
         case backgroundMode, backgroundImageURL
         case customBackgroundStartHex, customBackgroundEndHex, customTextColorHex
         case fontSelection, favoriteTagID, immersiveDisplay
+        case desktopCardWidth
     }
 
     static let defaultValue = NoteReviewSettings(
@@ -350,7 +352,8 @@ nonisolated struct NoteReviewSettings: Codable, Hashable, Sendable {
         customTextColorHex: UInt32?,
         fontSelection: NoteReviewFontSelection,
         favoriteTagID: Int64? = nil,
-        immersiveDisplay: NoteReviewImmersiveDisplaySettings = .defaultValue
+        immersiveDisplay: NoteReviewImmersiveDisplaySettings = .defaultValue,
+        desktopCardWidth: Int = 220
     ) {
         self.selectedBookIDs = selectedBookIDs
         self.selectedTagIDs = selectedTagIDs
@@ -366,6 +369,7 @@ nonisolated struct NoteReviewSettings: Codable, Hashable, Sendable {
         self.fontSelection = fontSelection
         self.favoriteTagID = favoriteTagID
         self.immersiveDisplay = immersiveDisplay
+        self.desktopCardWidth = Self.validatedDesktopCardWidth(desktopCardWidth)
     }
 
     /// 兼容旧版本只保存范围与配色的设置数据，新字段缺失时回退到 Android 默认语义。
@@ -388,6 +392,14 @@ nonisolated struct NoteReviewSettings: Codable, Hashable, Sendable {
             NoteReviewImmersiveDisplaySettings.self,
             forKey: .immersiveDisplay
         ) ?? .defaultValue
+        desktopCardWidth = Self.validatedDesktopCardWidth(
+            (try? container.decode(Int.self, forKey: .desktopCardWidth)) ?? 220
+        )
+    }
+
+    /// 新偏好独立容错；损坏或越界卡宽不能导致配色、字体及筛选设置整份回退。
+    static func validatedDesktopCardWidth(_ width: Int) -> Int {
+        (180...360).contains(width) ? width : 220
     }
 
     /// 当前有效背景起止颜色，图片背景不可用时也作为稳定回退颜色。
@@ -466,6 +478,18 @@ nonisolated struct NoteReviewPageRequest: Hashable, Sendable {
     let offset: Int
     let excludedNoteIDs: [Int64]
     let limit: Int
+}
+
+/// 纸流全量布局清单使用的轻量内容源；更新时间用于判断已测高度能否继续复用。
+nonisolated struct NoteReviewOverviewLayoutSource: Equatable, Sendable {
+    let noteID: Int64
+    let contentHTML: String
+    let ideaHTML: String
+    let bookTitle: String
+    let chapterTitle: String
+    let noteUpdatedDate: Int64
+    let bookUpdatedDate: Int64
+    let chapterUpdatedDate: Int64
 }
 
 /// 回顾卡片展示项，保留卡堆、标签区与详情跳转所需的稳定字段。

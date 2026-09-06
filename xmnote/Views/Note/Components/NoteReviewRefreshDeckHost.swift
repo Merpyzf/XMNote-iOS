@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 NoteReviewViewModel 的候选页准备/提交与一级操作状态、NoteReviewPagingDeck，以及页面注入的卡片内容、AI 助手与业务动作闭包
- * [OUTPUT]: 对外提供 NoteReviewLoadingShell、NoteReviewRefreshDeckHost、紧凑低强调的四项卡片操作栏、随机换组 latest-wins 协调器与可测动效规格
+ * [INPUT]: 依赖 NoteReviewViewModel 的候选页准备/提交、设置驱动的数据重载与一级操作状态，依赖 NoteReviewPagingDeck，以及页面注入的卡片内容、AI 助手与业务动作闭包
+ * [OUTPUT]: 对外提供 NoteReviewLoadingShell、NoteReviewRefreshDeckHost、不会误取消设置重载的视觉会话清理、紧凑低强调的四项卡片操作栏、随机换组 latest-wins 协调器与可测动效规格
  * [POS]: Note/Components 的回顾卡组与卡片操作宿主，以稳定 live deck 和预挂载新组完成连续替换，不作为跨模块组件
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -501,7 +501,7 @@ struct NoteReviewRefreshDeckHost<CardContent: View>: View {
             .padding(.bottom, NoteReviewBottomLayout.actionRowBottomPadding)
         }
         .onChange(of: viewModel.settings) { _, _ in
-            cancelRefreshWork()
+            cancelRefreshWork(invalidatesPreparedRefresh: false)
         }
         .onDisappear {
             cancelRefreshWork()
@@ -863,8 +863,8 @@ struct NoteReviewRefreshDeckHost<CardContent: View>: View {
         }
     }
 
-    /// 页面消失或设置变化会取消所有延迟和交接任务，并推进 ViewModel generation，防止旧候选页恢复到新范围。
-    private func cancelRefreshWork() {
+    /// 取消所有延迟和视觉交接任务；页面消失时同时推进 ViewModel generation，设置变化则保留其刚启动的新范围查询。
+    private func cancelRefreshWork(invalidatesPreparedRefresh: Bool = true) {
         queryProgressTask?.cancel()
         refreshTask?.cancel()
         replacementTask?.cancel()
@@ -876,7 +876,9 @@ struct NoteReviewRefreshDeckHost<CardContent: View>: View {
         isOrderedRefreshing = false
         progressShownAt = nil
         coordinator.cancel()
-        viewModel.cancelPreparedRefresh()
+        if invalidatesPreparedRefresh {
+            viewModel.cancelPreparedRefresh()
+        }
         clearTransitionVisualsWithoutAnimation()
     }
 }

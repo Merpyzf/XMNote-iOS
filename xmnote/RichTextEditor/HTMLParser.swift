@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 RichTextEditor 模块格式定义、RichTextTypography 与 UIKit/TextKit 能力，承接富文本解析/渲染/编辑链路
+ * [INPUT]: 接收富文本、字体、trait 与段落缩进快照，使用任务独占 XMLParser 解析 Android Knife 格式
  * [OUTPUT]: 对外提供 HTMLParser 能力，用于富文本编辑器的序列化、交互或样式支持
  * [POS]: RichTextEditor 功能模块内部构件，服务 Note 编辑场景的 Android 业务意图对齐
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -10,7 +10,7 @@ import UIKit
 
 /// HTML → NSAttributedString，对标 KnifeParser.fromHtml + KnifeTagHandler
 /// 使用 XMLParser（SAX 模式），不依赖 WebKit
-final class HTMLParser: NSObject {
+nonisolated final class HTMLParser: NSObject, XMLParserDelegate {
 
     // MARK: - 公开接口
 
@@ -19,21 +19,32 @@ final class HTMLParser: NSObject {
     ///   - html: HTML 字符串（来自 Android Knife 序列化）
     ///   - baseFont: 基础字体
     ///   - traitCollection: 用于高亮色适配
-    static func parse(
+    @MainActor static func parse(
         _ html: String,
         baseFont: UIFont = RichTextTypography.editorBodyUIFont,
         traitCollection: UITraitCollection = .current
     ) -> NSMutableAttributedString {
-        let parser = HTMLParser()
-        parser.baseFont = baseFont
-        parser.traitCollection = traitCollection
-        return parser.parseHTML(html)
+        parsePrepared(html, baseFont: baseFont, traitCollection: traitCollection,
+            paragraphIndent: RichTextEditorView.defaultParagraphIndent)
+    }
+
+    /// 准备任务独占解析器及可变结果；调用者预先捕获 UIKit 外观，不访问主线程视图或隐式当前 trait。
+    static func parsePrepared(_ html: String, baseFont: UIFont, traitCollection: UITraitCollection,
+                              paragraphIndent: CGFloat) -> NSMutableAttributedString {
+        HTMLParser(baseFont: baseFont, traits: traitCollection, indent: paragraphIndent).parseHTML(html)
+    }
+
+    /// 每次调用独立持有解析栈和结果，不把解析器实例跨线程共享。
+    private init(baseFont: UIFont, traits: UITraitCollection, indent: CGFloat) {
+        self.baseFont = baseFont; traitCollection = traits; configuredParagraphIndent = indent
+        super.init()
     }
 
     // MARK: - 内部状态
 
-    private var baseFont: UIFont = RichTextTypography.editorBodyUIFont
-    private var traitCollection: UITraitCollection = .current
+    private let baseFont: UIFont
+    private let traitCollection: UITraitCollection
+    private let configuredParagraphIndent: CGFloat
     private var result = NSMutableAttributedString()
     private var tagStack: [TagContext] = []
     private var currentText = ""
@@ -159,11 +170,7 @@ final class HTMLParser: NSObject {
         }
         return HighlightColors.defaultHighlightColor
     }
-}
-
 // MARK: - XMLParserDelegate
-
-extension HTMLParser: XMLParserDelegate {
 
     /// 处理开始标签：写入上下文栈，并在 `li` 起始前补齐换行。
     func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName: String?, attributes attributeDict: [String: String] = [:]) {
@@ -317,7 +324,7 @@ extension HTMLParser: XMLParserDelegate {
 
     private func paragraphIndent() -> NSMutableParagraphStyle {
         let style = NSMutableParagraphStyle()
-        let indent = RichTextEditorView.defaultParagraphIndent
+        let indent = configuredParagraphIndent
         style.headIndent = indent
         style.firstLineHeadIndent = indent
         return style

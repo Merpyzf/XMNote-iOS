@@ -1,12 +1,47 @@
 /**
- * [INPUT]: 依赖 NoteReviewPalette / NoteReviewTextAlignment 与 SwiftUI/UIKit 颜色类型
- * [OUTPUT]: 对外提供书摘回顾卡片配色、想法中性轻托底与文本对齐的 UI 映射
+ * [INPUT]: 依赖 NoteReviewPalette / NoteReviewTextAlignment / NoteReviewFontSelection、SwiftUI/UIKit 颜色与内置思源宋体资源
+ * [OUTPUT]: 对外提供书摘回顾卡片配色、桌面画布底色、思源宋体解析、想法中性轻托底与文本对齐的 UI 映射
  * [POS]: Note 模块页面私有 UI 辅助，供回顾卡片和设置 Sheet 共享外观映射
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
 import UIKit
+import os
+
+/// 书摘桌面的页面私有表层语义；低饱和灰绿只承担方案 2 画布底板，不扩散到其他页面。
+enum NoteReviewCanvasAppearance {
+    static let page = UIColor.xmResolved(Color.surfacePage)
+    static let paper = UIColor.xmResolved(Color.surfaceCard)
+    static let sheet = UIColor.xmResolved(Color.surfaceSheet)
+    static let primary = UIColor.xmResolved(Color.textPrimary)
+    static let secondary = UIColor.xmResolved(Color.textSecondary)
+    static let hint = UIColor.xmResolved(Color.textHint)
+    static let accent = UIColor.xmResolved(Color.selectionAccent)
+    static let border = UIColor.xmResolved(Color.surfaceBorderDefault)
+    static let subtleBorder = UIColor.xmResolved(Color.surfaceBorderSubtle)
+
+    /// 离屏纸面回到 UIKit 代理时沿用已解析颜色，不重新选择深浅主题。
+    static func resolvedPaper(_ color: CGColor) -> UIColor { UIColor(cgColor: color) }
+
+    /// 两种纸张材质在单一显示对象内连续混合，构色集中在既有页面外观 owner。
+    static func interpolatePaper(from: CGColor, to: CGColor, progress: CGFloat) -> UIColor {
+        var sr: CGFloat = 0, sg: CGFloat = 0, sb: CGFloat = 0, sa: CGFloat = 0
+        var tr: CGFloat = 0, tg: CGFloat = 0, tb: CGFloat = 0, ta: CGFloat = 0
+        UIColor(cgColor: from).getRed(&sr, green: &sg, blue: &sb, alpha: &sa)
+        UIColor(cgColor: to).getRed(&tr, green: &tg, blue: &tb, alpha: &ta)
+        let p = min(1, max(0, progress))
+        return UIColor.xmSRGB(red: sr + (tr - sr) * p, green: sg + (tg - sg) * p,
+            blue: sb + (tb - sb) * p, alpha: sa + (ta - sa) * p)
+    }
+
+    static let backgroundColor = UIColor.xmAdaptive(
+        lightHex: 0xF0F2F1,
+        darkHex: 0x1B1E1D,
+        highContrastLightHex: 0xE8ECEA,
+        highContrastDarkHex: 0x111312
+    )
+}
 
 /// 书摘回顾配色的页面级 UI 映射，始终从领域层的亮暗纯色集合构造动态颜色。
 extension NoteReviewPalette {
@@ -37,6 +72,8 @@ extension NoteReviewPalette {
 struct NoteReviewCardAppearance {
     /// 用于颜色模式卡片与图片加载失败的纯色表面。
     let surface: Color
+    /// 与 SwiftUI 纸面完全一致的动态 UIKit 表面色，供远景分块避免远近切换色差。
+    let uiSurface: UIColor
     /// 用于图片模式加载成功时覆盖卡片的远程背景地址。
     let backgroundImageURL: String?
     /// 卡片的基础 on-surface 前景色；仅图片模式会应用已存储的自定义文字色。
@@ -123,6 +160,7 @@ extension NoteReviewSettings {
 
         return NoteReviewCardAppearance(
             surface: Color.xmResolved(uiSurface),
+            uiSurface: uiSurface,
             backgroundImageURL: imageURL,
             onSurface: Color.xmResolved(uiOnSurface),
             ideaBackgroundColor: Color.xmResolved(uiIdeaBackground),
@@ -192,7 +230,32 @@ private enum NoteReviewIdeaSurfaceStyle {
     }
 }
 
-/// 将领域字体选择转换为 RichText 所需的 UIKit 字体；本地字体未注册时安全回退到系统字体。
+/// 回顾内置字体的资源身份与失败诊断 owner，避免把展示名称误当成 PostScript 注册名。
+private enum NoteReviewBundledFont {
+    static let sourceHanSerifPostScriptName = "SourceHanSerifSC-SemiBold"
+
+    #if DEBUG
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "xmnote",
+        category: "NoteReviewFont"
+    )
+    #endif
+
+    /// 按基础字号解析已由 UIAppFonts 注册的思源宋体；资源异常时保持可读并在 Debug 日志中暴露失败。
+    static func sourceHanSerif(base: UIFont) -> UIFont {
+        guard let font = UIFont(name: sourceHanSerifPostScriptName, size: base.pointSize) else {
+            #if DEBUG
+            logger.error(
+                "[note-review.font.resolve] status=missing postscript=\(sourceHanSerifPostScriptName, privacy: .public)"
+            )
+            #endif
+            return base
+        }
+        return font
+    }
+}
+
+/// 将领域字体选择转换为 RichText 所需的 UIKit 字体；字体资源不可用时安全回退到当前语义字体。
 extension NoteReviewFontSelection {
     /// 按当前字体选择生成与基础字号一致的 UIKit 字体。
     func uiFont(base: UIFont) -> UIFont {
@@ -200,9 +263,10 @@ extension NoteReviewFontSelection {
         case .system:
             return base
         case .sourceHanSerif:
-            return UIFont(name: "Songti SC", size: base.pointSize) ?? base
+            return NoteReviewBundledFont.sourceHanSerif(base: base)
         case .local(_, let displayName):
-            return UIFont(name: displayName, size: base.pointSize) ?? base
+            return UIFont(name: displayName, size: base.pointSize)
+                ?? NoteReviewBundledFont.sourceHanSerif(base: base)
         }
     }
 }

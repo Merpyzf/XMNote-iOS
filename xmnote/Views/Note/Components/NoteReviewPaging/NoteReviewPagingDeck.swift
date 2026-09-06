@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 BigUIPaging PageView、NoteReviewPagingModels 与 SwiftUI 手势/可访问性环境
- * [OUTPUT]: 对外提供 NoteReviewPagingDeck，支持首帧同步成组、书摘回顾双向滑动、后卡补位、分页预加载与空态承载
+ * [OUTPUT]: 对外提供 NoteReviewPagingDeck，支持首帧同步成组、数据源变更重建、书摘回顾双向滑动、后卡补位、分页预加载与空态承载
  * [POS]: Views/Note/Components/NoteReviewPaging 的页面私有卡组，隔离业务卡片内容与 BigUIPaging 源码基座
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -84,7 +84,12 @@ struct NoteReviewPagingDeck<Item: Identifiable, CardContent: View, EmptyContent:
         } content: { id in
             cardContent(for: id)
         }
-        .pageViewStyle(NoteReviewCardDeckPageViewStyle(configuration: configuration))
+        .pageViewStyle(
+            NoteReviewCardDeckPageViewStyle(
+                configuration: configuration,
+                sourceIDs: itemIDs.map(AnyHashable.init)
+            )
+        )
         .padding(configuration.cardInsets)
         .accessibilityElement(children: .contain)
         .accessibilityValue(accessibilityValue)
@@ -92,7 +97,7 @@ struct NoteReviewPagingDeck<Item: Identifiable, CardContent: View, EmptyContent:
 
     private var selectedIDBinding: Binding<Item.ID> {
         Binding {
-            selection ?? items[0].id
+            pagingState().normalizedSelection ?? items[0].id
         } set: { newValue in
             selection = newValue
         }
@@ -166,11 +171,13 @@ struct NoteReviewPagingDeck<Item: Identifiable, CardContent: View, EmptyContent:
 
 private struct NoteReviewCardDeckPageViewStyle: PageViewStyle {
     let configuration: NoteReviewPagingDeckConfiguration
+    let sourceIDs: [AnyHashable]
 
     func makeBody(configuration pageConfiguration: Configuration) -> some View {
         NoteReviewCardDeckPageView(
             pageConfiguration: pageConfiguration,
-            deckConfiguration: configuration
+            deckConfiguration: configuration,
+            sourceIDs: sourceIDs
         )
     }
 }
@@ -198,6 +205,7 @@ private struct NoteReviewCardDeckPageView: View {
 
     let pageConfiguration: PageViewStyleConfiguration
     let deckConfiguration: NoteReviewPagingDeckConfiguration
+    let sourceIDs: [AnyHashable]
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var dragTracker = NoteReviewPagingDragTracker()
@@ -210,10 +218,12 @@ private struct NoteReviewCardDeckPageView: View {
     /// 使用当前选中项同步建立首批视觉层，避免组件先提交空页面、再等待 onAppear 补齐卡组。
     init(
         pageConfiguration: PageViewStyleConfiguration,
-        deckConfiguration: NoteReviewPagingDeckConfiguration
+        deckConfiguration: NoteReviewPagingDeckConfiguration,
+        sourceIDs: [AnyHashable]
     ) {
         self.pageConfiguration = pageConfiguration
         self.deckConfiguration = deckConfiguration
+        self.sourceIDs = sourceIDs
 
         let visibleLimit = max(deckConfiguration.visibleCount - 1, 1)
         let resolved = pageConfiguration.values(
@@ -271,6 +281,9 @@ private struct NoteReviewCardDeckPageView: View {
             visualSession = nil
             rebuildPages(from: newValue)
             dragTracker.reset()
+        }
+        .onChange(of: sourceIDs) { oldIDs, newIDs in
+            reconcileSourceChange(from: oldIDs, to: newIDs)
         }
         .onChange(of: deckConfiguration) { _, _ in
             visualSession = nil
@@ -402,6 +415,22 @@ private struct NoteReviewCardDeckPageView: View {
         let resolved = pageConfiguration.values(surrounding: value, limit: visibleLimit)
         pages = resolved.0.enumerated().map { Page(index: $0.offset, value: $0.element) }
         selectedIndex = resolved.1
+    }
+
+    /// 数据仅在尾部追加时保留正在进行的直操；范围替换或重排则立即丢弃旧视觉会话并从权威 selection 重建。
+    private func reconcileSourceChange(from oldIDs: [AnyHashable], to newIDs: [AnyHashable]) {
+        let isAppendOnly = newIDs.count >= oldIDs.count && newIDs.starts(with: oldIDs)
+        if !isAppendOnly {
+            visualSession = nil
+            internallyCommittedSelection = nil
+            dragTracker.reset()
+        }
+
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            rebuildPages(from: pageConfiguration.selection.wrappedValue)
+        }
     }
 
     private func destinationValue(for navigation: NoteReviewPagingNavigation) -> PageViewStyleConfiguration.Value? {

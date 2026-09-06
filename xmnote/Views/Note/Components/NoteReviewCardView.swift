@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 NoteReviewCardItem 与 NoteReviewSettings，复用 RichText、XMRemoteImage 和 NoteReviewCardTypography
- * [OUTPUT]: 对外提供 NoteReviewCardView，以统一阅读轴线渲染正文、中性轻托底想法区、附图、标签与来源信息，并让图片背景在内容就绪后低调淡入
+ * [OUTPUT]: 对外提供 NoteReviewCardView，以选择字体和统一阅读轴线渲染正文、中性轻托底想法区、书名、附图、标签与来源信息，并让图片背景在内容就绪后低调淡入
  * [POS]: Note 模块页面私有子视图，被 NoteReviewView 的卡堆内容闭包消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -96,8 +96,8 @@ struct NoteReviewCardView: View {
 
                 if !bookAuthor.isEmpty {
                     Text(bookAuthor)
-                        .font(NoteReviewCardTypography.footerAuthor(for: settings))
-                    .foregroundStyle(appearance.secondaryTextColor)
+                        .font(NoteReviewCardTypography.footerAuthor)
+                        .foregroundStyle(appearance.secondaryTextColor)
                         .lineLimit(1)
                         .multilineTextAlignment(.leading)
                 }
@@ -269,18 +269,14 @@ private enum NoteReviewCardTypography {
             ) as CTFont
         )
     }
-    static func footerAuthor(for settings: NoteReviewSettings) -> Font {
-        Font(
-            settings.fontSelection.uiFont(
-                base: AppTypography.uiFixed(
-                    baseSize: 11,
-                    textStyle: .caption2,
-                    weight: .regular,
-                    minimumPointSize: 11
-                )
-            ) as CTFont
-        )
-    }
+    static let footerAuthor = Font(
+        AppTypography.uiFixed(
+            baseSize: 11,
+            textStyle: .caption2,
+            weight: .regular,
+            minimumPointSize: 11
+        ) as CTFont
+    )
 }
 
 /// 回顾卡片布局常量，控制阅读纸面比例、来源区托底和正文内边距。

@@ -3,7 +3,7 @@ import GRDB
 
 /**
  * [INPUT]: 依赖 AppDatabase 提供本地数据库连接，依赖 ObservationStream 提供观察流桥接，依赖 UserDefaults/FileManager/S3UploadRepository 承接草稿、暂存图与上传事务
- * [OUTPUT]: 对外提供 NoteRepository（NoteRepositoryProtocol 的 GRDB 实现）及跳过首个观察基线的回顾变化信号，覆盖聚合列表、章节范围、批量写入、合并、编辑草稿与保存事务
+ * [OUTPUT]: 对外提供 NoteRepository（NoteRepositoryProtocol 的 GRDB 实现）、有效章节语义的回顾卡片、纸流轻量布局源及跳过首个观察基线的变化信号，覆盖聚合列表、章节范围、批量写入、合并、编辑草稿与保存事务
  * [POS]: Data 层笔记仓储实现，统一收口书摘读取、iOS 已批准硬删除、关系替换、跨书章节迁移与合并原子事务
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -172,6 +172,15 @@ struct NoteRepository: NoteRepositoryProtocol {
     func fetchNoteReviewIDs(settings: NoteReviewSettings) async throws -> [Int64] {
         try await databaseManager.database.dbPool.read { db in
             try fetchNoteReviewIDs(db, settings: settings)
+        }
+    }
+
+    /// 异步按输入顺序读取纸流测高字段；数据库等待不占用主线程，读取事务内的每条 SQL 最多绑定 128 个书摘 ID。
+    func fetchNoteReviewOverviewLayoutSources(
+        noteIDs: [Int64]
+    ) async throws -> [NoteReviewOverviewLayoutSource] {
+        try await databaseManager.database.dbPool.read { db in
+            try fetchNoteReviewOverviewLayoutSources(db, noteIDs: noteIDs)
         }
     }
 
@@ -1916,7 +1925,7 @@ private extension NoteRepository {
 
         // SQL 目的：按书摘回顾设置读取一页书摘卡片基础字段，并携带微信读书原文跳转参数。
         // 涉及表：note 为主表，book/chapter 补充展示信息与 weread_book_id、source_type、source_uid；标签/图片由后续批量查询补齐。
-        // 关键过滤：始终排除 note.is_deleted=1；书籍范围使用 note.book_id IN；标签范围通过 tag_note 子查询支持任一/全部标签；
+        // 关键过滤：始终排除 note.is_deleted=1；章节连接排除 id=0 的 Android 根占位记录；书籍范围使用 note.book_id IN；标签范围通过 tag_note 子查询支持任一/全部标签；
         //          随机模式额外排除已加载 note.id，避免同一轮卡堆重复出现。
         // 排序：随机模式使用 SQLite RANDOM()；顺序模式按 Android NoteReview DAO 的 book_id DESC、note.id ASC。
         // 分页：顺序模式使用 LIMIT/OFFSET；随机模式仅 LIMIT。
@@ -1934,7 +1943,7 @@ private extension NoteRepository {
                    COALESCE(c.source_uid, '') AS chapter_source_uid
             FROM note n
             LEFT JOIN book b ON b.id = n.book_id
-            LEFT JOIN chapter c ON c.id = n.chapter_id AND c.is_deleted = 0
+            LEFT JOIN chapter c ON c.id = n.chapter_id AND c.id != 0 AND c.is_deleted = 0
             WHERE \(predicates.joined(separator: "\n              AND "))
             \(orderClause)
             \(pagingClause)
@@ -1977,6 +1986,66 @@ private extension NoteRepository {
         try fetchNoteReviewItems(db, noteIDs: [noteID]).first
     }
 
+    /// 分批读取纸流全量测高所需字段；每条 SQL 最多绑定 128 个身份，并在内存中恢复输入顺序。
+    nonisolated func fetchNoteReviewOverviewLayoutSources(
+        _ db: Database,
+        noteIDs: [Int64]
+    ) throws -> [NoteReviewOverviewLayoutSource] {
+        let orderedIDs = Self.uniquePositiveIDs(noteIDs)
+        guard !orderedIDs.isEmpty else { return [] }
+
+        let maximumBatchSize = 128
+        var sourcesByID: [Int64: NoteReviewOverviewLayoutSource] = [:]
+        sourcesByID.reserveCapacity(orderedIDs.count)
+
+        for startIndex in stride(from: 0, to: orderedIDs.count, by: maximumBatchSize) {
+            let endIndex = min(startIndex + maximumBatchSize, orderedIDs.count)
+            let batchIDs = Array(orderedIDs[startIndex..<endIndex])
+
+            // SQL 目的：读取纸流全量布局测高所需的最小正文、标题和版本字段，不构建完整操作卡片。
+            // 涉及表：note 为主表；book/chapter 仅补充纸面标题及各自 updated_date。
+            // 关键过滤：note.id 位于当前最多 128 个输入主键且 note.is_deleted=0；chapter 排除 Android 根占位与已删除记录。
+            // 排序：IN 查询不依赖 SQLite 返回顺序；读取后按调用方输入 ID 顺序恢复，重复及非正 ID 已稳定去除。
+            // 时间字段：三个 updated_date 均保持 Android Unix 毫秒原值，不做时区换算；缺失连接回填 0。
+            // 返回字段用途：只供纸流预览内容测高与高度缓存失效判断，不读取标签、图片、封面、位置或原文跳转字段。
+            let sql = """
+                SELECT n.id AS note_id,
+                       COALESCE(n.content, '') AS content_html,
+                       COALESCE(n.idea, '') AS idea_html,
+                       COALESCE(b.name, '') AS book_title,
+                       COALESCE(c.title, '') AS chapter_title,
+                       COALESCE(n.updated_date, 0) AS note_updated_date,
+                       COALESCE(b.updated_date, 0) AS book_updated_date,
+                       COALESCE(c.updated_date, 0) AS chapter_updated_date
+                FROM note n
+                LEFT JOIN book b ON b.id = n.book_id
+                LEFT JOIN chapter c ON c.id = n.chapter_id AND c.id != 0 AND c.is_deleted = 0
+                WHERE n.id IN (\(Self.placeholders(count: batchIDs.count)))
+                  AND n.is_deleted = 0
+                """
+            let rows = try Row.fetchAll(
+                db,
+                sql: sql,
+                arguments: StatementArguments(batchIDs)
+            )
+            for row in rows {
+                let noteID: Int64 = row["note_id"]
+                sourcesByID[noteID] = NoteReviewOverviewLayoutSource(
+                    noteID: noteID,
+                    contentHTML: Self.trimTrailingWhitespaceAndNewlines(row["content_html"] ?? ""),
+                    ideaHTML: Self.trimTrailingWhitespaceAndNewlines(row["idea_html"] ?? ""),
+                    bookTitle: row["book_title"] ?? "",
+                    chapterTitle: row["chapter_title"] ?? "",
+                    noteUpdatedDate: row["note_updated_date"] ?? 0,
+                    bookUpdatedDate: row["book_updated_date"] ?? 0,
+                    chapterUpdatedDate: row["chapter_updated_date"] ?? 0
+                )
+            }
+        }
+
+        return orderedIDs.compactMap { sourcesByID[$0] }
+    }
+
     /// 批量读取有效书摘及操作上下文，保持输入主键顺序并去除重复项。
     nonisolated func fetchNoteReviewItems(
         _ db: Database,
@@ -1990,7 +2059,7 @@ private extension NoteRepository {
 
         // SQL 目的：批量读取指定书摘的回顾卡片基础字段，并携带微信读书原文跳转参数。
         // 涉及表：note 为主表，book/chapter 补充书籍展示与微信读书来源字段；标签/图片由后续批量查询补齐。
-        // 关键过滤：note.id 位于输入主键集合且 note.is_deleted=0；chapter 仅连接有效记录。
+        // 关键过滤：note.id 位于输入主键集合且 note.is_deleted=0；chapter 仅连接非根占位的有效记录。
         // 时间字段：created_date 保持 Android 毫秒时间戳；weread_range 保留原始 start-end 字符串。
         // 返回字段用途：一次构建重度日期全部书摘的标签、复制、原文、分享卡片和外部发送上下文。
         let sql = """
@@ -2005,7 +2074,7 @@ private extension NoteRepository {
                    COALESCE(c.source_uid, '') AS chapter_source_uid
             FROM note n
             LEFT JOIN book b ON b.id = n.book_id
-            LEFT JOIN chapter c ON c.id = n.chapter_id AND c.is_deleted = 0
+            LEFT JOIN chapter c ON c.id = n.chapter_id AND c.id != 0 AND c.is_deleted = 0
             WHERE n.id IN (\(Self.placeholders(count: orderedIDs.count)))
               AND n.is_deleted = 0
             """
