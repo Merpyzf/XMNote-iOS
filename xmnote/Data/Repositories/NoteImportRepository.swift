@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖统一 NoteImport Draft、GRDB Record、DatabaseManager 与三联凭证存储
+ * [INPUT]: 依赖统一 NoteImport Draft、GRDB Record、DatabaseManager、可选会员写入门禁与三联凭证存储
  * [OUTPUT]: 对外提供 NoteImportRepository，完成全来源书摘的本地匹配和逐书增量落库
  * [POS]: Data/Repositories 的统一导入写边界；文件、剪贴板、API 与特殊入口共享此实现
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -14,13 +14,16 @@ final class NoteImportRepository: NoteImportRepositoryProtocol {
     private let databaseManager: DatabaseManager
     private let defaults: UserDefaults
     private let bookSearchRepository: any BookSearchRepositoryProtocol
+    private let requiredMembership: (any MembershipRepositoryProtocol)?
     private let lifeWeekCredentialStore = LifeWeekCredentialStore()
 
     init(
         databaseManager: DatabaseManager,
         defaults: UserDefaults = .standard,
-        bookSearchRepository: (any BookSearchRepositoryProtocol)? = nil
+        bookSearchRepository: (any BookSearchRepositoryProtocol)? = nil,
+        requiredMembership: (any MembershipRepositoryProtocol)? = nil
     ) {
+        self.requiredMembership = requiredMembership
         self.databaseManager = databaseManager
         self.defaults = defaults
         self.bookSearchRepository = bookSearchRepository ?? BookSearchRepository()
@@ -176,6 +179,8 @@ final class NoteImportRepository: NoteImportRepositoryProtocol {
         guard !books.isEmpty else { throw NoteImportParserError.noteNotFound }
         let placement = defaults.object(forKey: "newAddBookPosition") as? Int ?? 0
         for (index, item) in books.enumerated() {
+            // 每本书的事务开始前重新校验，已提交的前序书不会因撤销而回滚。
+            try await requiredMembership?.requirePremium()
             try Task.checkCancellation()
             try await databaseManager.database.dbPool.write { db in
                 let now = Int64(Date().timeIntervalSince1970 * 1_000)

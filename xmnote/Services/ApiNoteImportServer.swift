@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 Hummingbird 2.22.0、ApiNoteImportDTO 与会话回调
+ * [INPUT]: 依赖 Hummingbird 2.22.0、ApiNoteImportDTO、实时会员裁决闭包与会话回调
  * [OUTPUT]: 对外提供 8080 `/send` 本地服务、CORS、访问码和可取消生命周期
  * [POS]: Services 的 API 导入 HTTP 边界；页面显式启动，离开或进入后台时停止
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -20,17 +20,20 @@ actor ApiNoteImportServer {
         case failed(String)
     }
 
+    private var generation = 0
     private var task: Task<Void, Never>?
     private(set) var state: State = .stopped
 
     func start(
         port: Int = 8080,
         accessCode: String,
-        isPremium: Bool,
+        hasPremiumAccess: @escaping @Sendable () async -> Bool,
         onBook: @escaping BookHandler,
         onState: @escaping StateHandler
     ) async {
         guard task == nil else { return }
+        generation += 1
+        let token = generation
         state = .starting
         await onState(.starting)
 
@@ -41,7 +44,7 @@ actor ApiNoteImportServer {
                 let data = try? JSONSerialization.data(withJSONObject: ["code": code, "message": text], options: [.sortedKeys])
                 return data.flatMap { String(data: $0, encoding: .utf8) } ?? "{\"code\":500,\"message\":\"\"}"
             }
-            guard isPremium else { return message(500, "该功能仅限会员使用") }
+            guard await hasPremiumAccess() else { return message(500, "该功能仅限会员使用") }
             if !accessCode.isEmpty, request.headers[.xmnoteAccessCode] != accessCode {
                 return message(500, "访问码不正确")
             }
@@ -50,6 +53,7 @@ actor ApiNoteImportServer {
                 let bytes = buffer.getBytes(at: buffer.readerIndex, length: buffer.readableBytes) ?? []
                 let dto = try JSONDecoder().decode(ApiNoteImportDTO.self, from: Data(bytes))
                 let payload = try dto.validatedPayload()
+                guard await hasPremiumAccess() else { return message(500, "该功能仅限会员使用") }
                 await onBook(payload)
                 return message(200, "success")
             } catch {
@@ -68,28 +72,31 @@ actor ApiNoteImportServer {
         task = Task { [weak self] in
             do {
                 try await app.run()
-                await self?.finished(onState: onState)
+                await self?.finished(generation: token, onState: onState)
             } catch is CancellationError {
-                await self?.finished(onState: onState)
+                await self?.finished(generation: token, onState: onState)
             } catch {
-                await self?.failed(error, onState: onState)
+                await self?.failed(error, generation: token, onState: onState)
             }
         }
     }
 
     func stop() async {
+        generation += 1
         task?.cancel()
         task = nil
         state = .stopped
     }
 
-    private func finished(onState: StateHandler) async {
+    private func finished(generation token: Int, onState: StateHandler) async {
+        guard token == generation else { return }
         task = nil
         state = .stopped
         await onState(.stopped)
     }
 
-    private func failed(_ error: Error, onState: StateHandler) async {
+    private func failed(_ error: Error, generation token: Int, onState: StateHandler) async {
+        guard token == generation else { return }
         task = nil
         let value: State = .failed(Self.readableServerError(error))
         state = value

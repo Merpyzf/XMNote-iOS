@@ -73,6 +73,7 @@ final class WereadImportRepository: WereadImportRepositoryProtocol {
         static let newBookPosition = "newAddBookPosition"
     }
 
+    private let membership: any MembershipRepositoryProtocol
     private let databaseManager: DatabaseManager
     private let defaults: UserDefaults
     private let api: any WereadImportAPIClientProtocol
@@ -90,11 +91,13 @@ final class WereadImportRepository: WereadImportRepositoryProtocol {
         bookSearchRepository: (any BookSearchRepositoryProtocol)? = nil,
         s3UploadRepository: (any S3UploadRepositoryProtocol)? = nil,
         noteImportRepository: (any NoteImportRepositoryProtocol)? = nil,
+        membership: any MembershipRepositoryProtocol = MembershipRepository.shared,
         nowMillis: @escaping @Sendable () -> Int64 = {
             Int64(Date().timeIntervalSince1970 * 1_000)
         }
     ) {
         let resolvedBookSearchRepository = bookSearchRepository ?? BookSearchRepository()
+        self.membership = membership
         self.databaseManager = databaseManager
         self.defaults = defaults
         self.api = api ?? WereadImportAPIClient()
@@ -104,7 +107,8 @@ final class WereadImportRepository: WereadImportRepositoryProtocol {
         self.noteImportRepository = noteImportRepository ?? NoteImportRepository(
             databaseManager: databaseManager,
             defaults: defaults,
-            bookSearchRepository: resolvedBookSearchRepository
+            bookSearchRepository: resolvedBookSearchRepository,
+            requiredMembership: membership
         )
         self.nowMillis = nowMillis
     }
@@ -160,6 +164,7 @@ final class WereadImportRepository: WereadImportRepositoryProtocol {
     }
 
     func fetchImportBookIDs(authorization: WereadAuthorization, preferences: WereadImportPreferences) async throws -> [String] {
+        try await membership.requirePremium()
         let authorization = try await currentAuthorization(fallback: authorization, force: true)
         let ids = preferences.onlyBooksWithNotes
             ? try await notebookBookIDs(cookie: authorization.cookieHeader)
@@ -191,6 +196,7 @@ final class WereadImportRepository: WereadImportRepositoryProtocol {
         progress: @escaping (Int, Int) -> Void,
         warning: @escaping (String) -> Void
     ) async throws -> [WereadImportBook] {
+        try await membership.requirePremium()
         let ids = bookIDs
         guard !ids.isEmpty else { throw WereadImportError.emptyImport }
         var effectiveAuthorization = try await currentAuthorization(fallback: authorization, force: false)
@@ -199,6 +205,7 @@ final class WereadImportRepository: WereadImportRepositoryProtocol {
         var completed = Array<WereadImportBook?>(repeating: nil, count: total)
         var current = 0
         for chunkStart in stride(from: 0, to: total, by: 10) {
+            try await membership.requirePremium()
             try Task.checkCancellation()
             let chunkEnd = min(chunkStart + 10, total)
             effectiveAuthorization = try await currentAuthorization(fallback: effectiveAuthorization, force: false)
@@ -251,12 +258,14 @@ final class WereadImportRepository: WereadImportRepositoryProtocol {
         importsReadingTime: Bool,
         progress: @escaping (Int, Int) -> Void
     ) async throws -> [WereadImportBook] {
+        try await membership.requirePremium()
         guard !bookIDs.isEmpty else { return [] }
         var effectiveAuthorization = try await currentAuthorization(fallback: authorization, force: false)
         let books = try await syncBooks(ids: bookIDs, cookie: effectiveAuthorization.cookieHeader)
         var completed = Array<WereadImportBook?>(repeating: nil, count: books.count)
         var current = 0
         for chunkStart in stride(from: 0, to: books.count, by: 2) {
+            try await membership.requirePremium()
             try Task.checkCancellation()
             let chunkEnd = min(chunkStart + 2, books.count)
             effectiveAuthorization = try await currentAuthorization(fallback: effectiveAuthorization, force: false)
@@ -300,6 +309,7 @@ final class WereadImportRepository: WereadImportRepositoryProtocol {
     }
 
     func commitImport(books: [WereadImportBook], progress: @escaping (Int, Int) -> Void) async throws {
+        try await membership.requirePremium()
         let selected = await enrichNewBooks(books.filter(\.isSelected))
         guard !selected.isEmpty else { throw WereadImportError.emptyImport }
         let commits = selected.map { source in

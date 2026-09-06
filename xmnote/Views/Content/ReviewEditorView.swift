@@ -88,8 +88,7 @@ struct ReviewEditorView: View {
                 mode: mode,
                 repository: repositories.contentRepository,
                 s3UploadRepository: repositories.s3UploadRepository,
-                quotaRepository: repositories.noteImageUploadQuotaRepository,
-                isPremium: appState.isPremium
+                quotaRepository: repositories.noteImageUploadQuotaRepository
             )
             viewModel = newViewModel
             bootstrapLoadingGate.update(intent: .none)
@@ -159,8 +158,8 @@ private struct ReviewEditorLoadedView: View {
             guard let savedTime else { return }
             activeAlert = .recovery(Self.autoSaveTimeDescription(savedTime))
         }
-        .onChange(of: appState.isPremium) { _, isPremium in
-            Task { await viewModel.updatePremiumStatus(isPremium) }
+        .onChange(of: appState.isPremium) { _, _ in
+            Task { await viewModel.refreshMembershipQuota() }
         }
         .onDisappear {
             readLoadingGate.hideImmediately()

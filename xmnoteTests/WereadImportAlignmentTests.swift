@@ -110,6 +110,8 @@ struct WereadImportAlignmentTests {
 
     @Test
     func batchDetailsUseTwoBookGroupsAndMonotonicProgress() async throws {
+        let membership = MembershipRepository(source: WereadTestMembershipSource())
+        await membership.refresh()
         let api = WereadAPIProbe()
         let defaults = try #require(UserDefaults(suiteName: UUID().uuidString))
         defaults.set("wr_vid=1; wr_skey=old", forKey: "wereadCookie")
@@ -120,6 +122,7 @@ struct WereadImportAlignmentTests {
             databaseManager: DatabaseManager(database: database),
             defaults: defaults,
             api: api,
+            membership: membership,
             nowMillis: { 1_710_000_000_000 }
         )
         var progress: [(Int, Int)] = []
@@ -184,6 +187,8 @@ struct WereadImportAlignmentTests {
 
     @Test
     func bookmarkReviewChapterOrderingAndFinishedDateFallbackMatchAndroid() async throws {
+        let membership = MembershipRepository(source: WereadTestMembershipSource())
+        await membership.refresh()
         let api = WereadAPIProbe()
         api.usesSemanticFixture = true
         let defaults = try #require(UserDefaults(suiteName: UUID().uuidString))
@@ -194,6 +199,7 @@ struct WereadImportAlignmentTests {
             databaseManager: DatabaseManager(database: try AppDatabase.empty()),
             defaults: defaults,
             api: api,
+            membership: membership,
             nowMillis: { 1_710_000_000_000 }
         )
 
@@ -551,4 +557,14 @@ private final class WereadRepositoryStub: WereadImportRepositoryProtocol {
         for index in books.indices { progress(index + 1, books.count) }
         return books
     }
+}
+
+private actor WereadTestMembershipSource: MembershipSource {
+    func product() async -> MembershipProduct { .init(title: "Test", purchaseAvailable: false, isSimulation: false) }
+    func currentEntitlement() async throws -> MembershipEntitlement {
+        .init(status: .lifetime, source: .apple, transactionID: "fixture", purchasedAt: Date())
+    }
+    func purchase() async throws -> MembershipPurchaseResult { throw MembershipError.unavailable }
+    func restore() async throws -> MembershipEntitlement { try await currentEntitlement() }
+    func updates() async -> AsyncStream<Void> { AsyncStream { $0.finish() } }
 }

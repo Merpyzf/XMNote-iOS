@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer、AppState、NoteEditorViewModel、AppTaskNavigationContext、NoteTextComposerView、XMStarredAppearance、BookPickerView 与当前 UIWindow 键盘坐标转换
  * [OUTPUT]: 对外提供 NoteEditorView，承载书摘新建/编辑、局部焦点释放、窗口级键盘状态、中性草稿恢复提示、图片额度、附图、层级章节、无冗余上下文的标签草稿操作、语义化编辑设置入口与保存动作
- * [POS]: Note 模块书摘编辑页壳层，对齐 Android 编辑流程并采用 iOS 原生页面组织
+ * [POS]: Note 模块书摘编辑页壳层，对齐 Android 编辑流程并采用 iOS 原生页面组织；开发诊断不参与正式编辑行为
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -110,8 +110,7 @@ struct NoteEditorView: View {
                 mode: mode,
                 seed: seed,
                 repository: repositories.noteRepository,
-                quotaRepository: repositories.noteImageUploadQuotaRepository,
-                isPremium: appState.isPremium
+                quotaRepository: repositories.noteImageUploadQuotaRepository
             )
             viewModel = newViewModel
             bootstrapLoadingGate.update(intent: .none)
@@ -558,8 +557,8 @@ private extension NoteEditorView {
         .onChange(of: editorSettings.layoutModeRawValue) { _, _ in
             handleLayoutModeStateChange(animated: isLayoutStateInitialized)
         }
-        .onChange(of: appState.isPremium) { _, isPremium in
-            Task { await viewModel.updatePremiumStatus(isPremium) }
+        .onChange(of: appState.isPremium) { _, _ in
+            Task { await viewModel.refreshMembershipQuota() }
         }
         .onChange(of: viewModel.didSave) { _, didSave in
             guard didSave else { return }
@@ -2036,7 +2035,11 @@ private extension NoteEditorView {
         ].joined(separator: "|")
     }
 
+#endif
+
+    /// 承接编辑器文本通知；仅开发构建记录布局诊断，正式版本不执行日志逻辑。
     func handleEditorTextChange(target: NoteEditorComposerTarget, text: NSAttributedString) {
+#if DEBUG
         let targetKey = target.rawValue
         let currentLength = text.string.count
         let previousLength = lastObservedTextLengthByTarget[targetKey] ?? 0
@@ -2059,8 +2062,10 @@ private extension NoteEditorView {
             )
             lastLoggedTextChangeContextByTarget[targetKey] = context
         }
+#endif
     }
 
+#if DEBUG
     func describeMeasuredHeights(_ heights: [NoteEditorMeasuredPart: CGFloat]) -> String {
         NoteEditorMeasuredPart.allCases
             .map { part in

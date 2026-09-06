@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 SwiftUI/UIKit 字体系统与项目内注册字体资源（RozhaOne-Regular.ttf）
- * [OUTPUT]: 对外提供 BrandTypography 与 Font/UIFont 品牌字体扩展，统一品牌字体调用入口
+ * [OUTPUT]: 对外提供 BrandTypography 与 Font/UIFont 品牌字体扩展，统一品牌字体调用入口并隔离开发诊断日志
  * [POS]: Utilities/DesignSystem 的品牌字体底层门面，负责品牌展示字体的注册名与回退策略
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -36,12 +36,16 @@ enum BrandTypography {
     /// 判断品牌字体是否已在运行时注册成功。
     static func isBrandFontAvailable() -> Bool {
         if UIFont(name: rozhaPostScriptName, size: 12) != nil {
+            #if DEBUG
             debugLogAvailabilityIfNeeded(available: true, source: "precheck")
+            #endif
             return true
         }
         registerBundledFontIfNeeded()
         let available = UIFont(name: rozhaPostScriptName, size: 12) != nil
+        #if DEBUG
         debugLogAvailabilityIfNeeded(available: available, source: "post-register")
+        #endif
         return available
     }
 

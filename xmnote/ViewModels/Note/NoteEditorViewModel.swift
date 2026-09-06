@@ -148,7 +148,6 @@ final class NoteEditorViewModel {
     private let seed: NoteEditorSeed?
     private let repository: any NoteRepositoryProtocol
     private let quotaRepository: any NoteImageUploadQuotaRepositoryProtocol
-    private var isPremium: Bool
     private var hasLoaded = false
     private var initialDraft: NoteEditorDraft?
     private var initialPerceivedDirtyTrackingSnapshot: NoteEditorPerceivedDirtyTrackingSnapshot?
@@ -167,14 +166,12 @@ final class NoteEditorViewModel {
         mode: NoteEditorMode,
         seed: NoteEditorSeed?,
         repository: any NoteRepositoryProtocol,
-        quotaRepository: any NoteImageUploadQuotaRepositoryProtocol,
-        isPremium: Bool
+        quotaRepository: any NoteImageUploadQuotaRepositoryProtocol
     ) {
         self.mode = mode
         self.seed = seed
         self.repository = repository
         self.quotaRepository = quotaRepository
-        self.isPremium = isPremium
     }
 
     var hasUnsavedChanges: Bool {
@@ -409,8 +406,7 @@ final class NoteEditorViewModel {
             id: imageQuotaReservationID,
             owner: imageQuotaOwner,
             currentDraftNewImageCount: imageItems.count { $0.origin == .newInDraft },
-            requestedCount: componentAcceptedCount,
-            isPremium: isPremium
+            requestedCount: componentAcceptedCount
         )
         imageQuotaState = reservation.state
         let acceptedCount = reservation.acceptedCount
@@ -457,8 +453,7 @@ final class NoteEditorViewModel {
     }
 
     /// 会员状态变化时立即重算选择额度；MainActor 保证状态刷新不会与编辑器选择回写交错。
-    func updatePremiumStatus(_ isPremium: Bool) async {
-        self.isPremium = isPremium
+    func refreshMembershipQuota() async {
         await refreshImageQuota()
     }
 
@@ -594,8 +589,7 @@ final class NoteEditorViewModel {
             let noteId = try await repository.saveNoteEditor(snapshot)
             await quotaRepository.commitReservation(
                 id: imageQuotaReservationID,
-                savedImageCount: newImageCount,
-                isPremium: isPremium
+                savedImageCount: newImageCount
             )
             isImageQuotaReservationBackedByDraft = false
             isHydratingState = true
@@ -682,8 +676,7 @@ private extension NoteEditorViewModel {
             id: imageQuotaReservationID,
             owner: imageQuotaOwner,
             draftNewImageCount: imageItems.count { $0.origin == .newInDraft },
-            isPersistedDraft: isImageQuotaReservationBackedByDraft,
-            isPremium: isPremium
+            isPersistedDraft: isImageQuotaReservationBackedByDraft
         )
     }
 

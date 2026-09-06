@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 XMNoteWeb 能力端口、DesktopWebSettingsRepository、可延迟注入的目录/分组/书籍/日历/章节/书摘/书评/相关内容/搜索/阅读记录及在线章节仓储、生产会员读取闭包与主线程原生动作桥
+ * [INPUT]: 依赖 XMNoteWeb 能力端口、DesktopWebSettingsRepository、可延迟注入的目录/分组/书籍/日历/章节/书摘/书评/相关内容/搜索/阅读记录及在线章节仓储、会员 Repository 实时读取闭包与主线程原生动作桥
  * [OUTPUT]: 对外提供 App 到 XMNoteWeb 的设置、安全、会员、来源、标签、分组、书籍、阅读日历、章节、书摘、书评、相关内容、搜索、阅读记录、在线目录、导入投影和原生导航 Adapter
  * [POS]: Infra 层网页模块适配边界；Package 不接触 UserDefaults、AppState 或 SwiftUI 导航
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -331,7 +331,7 @@ final class DesktopWebAPIAdapter: @unchecked Sendable,
         try await repository.updateExportSettingsData(JSONEncoder().encode(patch))
     }
 
-    /// 生产会员状态尚未接入时 provider 固定为 false，因此核心写能力保持只读。
+    /// 每次能力查询读取 Repository 的当前权益，开通或撤销后不复用旧页面快照。
     func membershipCapability() async -> DesktopWebMembershipCapability {
         let isPremium = await isPremiumProvider()
         let isUpgradeAvailable = await nativeActionBridge.isPremiumUpgradeAvailable

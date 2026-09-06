@@ -52,12 +52,11 @@ struct NoteMergeView: View {
                 bookID: bookID,
                 noteIDs: noteIDs,
                 repository: repositories.noteRepository,
-                quotaRepository: repositories.noteImageUploadQuotaRepository,
-                isPremium: appState.isPremium
+                quotaRepository: repositories.noteImageUploadQuotaRepository
             )
         }
         .task(id: appState.isPremium) {
-            await viewModel?.updatePremiumStatus(appState.isPremium)
+            await viewModel?.refreshMembershipQuota()
         }
         .onAppear(perform: syncBootstrapLoading)
         .onChange(of: viewModel == nil) { _, _ in syncBootstrapLoading() }

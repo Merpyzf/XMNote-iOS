@@ -2,7 +2,7 @@ import Foundation
 import Observation
 
 /**
- * [INPUT]: 依赖 DatabaseManager 提供数据库实例，依赖各 Repository 实现与可注入 UserDefaults 完成生产或 Debug 隔离组装
+ * [INPUT]: 依赖 DatabaseManager 提供数据库实例，依赖统一会员权益与各 Repository 实现与可注入 UserDefaults 完成生产或 Debug 隔离组装
  * [OUTPUT]: 对外提供 RepositoryContainer，集中暴露业务仓储，并在 Debug 提供 Sheet 数据副本的隔离组装入口
  * [POS]: App 级依赖注入容器，被视图层通过 Environment 获取并创建 ViewModel
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -11,6 +11,8 @@ import Observation
 @Observable
 /// 仓储依赖容器，在应用启动时一次性组装各业务仓储。
 final class RepositoryContainer {
+    let membershipRepository: any MembershipRepositoryProtocol
+    let premiumNoteImportRepository: any NoteImportRepositoryProtocol
     let bookRepository: any BookRepositoryProtocol
     let noteRepository: any NoteRepositoryProtocol
     let contentRepository: any ContentRepositoryProtocol
@@ -59,6 +61,11 @@ final class RepositoryContainer {
 
     /// 集中组装可注入轻量偏好的仓储；生产固定使用标准容器，Debug 快照传入临时 suite。
     private init(databaseManager: DatabaseManager, userDefaults: UserDefaults) {
+        let membership = MembershipRepository.shared
+        self.membershipRepository = membership
+        self.premiumNoteImportRepository = NoteImportRepository(
+            databaseManager: databaseManager, defaults: userDefaults, requiredMembership: membership
+        )
         let backupServerRepository = BackupServerRepository(databaseManager: databaseManager)
         let aliyunDriveProvider = try? AliyunDriveBackupRemoteProvider(
             configuration: AliyunDriveOpenPlatformConfiguration()

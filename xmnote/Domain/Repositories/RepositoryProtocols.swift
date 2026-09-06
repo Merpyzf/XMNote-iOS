@@ -599,21 +599,19 @@ nonisolated protocol NoteImageUploadQuotaRepositoryProtocol: Sendable {
         id: String,
         owner: NoteImageUploadReservationOwner,
         draftNewImageCount: Int,
-        isPersistedDraft: Bool,
-        isPremium: Bool
+        isPersistedDraft: Bool
     ) async -> NoteImageUploadQuotaState
     /// 在共享 Actor 内按 owner 原子申请本次新增数量；申请先保持未确认，编辑器写下自动草稿后再 reconcile 确认。
     func reserveImages(
         id: String,
         owner: NoteImageUploadReservationOwner,
         currentDraftNewImageCount: Int,
-        requestedCount: Int,
-        isPremium: Bool
+        requestedCount: Int
     ) async -> NoteImageUploadReservationResult
     /// 用户明确丢弃草稿时释放当天预占；保留草稿退出不会调用此方法。
     func releaseReservation(id: String) async
     /// 仅在业务主内容成功后转换真实存在的 ticket；同一 ID 重复提交必须幂等。
-    func commitReservation(id: String, savedImageCount: Int, isPremium: Bool) async
+    func commitReservation(id: String, savedImageCount: Int) async
 }
 
 /// S3 上传契约，覆盖当前配置下的文件上传、联通性校验、删除与取消。

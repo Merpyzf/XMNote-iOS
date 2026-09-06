@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 AppNavigationCoordinator、Kindle 导入方式选择、DataImportCollectionView、系统 scrollEdgeEffectStyle、微信读书导入 ViewModel、全屏 WebView、浮动操作面板、BookPickerView、Photos 与统一反馈组件
+ * [INPUT]: 依赖 AppNavigationCoordinator、Kindle 导入方式选择、DataImportCollectionView、系统 scrollEdgeEffectStyle、微信读书导入 ViewModel、全屏 WebView、浮动操作面板、BookPickerView、Photos 与面板内统一反馈组件
  * [OUTPUT]: 对外提供支持系统上下滚动边缘过渡、分组/组内排序的书摘导入入口、非模态授权面板、分批、WereadImportBatchStatusView、导入预览和单书内容预览页面
  * [POS]: Views/Personal/DataImport 的完整微信读书扫码授权导入交互流
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -112,6 +112,7 @@ struct WereadImportAuthView: View {
     @State private var isActionPanelPresented = true
     @State private var selectedActionPanelDetent = WereadImportActionPanel.expandedDetent
     @State private var activeDestination: WereadImportAuthViewModel.Destination?
+    @State private var opensPremiumAfterPanelDismiss = false
     @State private var isSavingQRCode = false
     @State private var qrCodeSaveTask: Task<Void, Never>?
     let onOpenPremium: () -> Void
@@ -158,6 +159,9 @@ struct WereadImportAuthView: View {
                 .presentationBackgroundInteraction(.enabled)
                 .presentationContentInteraction(.scrolls)
                 .interactiveDismissDisabled()
+                .xmSystemAlert(isPresented: $showsError, descriptor: errorDescriptor)
+                .xmSystemAlert(isPresented: $showsPremium, descriptor: premiumDescriptor)
+                .xmSystemAlert(isPresented: $showsBackfillPrompt, descriptor: backfillDescriptor)
         }
         .task { await viewModel.load() }
         .onDisappear(perform: cancelTasks)
@@ -178,9 +182,6 @@ struct WereadImportAuthView: View {
             case .preview(let route): WereadImportPreviewView(route: route)
             }
         }
-        .xmSystemAlert(isPresented: $showsError, descriptor: errorDescriptor)
-        .xmSystemAlert(isPresented: $showsPremium, descriptor: premiumDescriptor)
-        .xmSystemAlert(isPresented: $showsBackfillPrompt, descriptor: backfillDescriptor)
     }
 
     private var phaseIsLoading: Bool { if case .loading = viewModel.phase { return true }; return false }
@@ -241,6 +242,10 @@ struct WereadImportAuthView: View {
         case .available: saveQRCode()
         case .expired, .failed: refresh()
         case .authorized:
+            guard appState.membership.snapshot.isLoaded else {
+                viewModel.errorMessage = MembershipError.notReady.localizedDescription
+                return
+            }
             guard appState.isPremium else { showsPremium = true; return }
             viewModel.beginCandidateFetch()
         case .loading: break
@@ -277,6 +282,11 @@ struct WereadImportAuthView: View {
 
     /// Sheet 完成程序化收起后再提交导航，避免呈现层与 push 同时竞争。
     private func actionPanelDidDismiss() {
+        if opensPremiumAfterPanelDismiss {
+            opensPremiumAfterPanelDismiss = false
+            onOpenPremium()
+            return
+        }
         guard let destination = viewModel.destination else { return }
         viewModel.destination = nil
         activeDestination = destination
@@ -306,7 +316,10 @@ struct WereadImportAuthView: View {
         case nil: "操作失败"
         }
     }
-    private var premiumDescriptor: XMSystemAlertDescriptor { .init(title: "会员功能", message: "微信读书授权导入是会员功能。", actions: [.init(title: "取消", role: .cancel) {}, .init(title: "升级会员") { onOpenPremium() }]) }
+    private var premiumDescriptor: XMSystemAlertDescriptor { .init(title: "会员功能", message: "微信读书授权导入是会员功能。", actions: [.init(title: "取消", role: .cancel) {}, .init(title: "升级会员") {
+            opensPremiumAfterPanelDismiss = true
+            isActionPanelPresented = false
+        }]) }
     private var backfillDescriptor: XMSystemAlertDescriptor? {
         guard let prompt = viewModel.backfillPrompt else { return nil }
         return .init(title: "关联历史微信数据", message: "发现 \(prompt.pendingCount) 本历史导入书籍缺少微信关联信息，是否现在补全？", actions: [.init(title: "稍后", role: .cancel) { viewModel.postponeBackfill() }, .init(title: "开始") { viewModel.beginBackfill() }])

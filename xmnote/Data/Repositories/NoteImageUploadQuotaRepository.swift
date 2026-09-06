@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 S3ConfigRepositoryProtocol 判断当前图床，依赖 AppBackendConfigRepositoryProtocol 获取动态日上限，依赖 UserDefaults 单体持久化日账本
+ * [INPUT]: 依赖 MembershipRepository 实时权益和 S3ConfigRepositoryProtocol 判断当前图床，依赖 AppBackendConfigRepositoryProtocol 获取动态日上限，依赖 UserDefaults 单体持久化日账本
  * [OUTPUT]: 对外提供 NoteImageUploadQuotaRepository，统一实现每日新增图片限额、跨编辑器原子预占、幂等提交与孤儿票据整理
  * [POS]: Data 层图片额度仓储，是书摘、书评与相关内容编辑器申请、释放和提交图片额度的唯一入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -14,6 +14,7 @@ actor NoteImageUploadQuotaRepository: NoteImageUploadQuotaRepositoryProtocol {
     nonisolated private static let ledgerStorageKey = "note_image_quota_ledger_v2"
     nonisolated private static let legacySavedCountKeyPrefix = "note_image_saved_count_"
 
+    private let membership: any MembershipRepositoryProtocol
     private let configRepository: any S3ConfigRepositoryProtocol
     private let appBackendConfigRepository: any AppBackendConfigRepositoryProtocol
     private let userDefaults: UserDefaults
@@ -29,8 +30,10 @@ actor NoteImageUploadQuotaRepository: NoteImageUploadQuotaRepositoryProtocol {
         appBackendConfigRepository: any AppBackendConfigRepositoryProtocol,
         userDefaults: UserDefaults = .standard,
         calendar: Calendar = .autoupdatingCurrent,
+        membership: any MembershipRepositoryProtocol = MembershipRepository.shared,
         now: @escaping @Sendable () -> Date = Date.init
     ) {
+        self.membership = membership
         self.configRepository = configRepository
         self.appBackendConfigRepository = appBackendConfigRepository
         self.userDefaults = userDefaults
@@ -43,10 +46,9 @@ actor NoteImageUploadQuotaRepository: NoteImageUploadQuotaRepositoryProtocol {
         id: String,
         owner: NoteImageUploadReservationOwner,
         draftNewImageCount: Int,
-        isPersistedDraft: Bool,
-        isPremium: Bool
+        isPersistedDraft: Bool
     ) async -> NoteImageUploadQuotaState {
-        let context = await limitContext(isPremium: isPremium)
+        let context = await limitContext()
         let bucket = currentDateBucket()
         prepareLedger(for: bucket)
         let normalizedCount = max(0, draftNewImageCount)
@@ -94,10 +96,9 @@ actor NoteImageUploadQuotaRepository: NoteImageUploadQuotaRepositoryProtocol {
         id: String,
         owner: NoteImageUploadReservationOwner,
         currentDraftNewImageCount: Int,
-        requestedCount: Int,
-        isPremium: Bool
+        requestedCount: Int
     ) async -> NoteImageUploadReservationResult {
-        let context = await limitContext(isPremium: isPremium)
+        let context = await limitContext()
         let bucket = currentDateBucket()
         prepareLedger(for: bucket)
         guard var ledger else {
@@ -192,7 +193,7 @@ actor NoteImageUploadQuotaRepository: NoteImageUploadQuotaRepositoryProtocol {
     }
 
     /// 主内容成功后重新核验会员与图床；等待期间锁定同 ticket，随后以单次 ledger 写入完成幂等转换。
-    func commitReservation(id: String, savedImageCount: Int, isPremium: Bool) async {
+    func commitReservation(id: String, savedImageCount: Int) async {
         let claimedBucket = currentDateBucket()
         prepareLedger(for: claimedBucket)
         guard !commitInFlightReservationIDs.contains(id),
@@ -204,7 +205,7 @@ actor NoteImageUploadQuotaRepository: NoteImageUploadQuotaRepositoryProtocol {
         commitInFlightReservationIDs.insert(id)
         defer { commitInFlightReservationIDs.remove(id) }
 
-        let context = await limitContext(isPremium: isPremium)
+        let context = await limitContext()
         let commitBucket = currentDateBucket()
         prepareLedger(for: commitBucket)
         guard var ledger, ledger.committedReservationIDs[id] == nil else { return }
@@ -229,21 +230,17 @@ actor NoteImageUploadQuotaRepository: NoteImageUploadQuotaRepositoryProtocol {
 
 private extension NoteImageUploadQuotaRepository {
     /// 动态上限解析遵循 Android：缺失或非法回退 20，合法负数归零；配置失败不阻断编辑。
-    func limitContext(isPremium: Bool) async -> NoteImageUploadLimitContext {
+    func limitContext() async -> NoteImageUploadLimitContext {
         async let remoteLimitValue = appBackendConfigRepository.queryValue(
             key: Self.dailyLimitConfigKey
         )
-        let isUsingBundledDefault: Bool
-        if isPremium {
-            isUsingBundledDefault = false
-        } else {
-            isUsingBundledDefault = await isUsingBundledDefaultConfiguration()
-        }
+        let isUsingBundledDefault = await isUsingBundledDefaultConfiguration()
         let fetchedRemoteLimitValue = await remoteLimitValue
         let rawLimit = fetchedRemoteLimitValue?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let dailyLimit = rawLimit.flatMap(Int.init).map { max(0, $0) }
             ?? Self.defaultDailyLimit
+        let isPremium = await membership.hasPremiumAccess()
         return NoteImageUploadLimitContext(
             isLimited: !isPremium && isUsingBundledDefault,
             dailyLimit: dailyLimit

@@ -34,7 +34,6 @@ final class RelevantEditorViewModel {
 
     private let repository: any ContentRepositoryProtocol
     private let quotaRepository: any NoteImageUploadQuotaRepositoryProtocol
-    private var isPremium: Bool
     private var baselineTitle = ""
     private var baselineURL = ""
     private var baselineContentText = NSAttributedString()
@@ -50,13 +49,11 @@ final class RelevantEditorViewModel {
         mode: RelevantEditorMode,
         repository: any ContentRepositoryProtocol,
         s3UploadRepository: any S3UploadRepositoryProtocol,
-        quotaRepository: any NoteImageUploadQuotaRepositoryProtocol,
-        isPremium: Bool
+        quotaRepository: any NoteImageUploadQuotaRepositoryProtocol
     ) {
         self.mode = mode
         self.repository = repository
         self.quotaRepository = quotaRepository
-        self.isPremium = isPremium
         let imageController = ContentEditorImageController(
             repository: s3UploadRepository,
             uploadPrefix: "category_image"
@@ -72,15 +69,13 @@ final class RelevantEditorViewModel {
         contentId: Int64,
         repository: any ContentRepositoryProtocol,
         s3UploadRepository: any S3UploadRepositoryProtocol,
-        quotaRepository: any NoteImageUploadQuotaRepositoryProtocol,
-        isPremium: Bool
+        quotaRepository: any NoteImageUploadQuotaRepositoryProtocol
     ) {
         self.init(
             mode: .edit(contentID: contentId),
             repository: repository,
             s3UploadRepository: s3UploadRepository,
-            quotaRepository: quotaRepository,
-            isPremium: isPremium
+            quotaRepository: quotaRepository
         )
     }
 
@@ -253,8 +248,7 @@ final class RelevantEditorViewModel {
             let contentID = try await repository.saveRelevantEditorDraft(draft, mode: mode)
             await quotaRepository.commitReservation(
                 id: imageQuotaReservationID,
-                savedImageCount: newImageCount,
-                isPremium: isPremium
+                savedImageCount: newImageCount
             )
             isImageQuotaReservationBackedByDraft = false
             imageController.markDraftImagesAsPersisted()
@@ -294,8 +288,7 @@ final class RelevantEditorViewModel {
             id: imageQuotaReservationID,
             owner: imageQuotaOwner,
             currentDraftNewImageCount: imageController.newDraftImageCount,
-            requestedCount: componentAcceptedCount,
-            isPremium: isPremium
+            requestedCount: componentAcceptedCount
         )
         imageQuotaState = reservation.state
         let acceptedCount = reservation.acceptedCount
@@ -389,8 +382,7 @@ final class RelevantEditorViewModel {
     }
 
     /// 会员状态变化时立即重算选择额度；MainActor 保证状态刷新不会与编辑器选择回写交错。
-    func updatePremiumStatus(_ isPremium: Bool) async {
-        self.isPremium = isPremium
+    func refreshMembershipQuota() async {
         await refreshImageQuota()
     }
 
@@ -407,8 +399,7 @@ final class RelevantEditorViewModel {
             id: imageQuotaReservationID,
             owner: imageQuotaOwner,
             draftNewImageCount: imageController.newDraftImageCount,
-            isPersistedDraft: isImageQuotaReservationBackedByDraft,
-            isPremium: isPremium
+            isPersistedDraft: isImageQuotaReservationBackedByDraft
         )
     }
 

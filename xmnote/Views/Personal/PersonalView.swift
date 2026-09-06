@@ -7,7 +7,7 @@
 
 /**
  * [INPUT]: 依赖 AppState、DesktopWebSessionCoordinator、AppNavigationCoordinator、XMSettingsGroup、PersonalRoute、DebugRoute 与阅读日历根级呈现回调
- * [OUTPUT]: 对外提供 PersonalView，以会员优先、四项常用功能、三组无标题紧凑卡片、16/13pt 设置行层级与页面私有 Reicon Outline 映射承载我的 Tab 核心入口、网页端状态与顶部新增、设置操作
+ * [OUTPUT]: 对外提供 PersonalView，以可持续进入的会员管理优先、四项常用功能、三组无标题紧凑卡片、16/13pt 设置行层级与页面私有 Reicon Outline 映射承载我的 Tab 核心入口、网页端状态与顶部新增、设置操作
  * [POS]: Personal 模块容器壳层，承载设置列表、网页端与备份入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -175,7 +175,7 @@ extension PersonalView {
 
     @ViewBuilder
     private var premiumSection: some View {
-        if !appState.isPremium {
+        Group {
             XMSettingsGroup(
                 horizontalPadding: Spacing.none,
                 verticalPadding: Spacing.none
@@ -190,10 +190,10 @@ extension PersonalView {
                             .foregroundStyle(Color.feedbackWarning)
                             .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: Spacing.compact) {
-                            Text("开通会员")
+                            Text(appState.membership.title)
                                 .font(AppTypography.callout)
                                 .foregroundStyle(Color.textPrimary)
-                            Text("解锁全部高级功能")
+                            Text(appState.isPremium ? "查看会员权益" : "解锁全部高级功能")
                                 .font(AppTypography.caption)
                                 .foregroundStyle(Color.textSecondary)
                         }

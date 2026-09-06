@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 ApiNoteImportViewModel、统一预览、Repository 注入与 App 生命周期
+ * [INPUT]: 依赖 ApiNoteImportViewModel、统一预览、受会员保护的 Repository 注入与 App 生命周期
  * [OUTPUT]: 对外提供 8080 API 导入页面，基于系统有效接口展示地址/访问码并接收多次 `/send`
  * [POS]: Views/Personal/DataImport 的 API 特殊入口；离开页面或 App 进入后台即停止服务
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -13,10 +13,10 @@ struct ApiNoteImportView: View {
     let repository: any NoteImportRepositoryProtocol
     let onOpenPremium: () -> Void
 
-    init(repository: any NoteImportRepositoryProtocol, isPremium: Bool, onOpenPremium: @escaping () -> Void) {
+    init(repository: any NoteImportRepositoryProtocol, membership: any MembershipRepositoryProtocol, onOpenPremium: @escaping () -> Void) {
         self.repository = repository
         self.onOpenPremium = onOpenPremium
-        _model = State(initialValue: ApiNoteImportViewModel(isPremium: isPremium))
+        _model = State(initialValue: ApiNoteImportViewModel(membership: membership))
     }
 
     var body: some View {

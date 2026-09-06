@@ -1045,8 +1045,8 @@ struct MainTabView: View {
             )
         case .api:
             ApiNoteImportView(
-                repository: repositories.noteImportRepository,
-                isPremium: appState.isPremium,
+                repository: repositories.premiumNoteImportRepository,
+                membership: repositories.membershipRepository,
                 onOpenPremium: openPremiumFromFullScreenTask
             )
         case .hanwang:
@@ -1592,7 +1592,7 @@ struct MainTabView: View {
         case .readingTimerSettings:
             ReadingTimerSettingsView()
         case .premium:
-            Text("会员")
+            MembershipView()
         case .readReminder:
             Text("阅读提醒")
         case .dataImport:

@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 XMNoteWeb.DesktopWebServer、Web API Adapter/设置仓储、AppState 同步的会员状态、LocalNetworkEndpointProvider、固定域名 BonjourServicePublisher、UIKit 与 App scenePhase
+ * [INPUT]: 依赖 XMNoteWeb.DesktopWebServer、Web API Adapter/设置仓储、MembershipRepository 实时会员权益、LocalNetworkEndpointProvider、固定域名 BonjourServicePublisher、UIKit 与 App scenePhase
  * [OUTPUT]: 对外提供当前会话/自动启动独立开关、六态会话状态、访问安全状态、实时会员裁决、可一次消费的原生高级版请求、固定局域网域名与有限后台收尾
  * [POS]: Services 的桌面网页会话唯一 owner，页面离开后仍由 App 根层持有
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -76,21 +76,6 @@ nonisolated enum DesktopWebSessionState: Equatable, Sendable {
     }
 }
 
-/// 在线程安全边界内保存 AppState 的最新会员快照，供并发 HTTP 请求和上传服务共享。
-private actor DesktopWebPremiumState {
-    private var isPremium = false
-
-    /// 返回当前会员能力；每个 HTTP 请求只读取一次该快照。
-    func currentValue() -> Bool {
-        isPremium
-    }
-
-    /// 接收 App 主线程发布的最新会员状态，后续请求立即使用新值。
-    func update(_ value: Bool) {
-        isPremium = value
-    }
-}
-
 /// 在 App 生命周期持有 HTTP、网络路径与 Bonjour，统一裁决用户开关和 scene 变化产生的竞态。
 @MainActor
 @Observable
@@ -119,20 +104,18 @@ final class DesktopWebSessionCoordinator {
     private let settingsRepository: DesktopWebSettingsRepository
     private let nativeActionBridge: DesktopWebNativeActionBridge
     private let apiAdapter: DesktopWebAPIAdapter
-    private let premiumState: DesktopWebPremiumState
     private let isPremiumProvider: @Sendable () async -> Bool
     private var isAppActive = false
     private var operationGeneration = 0
     private var latestEndpoints: [LocalNetworkEndpoint] = []
 
-    init(defaults explicitDefaults: UserDefaults? = nil) {
+    init(defaults explicitDefaults: UserDefaults? = nil, membership: any MembershipRepositoryProtocol = MembershipRepository.shared) {
         let runtimeDefaults = Self.makeRuntimeDefaults(explicit: explicitDefaults)
         let defaults = runtimeDefaults.defaults
         let settingsRepository = DesktopWebSettingsRepository(defaults: defaults)
         let nativeActionBridge = DesktopWebNativeActionBridge()
-        let premiumState = DesktopWebPremiumState()
         let isPremiumProvider: @Sendable () async -> Bool = {
-            await premiumState.currentValue()
+            await membership.hasPremiumAccess()
         }
         let apiAdapter = DesktopWebAPIAdapter(
             repository: settingsRepository,
@@ -144,7 +127,6 @@ final class DesktopWebSessionCoordinator {
         self.settingsRepository = settingsRepository
         self.nativeActionBridge = nativeActionBridge
         self.apiAdapter = apiAdapter
-        self.premiumState = premiumState
         self.isPremiumProvider = isPremiumProvider
         self.server = DesktopWebServer(
             apiDependencies: DesktopWebAPIDependencies(
@@ -211,11 +193,6 @@ final class DesktopWebSessionCoordinator {
         }
         #endif
         return (.standard, false)
-    }
-
-    /// 从 AppState 同步实时会员能力；更新由 actor 串行，已开始的请求保留进入门禁时读取的单次快照。
-    func updatePremiumStatus(_ isPremium: Bool) async {
-        await premiumState.update(isPremium)
     }
 
     /// 原子消费网页端高级版跳转请求，确保共享会话被多个 scene 观察时最多只有一个场景响应。

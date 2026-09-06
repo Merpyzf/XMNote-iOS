@@ -33,7 +33,6 @@ final class NoteMergeViewModel {
 
     private let repository: any NoteRepositoryProtocol
     private let quotaRepository: any NoteImageUploadQuotaRepositoryProtocol
-    private var isPremium: Bool
     private let imageQuotaReservationID = "note-merge-\(UUID().uuidString)"
     private var loadTask: Task<Void, Never>?
     private var previewTask: Task<Void, Never>?
@@ -50,14 +49,12 @@ final class NoteMergeViewModel {
         bookID: Int64,
         noteIDs: [Int64],
         repository: any NoteRepositoryProtocol,
-        quotaRepository: any NoteImageUploadQuotaRepositoryProtocol,
-        isPremium: Bool
+        quotaRepository: any NoteImageUploadQuotaRepositoryProtocol
     ) {
         self.bookID = bookID
         self.noteIDs = Array(Set(noteIDs)).sorted()
         self.repository = repository
         self.quotaRepository = quotaRepository
-        self.isPremium = isPremium
         load()
     }
 
@@ -68,14 +65,12 @@ final class NoteMergeViewModel {
         availableTags: [NoteEditorTagOption],
         chapterOptions: [NoteEditorChapterOption],
         repository: any NoteRepositoryProtocol,
-        quotaRepository: any NoteImageUploadQuotaRepositoryProtocol,
-        isPremium: Bool
+        quotaRepository: any NoteImageUploadQuotaRepositoryProtocol
     ) {
         self.bookID = validationDraft.book.id
         self.noteIDs = validationDraft.sourceNoteIDs
         self.repository = repository
         self.quotaRepository = quotaRepository
-        self.isPremium = isPremium
         self.phase = .content
         self.draft = validationDraft
         self.availableTags = availableTags
@@ -255,8 +250,7 @@ final class NoteMergeViewModel {
             id: imageQuotaReservationID,
             owner: imageQuotaOwner,
             currentDraftNewImageCount: draft.imageItems.count { $0.origin == .newInDraft },
-            requestedCount: componentAcceptedCount,
-            isPremium: isPremium
+            requestedCount: componentAcceptedCount
         )
         imageQuotaState = reservation.state
         guard reservation.acceptedCount > 0 else {
@@ -345,8 +339,7 @@ final class NoteMergeViewModel {
     }
 
     /// 会员状态变化时刷新本会话剩余额度，不中断已经上传的新图。
-    func updatePremiumStatus(_ isPremium: Bool) async {
-        self.isPremium = isPremium
+    func refreshMembershipQuota() async {
         await refreshImageQuota()
     }
 
@@ -398,8 +391,7 @@ final class NoteMergeViewModel {
             }
             await quotaRepository.commitReservation(
                 id: imageQuotaReservationID,
-                savedImageCount: newImages.count,
-                isPremium: isPremium
+                savedImageCount: newImages.count
             )
             loadTask?.cancel()
             previewTask?.cancel()
@@ -525,8 +517,7 @@ final class NoteMergeViewModel {
             id: imageQuotaReservationID,
             owner: imageQuotaOwner,
             draftNewImageCount: newImageCount,
-            isPersistedDraft: false,
-            isPremium: isPremium
+            isPersistedDraft: false
         )
     }
 
