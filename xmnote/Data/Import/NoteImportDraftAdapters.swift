@@ -22,6 +22,9 @@ nonisolated extension WereadImportBook {
         draft.cover = coverURL
         draft.type = 1
         draft.source = 4
+        draft.sourceName = "微信读书"
+        draft.sourceReadingStatus = readStatusID == 3 ? .finished : .unfinished
+        draft.usesCompletionReadingStatus = true
         draft.positionUnit = 1
         draft.currentPositionUnit = 1
         draft.wordCount = wordCount
@@ -45,8 +48,8 @@ nonisolated extension WereadImportBook {
         draft.reviews = reviews.map {
             NoteImportDraftReview(title: $0.title, content: $0.content, createdTime: $0.createdAt)
         }
-        draft.fuzzyReadingDurations = readingDays.map {
-            NoteImportFuzzyReadingDuration(date: $0.date, durationSeconds: $0.seconds, position: nil)
+        draft.wereadReadingDurations = readingDays.map {
+            NoteImportFuzzyReadingDuration(date: $0.date * 1_000, durationSeconds: $0.seconds, position: nil)
         }
         return draft
     }
@@ -57,8 +60,9 @@ nonisolated extension NoteImportDraftChapter {
         title = chapter.title
         level = chapter.level
         order = chapter.order
+        pathTitles = chapter.sourcePath.components(separatedBy: " / ").filter { !$0.isEmpty }
         sourceType = 1
-        sourceUID = String(chapter.uid)
+        sourceUID = chapter.uid > 0 ? String(chapter.uid) : ""
         sourceAnchor = chapter.sourceAnchor
         sourceOrder = chapter.order
         sourcePath = chapter.sourcePath
@@ -93,6 +97,7 @@ nonisolated extension ApiImportBookPayload {
         draft.purchaseDate = purchaseDate
         draft.price = price
         draft.readStatusID = readStatusId
+        draft.sourceReadingStatus = NoteImportReadingStatus(sourceValue: providedReadingStatus)
         draft.readStatusChangedDate = readStatusChangedDate
         draft.wereadUpdateTime = wereadUpdateTime
         draft.group = group.map { NoteImportDraftGroup(name: $0.name) }
@@ -101,7 +106,7 @@ nonisolated extension ApiImportBookPayload {
             NoteImportDraftNote(
                 content: $0.content,
                 idea: $0.idea,
-                position: "",
+                position: $0.position,
                 positionUnit: positionUnit,
                 createdTime: $0.createdDateTime,
                 chapter: $0.chapter.title.isEmpty ? nil : NoteImportDraftChapter(title: $0.chapter.title),

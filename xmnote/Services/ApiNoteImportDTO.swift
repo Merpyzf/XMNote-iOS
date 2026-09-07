@@ -88,6 +88,7 @@ nonisolated struct ApiNoteImportDTO: Decodable, Sendable {
         if locationUnit == 1 { payload.totalPosition = normalizedTotal ?? 0 }
         payload.score = Int64(((rating ?? 0) * 10).rounded(.towardZero))
         payload.readStatusId = readingStatus == nil || readingStatus == 0 ? 1 : readingStatus!
+        payload.providedReadingStatus = readingStatus
         payload.readStatusChangedDate = Self.milliseconds(readingStatusChangedDate ?? 0)
         if let group, !group.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { payload.group = ApiImportGroupPayload(name: group) }
         payload.tags = (tags ?? []).map { ApiImportTagPayload(name: $0) }

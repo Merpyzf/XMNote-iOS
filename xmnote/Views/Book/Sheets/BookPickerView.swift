@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer 或 Debug 仓储替身提供本地书与在线搜索，Debug 可附带固定远端预选；依赖 BookPickerViewModel 维护共享选择草稿，并复用 XMScrollEdgeChrome 协调固定控件与滚动内容
- * [OUTPUT]: 对外提供生产与测试中心共用的 iOS 26 系统样式 BookPickerView，并支持确定性异步确认验证
+ * [OUTPUT]: 对外提供生产与测试中心共用的 iOS 26 系统样式 BookPickerView，空态遵守创建能力，并支持确定性异步确认验证
  * [POS]: Book 模块业务 Sheet，负责统一书籍选择流，不承担具体业务页保存逻辑
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -460,7 +460,7 @@ private struct BookPickerResolvedView: View {
             appleRecommendedStateRow(
                 role: .empty,
                 title: "还没有书籍",
-                message: "先创建一本书，后续书摘才能关联到阅读对象",
+                message: configuration.allowsCreationFlow ? "先创建一本书，后续书摘才能关联到阅读对象" : "书库中暂无可选书籍",
                 systemImage: "books.vertical",
                 action: localStatePrimaryAction(viewModel),
                 secondaryAction: localStateSecondaryAction(viewModel)
@@ -958,6 +958,7 @@ private struct BookPickerResolvedView: View {
     }
 
     private var localNoResultsMessage: String {
+        guard configuration.allowsCreationFlow else { return "试试其他书名或作者" }
         switch configuration.creationAction {
         case .inlineManualEditor:
             return "你可以继续修改关键词，或直接手动创建"
@@ -969,6 +970,7 @@ private struct BookPickerResolvedView: View {
     }
 
     private var onlineNoResultsMessage: String {
+        guard configuration.allowsCreationFlow else { return "试试其他关键词或搜索源" }
         switch configuration.creationAction {
         case .inlineManualEditor:
             return "可以切换搜索源继续查找，或直接手动创建"

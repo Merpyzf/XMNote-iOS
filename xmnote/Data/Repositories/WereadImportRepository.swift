@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 DatabaseManager、WereadImportAPIClient、WereadWebAuthorizationService、UserDefaults 与微信读书领域模型
- * [OUTPUT]: 对外提供 WereadImportRepository，完成授权恢复、远端抓取、本地匹配、历史回填并把写入统一交给 NoteImportRepository
+ * [OUTPUT]: 对外提供 WereadImportRepository，按微信读书普通书籍类型筛选候选，完成授权恢复、远端抓取、本地匹配、历史回填并把写入统一交给 NoteImportRepository
  * [POS]: Data/Repositories 的微信读书扫码导入实现，是 ViewModel 唯一的数据与业务入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -11,6 +11,12 @@ import GRDB
 
 @MainActor
 final class WereadImportRepository: WereadImportRepositoryProtocol {
+    /// 微信读书书架与笔记本的书籍类型；与划线、评论及本地书籍类型分别解释。
+    private enum RemoteBookType: Int {
+        case book = 0
+        case publicAccount = 3
+    }
+
     private enum DetailLoadResult: Sendable {
         case success(Int, WereadImportBook)
         case failure(Int)
@@ -321,6 +327,61 @@ final class WereadImportRepository: WereadImportRepositoryProtocol {
         try await noteImportRepository.commitImport(books: commits, progress: progress)
     }
 
+    /// 预览使用生产提交转换器生成完整快照，包含未勾选书摘，保留专用时长与章节身份。
+    func makePreviewDrafts(_ books: [WereadImportBook]) -> [NoteImportDraftBook] {
+        books.map { book in
+            var source = book
+            for index in source.notes.indices { source.notes[index].isSelected = true }
+            var draft = noteImportDraft(from: source)
+            draft.sourceReadingStatus = source.readStatusID == 3 ? .finished : .unfinished
+            draft.usesCompletionReadingStatus = true
+            return draft
+        }
+    }
+
+    /// MainActor 编排会员验证与逐书写入；父任务取消沿仓储传播，显式资料补丁在补全后生效。
+    func commitPreviewImport(books: [NoteImportCommitBook], progress: @escaping (Int, Int) -> Void) async throws {
+        let enriched = try await enrichPreviewPayloads(books)
+        try await noteImportRepository.commitImport(books: enriched, progress: progress)
+    }
+
+    /// MainActor 完成微信资料补全后提交整个目标；取消沿仓储传播，不拆散同目标事务。
+    func commitPreviewGroup(_ group: NoteImportCommitGroup) async throws -> NoteImportCommitGroupResult {
+        var value = group
+        value.books = try await enrichPreviewPayloads(group.books)
+        try Task.checkCancellation()
+        return try await noteImportRepository.commitImportGroup(value)
+    }
+
+    /// 网络补全仅处理新书；不重新转换冻结的来源内容，显式资料补丁由最终事务应用。
+    private func enrichPreviewPayloads(_ books: [NoteImportCommitBook]) async throws -> [NoteImportCommitBook] {
+        try await membership.requirePremium()
+        var enriched = books
+        for index in enriched.indices {
+            try Task.checkCancellation()
+            guard enriched[index].targetBookID == nil else { continue }
+            let draft = enriched[index].draft
+            let source = WereadImportBook(
+                wereadBookID: draft.wereadBookID, title: draft.name, rawTitle: draft.rawName,
+                author: draft.author, coverURL: draft.cover, summary: draft.summary,
+                translator: draft.translator, isbn: draft.isbn, press: draft.press,
+                publicationDate: draft.pubDate, wordCount: draft.wordCount,
+                wereadUpdatedAt: draft.wereadUpdateTime, readStatusID: draft.readStatusID
+            )
+            let value = await enrichNewBook(source)
+            // 沿用微信读书的资料补全与封面转存，只回填资料；已冻结的章节、位置和时长不再次转换。
+            enriched[index].draft.cover = value.coverURL
+            enriched[index].draft.summary = value.summary
+            enriched[index].draft.translator = value.translator
+            enriched[index].draft.isbn = value.isbn
+            enriched[index].draft.press = value.press
+            enriched[index].draft.pubDate = value.publicationDate
+            enriched[index].draft.wordCount = value.wordCount
+        }
+        try Task.checkCancellation()
+        return enriched
+    }
+
     func enrichNewBooks(_ books: [WereadImportBook]) async -> [WereadImportBook] {
         var result = books
         for chunkStart in stride(from: 0, to: result.count, by: 5) {
@@ -604,8 +665,9 @@ private extension WereadImportRepository {
         let object = try await api.get("/api/user/notebook", cookie: cookie).object
         return WereadImportAPIClient.array(object["books"]).compactMap { wrapper in
             let book = WereadImportAPIClient.dictionary(wrapper["book"])
-            let type = WereadImportAPIClient.int(book?["type"]) ?? WereadImportAPIClient.int(wrapper["type"]) ?? 1
-            return type == 1 ? WereadImportAPIClient.string(wrapper["bookId"] ?? book?["bookId"]) : nil
+            let type = WereadImportAPIClient.int(book?["type"])
+            return type == RemoteBookType.book.rawValue
+                ? WereadImportAPIClient.string(wrapper["bookId"] ?? book?["bookId"]) : nil
         }
     }
 
@@ -618,7 +680,8 @@ private extension WereadImportRepository {
               let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let shelf = root["shelf"] as? [String: Any] else { return [] }
         return WereadImportAPIClient.array(shelf["rawIndexes"]).compactMap { item in
-            (WereadImportAPIClient.int(item["type"]) == 1) ? WereadImportAPIClient.string(item["bookId"]) : nil
+            (WereadImportAPIClient.int(item["type"]) == RemoteBookType.book.rawValue)
+                ? WereadImportAPIClient.string(item["bookId"]) : nil
         }
     }
 

@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖带 Kindle 入口参数的 DataImportTaskDestination、UserDefaults、UIKit interactive movement、XMSystemScrollEdgeRegistration，以及 XMNote 设计系统令牌
- * [OUTPUT]: 对外提供书摘导入分组模型、兼容旧设置的排序存储，以及支持系统上下滚动边缘过渡、条目浮动圆角和单一视觉载体排序的 DataImportCollectionView
+ * [INPUT]: 依赖带 Kindle 入口参数的 DataImportTaskDestination、类型安全 ImageResource、UserDefaults、UIKit interactive movement、XMSystemScrollEdgeRegistration，以及 XMNote 设计系统令牌
+ * [OUTPUT]: 对外提供带光学校准来源图标与辅助说明的书摘导入分组模型、兼容旧设置的排序存储，以及支持系统上下滚动边缘过渡、局部编辑附件过渡、条目浮动圆角和单一视觉载体排序的 DataImportCollectionView
  * [POS]: Views/Personal/DataImport 的主页排序与视觉承载层，SwiftUI 持有业务状态，UIKit 仅管理可中断拖拽交互
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -16,11 +16,101 @@ enum DataImportGroupID: String, CaseIterable, Hashable {
     case clipboard
 }
 
+/// 导入入口的页面私有图标语义，统一映射到 iOS 类型安全原色资源。
+fileprivate enum DataImportEntryIcon {
+    case computer
+    case weRead
+    case lifeWeek
+    case api
+    case kindle
+    case koReader
+    case boox
+    case legado
+    case appleBooks
+    case doubanRead
+    case jdReader
+    case iReader
+    case neatReader
+    case koodoReader
+    case hanwang
+    case dimo
+    case reeden
+    case dedao
+    case iReaderSelect
+    case moonReader
+    case duokan
+    case dangdang
+    case doubanApp
+    case neteaseSnail
+    case fanqie
+    case readingo
+
+    var resource: ImageResource {
+        switch self {
+        case .computer: .dataImportSourceComputer
+        case .weRead: .dataImportSourceWeRead
+        case .lifeWeek: .dataImportSourceLifeWeek
+        case .api: .dataImportSourceApi
+        case .kindle: .dataImportSourceKindle
+        case .koReader: .dataImportSourceKoReader
+        case .boox: .dataImportSourceBoox
+        case .legado: .dataImportSourceLegado
+        case .appleBooks: .dataImportSourceAppleBooks
+        case .doubanRead: .dataImportSourceDoubanRead
+        case .jdReader: .dataImportSourceJdReader
+        case .iReader: .dataImportSourceIReader
+        case .neatReader: .dataImportSourceNeatReader
+        case .koodoReader: .dataImportSourceKoodoReader
+        case .hanwang: .dataImportSourceHanwang
+        case .dimo: .dataImportSourceDimo
+        case .reeden: .dataImportSourceReeden
+        case .dedao: .dataImportSourceDedao
+        case .iReaderSelect: .dataImportSourceIReaderSelect
+        case .moonReader: .dataImportSourceMoonReader
+        case .duokan: .dataImportSourceDuokan
+        case .dangdang: .dataImportSourceDangdang
+        case .doubanApp: .dataImportSourceDoubanApp
+        case .neteaseSnail: .dataImportSourceNeteaseSnail
+        case .fanqie: .dataImportSourceFanqie
+        case .readingo: .dataImportSourceReadingo
+        }
+    }
+
+    /// 在统一 28pt 对齐槽内按原图有效面积补偿视觉重量，不改变资源轮廓与透明背景。
+    var visualSize: CGFloat {
+        switch self {
+        case .computer, .koReader, .neatReader, .reeden:
+            DataImportCollectionMetrics.entryIconCanvas
+        case .moonReader, .neteaseSnail, .readingo:
+            DataImportCollectionMetrics.compactSourceIconSize
+        default:
+            DataImportCollectionMetrics.sourceIconSize
+        }
+    }
+}
+
 /// 单个可启动的导入入口，稳定 ID 同时用于旧版顺序兼容与 UIKit 拖拽定位。
 struct DataImportEntry: Identifiable {
     let id: String
     let title: LocalizedStringResource
+    fileprivate let subtitle: LocalizedStringResource?
+    fileprivate let icon: DataImportEntryIcon
     let destination: DataImportTaskDestination
+
+    /// 创建带类型安全图标和可选辅助说明的首页入口，不把展示资源下沉到领域模型。
+    fileprivate init(
+        id: String,
+        title: LocalizedStringResource,
+        subtitle: LocalizedStringResource? = nil,
+        icon: DataImportEntryIcon,
+        destination: DataImportTaskDestination
+    ) {
+        self.id = id
+        self.title = title
+        self.subtitle = subtitle
+        self.icon = icon
+        self.destination = destination
+    }
 }
 
 /// 书摘导入业务分组，分组移动时完整携带其内部已排序条目。
@@ -114,52 +204,199 @@ enum DataImportOrderingStore {
             id: .quick,
             title: "快捷导入",
             entries: [
-                DataImportEntry(id: "computer", title: "从电脑导入", destination: .desktopComputer),
-                DataImportEntry(id: "weread-auth", title: "微信读书授权导入", destination: .wereadAuthorization),
-                DataImportEntry(id: "lifeweek", title: "三联生活周刊", destination: .lifeWeek)
+                DataImportEntry(
+                    id: "computer",
+                    title: "从电脑导入",
+                    subtitle: "开启网页端后，在电脑浏览器中继续导入",
+                    icon: .computer,
+                    destination: .desktopComputer
+                ),
+                DataImportEntry(
+                    id: "weread-auth",
+                    title: "微信读书授权导入",
+                    subtitle: "批量导入微信读书中的摘录笔记",
+                    icon: .weRead,
+                    destination: .wereadAuthorization
+                ),
+                DataImportEntry(
+                    id: "lifeweek",
+                    title: "三联生活周刊",
+                    subtitle: "批量导入三联生活周刊中的摘录笔记",
+                    icon: .lifeWeek,
+                    destination: .lifeWeek
+                )
             ]
         ),
         DataImportGroup(
             id: .api,
-            title: "API 导入",
+            title: "开发者工具",
             entries: [
-                DataImportEntry(id: "api", title: "API 导入", destination: .api)
+                DataImportEntry(
+                    id: "api",
+                    title: "API 导入",
+                    subtitle: "接收同一局域网内其他设备发送的书摘",
+                    icon: .api,
+                    destination: .api
+                )
             ]
         ),
         DataImportGroup(
             id: .file,
             title: "本地文件",
             entries: [
-                DataImportEntry(id: "kindle", title: "Kindle", destination: .kindle(.manualFile)),
-                DataImportEntry(id: "koreader", title: "KOReader", destination: .file(title: "KOReader", parserID: .koreader)),
-                DataImportEntry(id: "boox", title: "BOOX", destination: .fileCandidates(title: "BOOX", parserIDs: [.booxOld, .booxNew])),
-                DataImportEntry(id: "legado", title: "阅读", destination: .file(title: "阅读", parserID: .legado)),
-                DataImportEntry(id: "apple-books", title: "Apple Books", destination: .file(title: "Apple Books", parserID: .appleBooks)),
-                DataImportEntry(id: "douban-read", title: "豆瓣阅读", destination: .file(title: "豆瓣阅读", parserID: .doubanRead)),
-                DataImportEntry(id: "jd-reader", title: "京东读书", destination: .file(title: "京东读书", parserID: .jdReader)),
-                DataImportEntry(id: "ireader-file", title: "掌阅", destination: .file(title: "掌阅", parserID: .ireaderFile)),
-                DataImportEntry(id: "ireader-epub", title: "iReader 笔记成书", destination: .file(title: "iReader 笔记成书", parserID: .ireaderEpub)),
-                DataImportEntry(id: "neat", title: "Neat Reader", destination: .file(title: "Neat Reader", parserID: .neatReader)),
-                DataImportEntry(id: "koodo", title: "Koodo Reader", destination: .file(title: "Koodo Reader", parserID: .koodo)),
-                DataImportEntry(id: "hanwang", title: "汉王", destination: .hanwang),
-                DataImportEntry(id: "dimo", title: "滴墨", destination: .file(title: "滴墨", parserID: .dimo)),
-                DataImportEntry(id: "reeden", title: "Reeden", destination: .file(title: "Reeden", parserID: .reeden))
+                DataImportEntry(
+                    id: "kindle",
+                    title: "Kindle",
+                    icon: .kindle,
+                    destination: .kindle(.manualFile)
+                ),
+                DataImportEntry(
+                    id: "koreader",
+                    title: "KOReader",
+                    icon: .koReader,
+                    destination: .file(title: "KOReader", parserID: .koreader)
+                ),
+                DataImportEntry(
+                    id: "boox",
+                    title: "BOOX",
+                    icon: .boox,
+                    destination: .fileCandidates(title: "BOOX", parserIDs: [.booxOld, .booxNew])
+                ),
+                DataImportEntry(
+                    id: "legado",
+                    title: "阅读",
+                    icon: .legado,
+                    destination: .file(title: "阅读", parserID: .legado)
+                ),
+                DataImportEntry(
+                    id: "apple-books",
+                    title: "Apple Books",
+                    icon: .appleBooks,
+                    destination: .file(title: "Apple Books", parserID: .appleBooks)
+                ),
+                DataImportEntry(
+                    id: "douban-read",
+                    title: "豆瓣阅读",
+                    icon: .doubanRead,
+                    destination: .file(title: "豆瓣阅读", parserID: .doubanRead)
+                ),
+                DataImportEntry(
+                    id: "jd-reader",
+                    title: "京东读书",
+                    icon: .jdReader,
+                    destination: .file(title: "京东读书", parserID: .jdReader)
+                ),
+                DataImportEntry(
+                    id: "ireader-file",
+                    title: "掌阅",
+                    icon: .iReader,
+                    destination: .file(title: "掌阅", parserID: .ireaderFile)
+                ),
+                DataImportEntry(
+                    id: "ireader-epub",
+                    title: "iReader 笔记成书",
+                    icon: .iReader,
+                    destination: .file(title: "iReader 笔记成书", parserID: .ireaderEpub)
+                ),
+                DataImportEntry(
+                    id: "neat",
+                    title: "Neat Reader",
+                    icon: .neatReader,
+                    destination: .file(title: "Neat Reader", parserID: .neatReader)
+                ),
+                DataImportEntry(
+                    id: "koodo",
+                    title: "Koodo Reader",
+                    icon: .koodoReader,
+                    destination: .file(title: "Koodo Reader", parserID: .koodo)
+                ),
+                DataImportEntry(
+                    id: "hanwang",
+                    title: "汉王",
+                    icon: .hanwang,
+                    destination: .hanwang
+                ),
+                DataImportEntry(
+                    id: "dimo",
+                    title: "滴墨",
+                    icon: .dimo,
+                    destination: .file(title: "滴墨", parserID: .dimo)
+                ),
+                DataImportEntry(
+                    id: "reeden",
+                    title: "Reeden",
+                    icon: .reeden,
+                    destination: .file(title: "Reeden", parserID: .reeden)
+                )
             ]
         ),
         DataImportGroup(
             id: .clipboard,
             title: "剪贴板",
             entries: [
-                DataImportEntry(id: "weread-clipboard", title: "微信读书", destination: .clipboardCandidates(title: "微信读书", parserIDs: [.wereadOld, .wereadPre830, .weread830])),
-                DataImportEntry(id: "dedao", title: "得到", destination: .clipboard(title: "得到", parserID: .dedao)),
-                DataImportEntry(id: "ireader-selected", title: "掌阅精选", destination: .clipboard(title: "掌阅精选", parserID: .ireaderSelected)),
-                DataImportEntry(id: "moon", title: "静读天下", destination: .clipboard(title: "静读天下", parserID: .moonReader)),
-                DataImportEntry(id: "duokan", title: "多看", destination: .clipboard(title: "多看", parserID: .duokan)),
-                DataImportEntry(id: "dangdang", title: "当当", destination: .clipboard(title: "当当", parserID: .dangdang)),
-                DataImportEntry(id: "douban-app", title: "豆瓣阅读 App", destination: .clipboard(title: "豆瓣阅读 App", parserID: .doubanApp)),
-                DataImportEntry(id: "reader163", title: "网易蜗牛", destination: .clipboard(title: "网易蜗牛", parserID: .reader163)),
-                DataImportEntry(id: "fanqie", title: "番茄小说", destination: .clipboard(title: "番茄小说", parserID: .fanqie)),
-                DataImportEntry(id: "readingo", title: "Readingo", destination: .clipboard(title: "Readingo", parserID: .readingo))
+                DataImportEntry(
+                    id: "weread-clipboard",
+                    title: "微信读书",
+                    icon: .weRead,
+                    destination: .clipboardCandidates(
+                        title: "微信读书",
+                        parserIDs: [.wereadOld, .wereadPre830, .weread830]
+                    )
+                ),
+                DataImportEntry(
+                    id: "dedao",
+                    title: "得到",
+                    icon: .dedao,
+                    destination: .clipboard(title: "得到", parserID: .dedao)
+                ),
+                DataImportEntry(
+                    id: "ireader-selected",
+                    title: "掌阅精选",
+                    icon: .iReaderSelect,
+                    destination: .clipboard(title: "掌阅精选", parserID: .ireaderSelected)
+                ),
+                DataImportEntry(
+                    id: "moon",
+                    title: "静读天下",
+                    icon: .moonReader,
+                    destination: .clipboard(title: "静读天下", parserID: .moonReader)
+                ),
+                DataImportEntry(
+                    id: "duokan",
+                    title: "多看",
+                    icon: .duokan,
+                    destination: .clipboard(title: "多看", parserID: .duokan)
+                ),
+                DataImportEntry(
+                    id: "dangdang",
+                    title: "当当",
+                    icon: .dangdang,
+                    destination: .clipboard(title: "当当", parserID: .dangdang)
+                ),
+                DataImportEntry(
+                    id: "douban-app",
+                    title: "豆瓣阅读 App",
+                    icon: .doubanApp,
+                    destination: .clipboard(title: "豆瓣阅读 App", parserID: .doubanApp)
+                ),
+                DataImportEntry(
+                    id: "reader163",
+                    title: "网易蜗牛",
+                    icon: .neteaseSnail,
+                    destination: .clipboard(title: "网易蜗牛", parserID: .reader163)
+                ),
+                DataImportEntry(
+                    id: "fanqie",
+                    title: "番茄小说",
+                    icon: .fanqie,
+                    destination: .clipboard(title: "番茄小说", parserID: .fanqie)
+                ),
+                DataImportEntry(
+                    id: "readingo",
+                    title: "Readingo",
+                    icon: .readingo,
+                    destination: .clipboard(title: "Readingo", parserID: .readingo)
+                )
             ]
         )
     ]
@@ -498,26 +735,20 @@ final class DataImportCollectionHostView: UICollectionView, UIGestureRecognizerD
 
         let previousConfiguration = self.configuration
         let needsDataUpdate = previousConfiguration.dataSignature != configuration.dataSignature
-        let needsPresentationUpdate = previousConfiguration.isEditing != configuration.isEditing
-            || previousConfiguration.reducesMotion != configuration.reducesMotion
+        let didEditingChange = previousConfiguration.isEditing != configuration.isEditing
+        let didMotionPreferenceChange = previousConfiguration.reducesMotion != configuration.reducesMotion
         self.configuration = configuration
         displayedGroups = configuration.groups
         interactionState = configuration.isEditing ? .editingExpanded : .normal
 
         if needsDataUpdate {
             reloadData()
-        } else if needsPresentationUpdate {
-            if animated, window != nil, !configuration.reducesMotion {
-                UIView.transition(
-                    with: self,
-                    duration: DataImportCollectionMetrics.presentationDuration,
-                    options: [.transitionCrossDissolve, .allowAnimatedContent]
-                ) {
-                    self.reloadData()
-                }
-            } else {
-                reloadData()
-            }
+        } else if didEditingChange {
+            updateVisibleCells(
+                animatesAccessories: animated && window != nil && !configuration.reducesMotion
+            )
+        } else if didMotionPreferenceChange {
+            updateVisibleCells()
         }
     }
 
@@ -579,17 +810,21 @@ private extension DataImportCollectionHostView {
         return .entry(groupID: group.id, entryID: group.entries[entryIndex].id)
     }
 
-    /// 用最新交互状态刷新可见行的箭头、把手、紧凑分组和可访问动作。
-    func updateVisibleCells() {
+    /// 用最新交互状态刷新可见行的附件、紧凑分组和可访问动作，不重建列表身份。
+    func updateVisibleCells(animatesAccessories: Bool = false) {
         for case let cell as DataImportCollectionCell in visibleCells {
             guard let indexPath = indexPath(for: cell) else { continue }
-            configure(cell, at: indexPath)
+            configure(cell, at: indexPath, animatesAccessory: animatesAccessories)
             applyVisualOwnership(to: cell, at: indexPath)
         }
     }
 
     /// 为分组标题或条目配置设计系统排版、表层、语义图标与操作回调。
-    func configure(_ cell: DataImportCollectionCell, at indexPath: IndexPath) {
+    func configure(
+        _ cell: DataImportCollectionCell,
+        at indexPath: IndexPath,
+        animatesAccessory: Bool = false
+    ) {
         guard displayedGroups.indices.contains(indexPath.section) else { return }
         let group = displayedGroups[indexPath.section]
         if indexPath.item == 0 {
@@ -600,6 +835,7 @@ private extension DataImportCollectionHostView {
                 isEditing: configuration.isEditing,
                 isCompact: areEntriesCollapsed,
                 isDropTarget: false,
+                animatesAccessory: animatesAccessory,
                 moveUp: canMoveUp ? { [weak self] in
                     self?.moveGroupForAccessibility(group.id, offset: -1)
                     return true
@@ -625,6 +861,7 @@ private extension DataImportCollectionHostView {
             showsReorderHandle: canReorderEntries,
             isFirst: entryIndex == 0,
             isLast: entryIndex == group.entries.count - 1,
+            animatesAccessory: animatesAccessory,
             moveUp: canReorderEntries && entryIndex > 0 ? { [weak self] in
                 self?.moveEntryForAccessibility(group.id, entryID: entry.id, offset: -1)
                 return true
@@ -1978,6 +2215,14 @@ extension DataImportCollectionHostView: UICollectionViewDelegate {
     }
 }
 
+/// Cell 尾部展示状态；附件独立于 SwiftUI 行内容，避免编辑态切换重绘整行。
+private enum DataImportCellTrailingAccessory: Equatable {
+    case hidden
+    case disclosure
+    case groupReorder
+    case entryReorder
+}
+
 /// 使用 SwiftUI 内容配置的集合行，统一管理高亮、44pt 把手命中和 VoiceOver 自定义动作。
 private final class DataImportCollectionCell: UICollectionViewCell {
     static let reuseIdentifier = "DataImportCollectionCell"
@@ -1993,6 +2238,8 @@ private final class DataImportCollectionCell: UICollectionViewCell {
     private var allowsHighlight = false
     private var isContentSuppressed = false
     private var compactProgress: CGFloat = 0
+    private var trailingAccessory = DataImportCellTrailingAccessory.hidden
+    private let trailingAccessoryImageView = UIImageView()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -2001,6 +2248,28 @@ private final class DataImportCollectionCell: UICollectionViewCell {
         compactChromeView?.isUserInteractionEnabled = false
         compactChromeView?.alpha = 0
         backgroundView = compactChromeView
+
+        trailingAccessoryImageView.translatesAutoresizingMaskIntoConstraints = false
+        trailingAccessoryImageView.contentMode = .center
+        trailingAccessoryImageView.adjustsImageSizeForAccessibilityContentSizeCategory = true
+        trailingAccessoryImageView.isUserInteractionEnabled = false
+        trailingAccessoryImageView.isAccessibilityElement = false
+        addSubview(trailingAccessoryImageView)
+        NSLayoutConstraint.activate([
+            trailingAccessoryImageView.trailingAnchor.constraint(
+                equalTo: trailingAnchor
+            ),
+            trailingAccessoryImageView.centerYAnchor.constraint(
+                equalTo: centerYAnchor
+            ),
+            trailingAccessoryImageView.widthAnchor.constraint(
+                equalToConstant: reorderHandleWidth
+            ),
+            trailingAccessoryImageView.heightAnchor.constraint(
+                equalToConstant: InteractionMetrics.minimumTouchTarget
+            )
+        ])
+
         configurationUpdateHandler = { [weak self] cell, state in
             guard let self else { return }
             if self.isContentSuppressed {
@@ -2028,7 +2297,9 @@ private final class DataImportCollectionCell: UICollectionViewCell {
         compactProgress = 0
         accessibilityCustomActions = nil
         contentConfiguration = nil
+        setTrailingAccessory(.hidden, animated: false)
         contentView.alpha = 1
+        trailingAccessoryImageView.alpha = 1
         compactChromeHostingController.view.alpha = 0
         alpha = 1
         transform = .identity
@@ -2045,6 +2316,7 @@ private final class DataImportCollectionCell: UICollectionViewCell {
     func removeVisualAnimations() {
         layer.removeAllAnimations()
         contentView.layer.removeAllAnimations()
+        trailingAccessoryImageView.layer.removeAllAnimations()
         backgroundView?.layer.removeAllAnimations()
         compactChromeHostingController.view.layer.removeAllAnimations()
     }
@@ -2055,6 +2327,7 @@ private final class DataImportCollectionCell: UICollectionViewCell {
         isContentSuppressed = isSuppressed
         setNeedsUpdateConfiguration()
         contentView.alpha = isSuppressed ? 0 : 1
+        trailingAccessoryImageView.alpha = isSuppressed ? 0 : 1
         updateCompactChromeVisibility()
     }
 
@@ -2070,6 +2343,7 @@ private final class DataImportCollectionCell: UICollectionViewCell {
         isEditing: Bool,
         isCompact: Bool,
         isDropTarget: Bool,
+        animatesAccessory: Bool,
         moveUp: (() -> Bool)?,
         moveDown: (() -> Bool)?
     ) {
@@ -2078,7 +2352,7 @@ private final class DataImportCollectionCell: UICollectionViewCell {
         contentConfiguration = UIHostingConfiguration {
             DataImportGroupRow(
                 title: group.title,
-                isEditing: isEditing,
+                showsReorderHandle: false,
                 isCompactGeometry: isCompact
             )
             .accessibilityHidden(true)
@@ -2088,6 +2362,10 @@ private final class DataImportCollectionCell: UICollectionViewCell {
             itemCount: group.entries.count,
             isEditing: isEditing,
             isDropTarget: isDropTarget
+        )
+        setTrailingAccessory(
+            isEditing ? .groupReorder : .hidden,
+            animated: animatesAccessory
         )
         isAccessibilityElement = true
         accessibilityLabel = String(localized: group.title)
@@ -2109,6 +2387,7 @@ private final class DataImportCollectionCell: UICollectionViewCell {
         showsReorderHandle: Bool,
         isFirst: Bool,
         isLast: Bool,
+        animatesAccessory: Bool,
         moveUp: (() -> Bool)?,
         moveDown: (() -> Bool)?
     ) {
@@ -2118,17 +2397,24 @@ private final class DataImportCollectionCell: UICollectionViewCell {
         contentConfiguration = UIHostingConfiguration {
             DataImportEntryRow(
                 title: entry.title,
-                isEditing: isEditing,
-                showsReorderHandle: showsReorderHandle,
+                subtitle: entry.subtitle,
+                icon: entry.icon,
                 isFirst: isFirst,
                 isLast: isLast
             )
             .accessibilityHidden(true)
         }
         .margins(.all, 0)
+        let trailingAccessory: DataImportCellTrailingAccessory
+        if isEditing {
+            trailingAccessory = showsReorderHandle ? .entryReorder : .hidden
+        } else {
+            trailingAccessory = .disclosure
+        }
+        setTrailingAccessory(trailingAccessory, animated: animatesAccessory)
         isAccessibilityElement = true
         accessibilityLabel = String(localized: entry.title)
-        accessibilityValue = nil
+        accessibilityValue = entry.subtitle.map { String(localized: $0) }
         accessibilityHint = isEditing ? "拖动排序，或使用上移和下移动作" : "打开导入任务"
         accessibilityTraits = isEditing ? [] : [.button]
         accessibilityCustomActions = Self.accessibilityMoveActions(
@@ -2138,6 +2424,74 @@ private final class DataImportCollectionCell: UICollectionViewCell {
             downName: "下移"
         )
         setNeedsUpdateConfiguration()
+    }
+
+    /// 仅在 44pt 尾部槽内切换符号；快速重复切换从当前动画状态继续。
+    private func setTrailingAccessory(
+        _ accessory: DataImportCellTrailingAccessory,
+        animated: Bool
+    ) {
+        let didAccessoryChange = trailingAccessory != accessory
+        guard didAccessoryChange else {
+            bringSubviewToFront(trailingAccessoryImageView)
+            return
+        }
+
+        trailingAccessory = accessory
+        let updates = { [self] in
+            applyTrailingAccessory(accessory)
+        }
+        bringSubviewToFront(trailingAccessoryImageView)
+
+        guard animated else {
+            trailingAccessoryImageView.layer.removeAllAnimations()
+            UIView.performWithoutAnimation(updates)
+            return
+        }
+
+        UIView.transition(
+            with: trailingAccessoryImageView,
+            duration: DataImportCollectionMetrics.accessoryTransitionDuration,
+            options: [
+                .transitionCrossDissolve,
+                .beginFromCurrentState,
+                .allowUserInteraction
+            ],
+            animations: updates
+        )
+    }
+
+    /// 应用系统动态色与 Symbol 文本样式，保持辅助图标随外观和字号自动适配。
+    private func applyTrailingAccessory(_ accessory: DataImportCellTrailingAccessory) {
+        let symbolName: String?
+        let symbolConfiguration: UIImage.SymbolConfiguration?
+        let tintColor: UIColor
+
+        switch accessory {
+        case .hidden:
+            symbolName = nil
+            symbolConfiguration = nil
+            tintColor = .secondaryLabel
+        case .disclosure:
+            symbolName = "chevron.forward"
+            symbolConfiguration = UIImage.SymbolConfiguration(textStyle: .caption1)
+            tintColor = .secondaryLabel
+        case .groupReorder:
+            symbolName = "line.3.horizontal"
+            symbolConfiguration = UIImage.SymbolConfiguration(textStyle: .subheadline)
+                .applying(UIImage.SymbolConfiguration(weight: .semibold))
+            tintColor = .label
+        case .entryReorder:
+            symbolName = "line.3.horizontal"
+            symbolConfiguration = UIImage.SymbolConfiguration(textStyle: .subheadline)
+                .applying(UIImage.SymbolConfiguration(weight: .semibold))
+            tintColor = .secondaryLabel
+        }
+
+        trailingAccessoryImageView.image = symbolName.flatMap { name in
+            UIImage(systemName: name, withConfiguration: symbolConfiguration)
+        }
+        trailingAccessoryImageView.tintColor = tintColor
     }
 
     /// 统一应用紧凑附属层可见度，并让活动分组的真实 cell 始终完全隐身。
@@ -2167,18 +2521,22 @@ private final class DataImportCollectionCell: UICollectionViewCell {
 private struct DataImportGroupRow: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let title: LocalizedStringResource
-    let isEditing: Bool
+    let showsReorderHandle: Bool
     let isCompactGeometry: Bool
 
     var body: some View {
         HStack(spacing: Spacing.cozy) {
             Text(title)
-                .font(AppTypography.headline)
-                .foregroundStyle(Color.textPrimary)
+                .font(AppTypography.subheadlineSemibold)
+                .foregroundStyle(Color.textSecondary)
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
             Spacer(minLength: Spacing.cozy)
-            if isEditing {
+            if showsReorderHandle {
                 reorderHandle
+            } else {
+                Color.clear
+                    .frame(width: InteractionMetrics.minimumTouchTarget)
+                    .frame(minHeight: InteractionMetrics.minimumTouchTarget)
             }
         }
         .padding(.leading, Spacing.screenEdge)
@@ -2210,10 +2568,10 @@ private struct DataImportGroupCompactChrome: View {
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
+            RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
                 .fill(Color.surfaceCard)
             if isDropTarget {
-                RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
+                RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
                     .stroke(Color.surfaceBorderStrong, lineWidth: StrokeWidth.hairline)
             }
             HStack(spacing: Spacing.cozy) {
@@ -2233,70 +2591,88 @@ private struct DataImportGroupCompactChrome: View {
     }
 }
 
-/// 52pt 基线的导入入口行，按首尾位置组成 grouped-card 并在编辑态切换中性把手。
+/// 导入入口行通过稳定图标槽和可选说明形成扫读层级，并为 UIKit 尾部附件保留固定空间。
 private struct DataImportEntryRow: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.displayScale) private var displayScale
     let title: LocalizedStringResource
-    let isEditing: Bool
-    let showsReorderHandle: Bool
+    let subtitle: LocalizedStringResource?
+    let icon: DataImportEntryIcon
     let isFirst: Bool
     let isLast: Bool
 
     var body: some View {
-        HStack(spacing: Spacing.cozy) {
-            Text(title)
-                .font(AppTypography.body)
-                .foregroundStyle(Color.textPrimary)
-                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
-            Spacer(minLength: Spacing.cozy)
-            if isEditing, showsReorderHandle {
-                reorderHandle
-            } else if !isEditing {
-                Image(systemName: "chevron.forward")
-                    .font(AppTypography.caption)
-                    .foregroundStyle(Color.iconSecondary)
-                    .frame(
-                        width: InteractionMetrics.minimumTouchTarget
-                    )
-                    .frame(minHeight: InteractionMetrics.minimumTouchTarget)
-                    .accessibilityHidden(true)
+        HStack(spacing: Spacing.tight) {
+            DataImportEntryIconView(icon: icon)
+
+            VStack(alignment: .leading, spacing: Spacing.compact) {
+                Text(title)
+                    .font(AppTypography.body)
+                    .foregroundStyle(Color.textPrimary)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
+
+                if let subtitle {
+                    Text(subtitle)
+                        .font(AppTypography.footnote)
+                        .foregroundStyle(Color.textSecondary)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Color.clear
+                .frame(width: InteractionMetrics.minimumTouchTarget)
+                .frame(minHeight: InteractionMetrics.minimumTouchTarget)
         }
         .padding(.leading, Spacing.screenEdge)
-        .frame(minHeight: DataImportCollectionMetrics.entryMinimumHeight)
+        .frame(
+            minHeight: subtitle == nil
+                ? DataImportCollectionMetrics.entryMinimumHeight
+                : DataImportCollectionMetrics.entryDetailMinimumHeight
+        )
         .background(Color.surfaceCard)
         .overlay(alignment: .bottom) {
             if !isLast {
                 Rectangle()
                     .fill(Color.surfaceDividerSubtle)
                     .frame(height: 1 / max(displayScale, 1))
-                    .padding(.leading, Spacing.screenEdge)
+                    .padding(.leading, DataImportCollectionMetrics.entryDividerLeading)
             }
         }
+        .compositingGroup()
         .clipShape(cardShape)
         .contentShape(Rectangle())
     }
 
-    private var reorderHandle: some View {
-        Image(systemName: "line.3.horizontal")
-            .font(AppTypography.subheadlineSemibold)
-            .foregroundStyle(Color.iconSecondary)
-            .frame(
-                width: InteractionMetrics.minimumTouchTarget
-            )
-            .frame(minHeight: InteractionMetrics.minimumTouchTarget)
-            .accessibilityHidden(true)
-    }
-
     private var cardShape: UnevenRoundedRectangle {
         UnevenRoundedRectangle(
-            topLeadingRadius: isFirst ? CornerRadius.blockMedium : 0,
-            bottomLeadingRadius: isLast ? CornerRadius.blockMedium : 0,
-            bottomTrailingRadius: isLast ? CornerRadius.blockMedium : 0,
-            topTrailingRadius: isFirst ? CornerRadius.blockMedium : 0,
+            topLeadingRadius: isFirst ? CornerRadius.blockLarge : 0,
+            bottomLeadingRadius: isLast ? CornerRadius.blockLarge : 0,
+            bottomTrailingRadius: isLast ? CornerRadius.blockLarge : 0,
+            topTrailingRadius: isFirst ? CornerRadius.blockLarge : 0,
             style: .continuous
         )
+    }
+}
+
+/// 首页入口的稳定图标槽，保持迁移来源的原色身份表达。
+private struct DataImportEntryIconView: View {
+    let icon: DataImportEntryIcon
+
+    var body: some View {
+        Image(icon.resource)
+            .renderingMode(.original)
+            .resizable()
+            .scaledToFit()
+            .frame(
+                width: icon.visualSize,
+                height: icon.visualSize
+            )
+            .frame(
+                width: DataImportCollectionMetrics.entryIconCanvas,
+                height: DataImportCollectionMetrics.entryIconCanvas
+            )
+            .accessibilityHidden(true)
     }
 }
 
@@ -2317,7 +2693,7 @@ private final class DataImportGroupDragProxyView: UIView {
         identityHostingController = UIHostingController(
             rootView: DataImportGroupRow(
                 title: group.title,
-                isEditing: true,
+                showsReorderHandle: true,
                 isCompactGeometry: false
             )
         )
@@ -2365,6 +2741,13 @@ private enum DataImportCollectionMetrics {
     static let groupHeaderMinimumHeight: CGFloat = 40
     static let compactGroupMinimumHeight: CGFloat = 52
     static let entryMinimumHeight: CGFloat = 52
+    static let entryDetailMinimumHeight: CGFloat = 64
+    static let entryIconCanvas: CGFloat = 28
+    static let sourceIconSize: CGFloat = 26
+    static let compactSourceIconSize: CGFloat = 25
+    static let entryDividerLeading: CGFloat = Spacing.screenEdge
+        + entryIconCanvas
+        + Spacing.tight
     static let entryDepartureDuration: TimeInterval = 0.10
     static let collapseDuration: TimeInterval = 0.18
     static let sectionMoveDuration: TimeInterval = 0.18
@@ -2372,7 +2755,7 @@ private enum DataImportCollectionMetrics {
     static let expandDuration: TimeInterval = 0.28
     static let entrySettleDuration: TimeInterval = 0.16
     static let reduceMotionFadeDuration: TimeInterval = 0.10
-    static let presentationDuration: TimeInterval = 0.16
+    static let accessoryTransitionDuration: TimeInterval = 0.18
     static let entryTransitionTravel: CGFloat = 10
     static let entryDepartureTravel: CGFloat = 4
     static let finishDurationFactor: CGFloat = 0.35

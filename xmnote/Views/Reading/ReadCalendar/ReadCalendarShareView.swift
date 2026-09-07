@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer/AppState、ReadCalendarShareViewModel、分享卡、阅读日历 Reicon 资源、XMSystemSearchBar/XMScrollEdgeChrome 与系统年月选择/弹窗/XMActivityShareSheet
- * [OUTPUT]: 对外提供 ReadCalendarShareView，以 Reicon 表达分享配置业务对象并完成短内容回弹的三类预览、48 模板、排行、可搜索书籍排除重算、会员拦截、保存与分享
+ * [OUTPUT]: 对外提供 ReadCalendarShareView，以 Reicon 表达分享配置业务对象并完成短内容回弹的三类预览、48 模板、排行、可搜索书籍排除重算、会员拦截、中性保存入口与主分享操作
  * [POS]: ReadCalendar 分享页面壳层，采用 iOS 原生 push、Sheet 与系统分享/相册能力表达 Android 业务规则
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -282,6 +282,7 @@ struct ReadCalendarShareView: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
+            .tint(Color.textSecondary)
             .disabled(viewModel.snapshot == nil || isExporting)
 
             Button {

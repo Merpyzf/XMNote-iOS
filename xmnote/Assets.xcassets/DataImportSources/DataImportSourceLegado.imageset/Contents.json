@@ -1,0 +1,23 @@
+{
+  "images": [
+    {
+      "filename": "DataImportSourceLegado.png",
+      "idiom": "universal",
+      "scale": "1x"
+    },
+    {
+      "filename": "DataImportSourceLegado@2x.png",
+      "idiom": "universal",
+      "scale": "2x"
+    },
+    {
+      "filename": "DataImportSourceLegado@3x.png",
+      "idiom": "universal",
+      "scale": "3x"
+    }
+  ],
+  "info": {
+    "author": "xcode",
+    "version": 1
+  }
+}

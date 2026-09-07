@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 WereadImportRepositoryProtocol 与微信读书导入领域模型
- * [OUTPUT]: 对外提供授权、分批与预览页面的 @Observable ViewModel 和导航载荷
+ * [OUTPUT]: 对外提供授权面板的结构化数量进度、分阶段反馈，以及分批与预览页面的 ViewModel 和导航载荷
  * [POS]: ViewModels/Personal 的微信读书导入状态编排层，不直接访问网络、数据库或偏好存储
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -22,9 +22,25 @@ final class WereadImportAuthViewModel {
         case backfill
     }
 
+    /// 授权面板的数量进度；同一次处理序列保持身份，重试时重建以避免数字倒滚。
+    struct WorkProgress: Equatable {
+        let id: UUID
+        let current: Int
+        let total: Int
+
+        /// 仅接受可展示的真实计数；未知总数保持不定量状态。
+        init?(id: UUID, current: Int, total: Int) {
+            guard total > 0, current >= 0, current <= total else { return nil }
+            self.id = id
+            self.current = current
+            self.total = total
+        }
+    }
+
     enum ErrorContext: Equatable {
         case authorization
         case candidateFetch
+        case emptyCandidates
         case backfill
     }
 
@@ -32,7 +48,7 @@ final class WereadImportAuthViewModel {
     var preferences: WereadImportPreferences = .default
     var authorization: WereadAuthorization?
     var qrCodeData: Data?
-    var progressText = ""
+    var progress: WorkProgress?
     var isWorking = false
     var workKind: WorkKind?
     var destination: Destination?
@@ -40,7 +56,6 @@ final class WereadImportAuthViewModel {
     var errorContext: ErrorContext?
     var webReloadToken = UUID()
     var backfillPrompt: WereadBackfillPrompt?
-    var backfillProgressText = ""
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var taskGeneration = 0
     private let repository: any WereadImportRepositoryProtocol
@@ -76,6 +91,8 @@ final class WereadImportAuthViewModel {
             errorMessage = nil
             errorContext = nil
             workKind = nil
+            progress = nil
+            isWorking = false
             webReloadToken = UUID()
         }
     }
@@ -107,7 +124,8 @@ final class WereadImportAuthViewModel {
         workKind = .candidateFetch
         errorMessage = nil
         errorContext = nil
-        progressText = "正在获取候选书籍…"
+        progress = nil
+        let progressID = UUID()
         do {
             let ids = try await repository.fetchImportBookIDs(authorization: authorization, preferences: preferences)
             guard generation == taskGeneration, !Task.isCancelled else { return }
@@ -120,7 +138,7 @@ final class WereadImportAuthViewModel {
                     importsReadingTime: preferences.importsReadingTime,
                     progress: { [weak self] current, total in
                         guard let self, generation == self.taskGeneration else { return }
-                        self.progressText = "正在获取候选书籍（\(current)/\(total)）"
+                        self.progress = WorkProgress(id: progressID, current: current, total: total)
                     },
                     warning: { [weak self] message in
                         guard let self, generation == self.taskGeneration else { return }
@@ -141,12 +159,17 @@ final class WereadImportAuthViewModel {
             } else {
                 errorContext = .candidateFetch
             }
-            errorMessage = error.localizedDescription
+            if case WereadImportError.emptyImport = error {
+                errorContext = .emptyCandidates
+                errorMessage = "未找到可导入的书籍，请尝试调整书籍范围或筛选条件后重试。"
+            } else {
+                errorMessage = error.localizedDescription
+            }
         }
         guard generation == taskGeneration else { return }
         isWorking = false
         workKind = nil
-        progressText = ""
+        progress = nil
     }
 
     /// 启动用户明确确认后的候选获取任务；新的请求会取消旧任务并以 generation 防止竞态回写。
@@ -165,6 +188,7 @@ final class WereadImportAuthViewModel {
 
     func postponeBackfill() { backfillPrompt = nil }
 
+    /// 在主线程发布关联进度；取消或刷新后以 generation 丢弃旧任务回写。
     func beginBackfill() {
         guard let authorization else { return }
         backfillPrompt = nil
@@ -172,22 +196,31 @@ final class WereadImportAuthViewModel {
         workKind = .backfill
         errorMessage = nil
         errorContext = nil
+        progress = nil
         task?.cancel()
+        taskGeneration += 1
+        let generation = taskGeneration
+        let progressID = UUID()
         task = Task {
             do {
                 let result = try await repository.performBackfill(authorization: authorization) { [weak self] value in
-                    self?.backfillProgressText = "正在关联历史数据（\(value.current)/\(value.total)）"
-                    self?.progressText = self?.backfillProgressText ?? ""
+                    guard let self, generation == self.taskGeneration, !Task.isCancelled else { return }
+                    self.progress = value.stage == .processingBooks
+                        ? WorkProgress(id: progressID, current: value.current, total: value.total)
+                        : nil
                 }
-                backfillProgressText = ""; progressText = ""; isWorking = false; workKind = nil
+                guard generation == taskGeneration, !Task.isCancelled else { return }
+                progress = nil; isWorking = false; workKind = nil
                 if result.partialFailureCount > 0 {
-                    errorMessage = "部分历史数据关联失败，下次授权后可继续重试"
+                    errorMessage = "部分书籍未能关联，可在下次授权后重试。"
                     errorContext = .backfill
                 }
             } catch is CancellationError {
-                backfillProgressText = ""; progressText = ""; isWorking = false; workKind = nil
+                guard generation == taskGeneration else { return }
+                progress = nil; isWorking = false; workKind = nil
             } catch {
-                backfillProgressText = ""; progressText = ""; isWorking = false; workKind = nil
+                guard generation == taskGeneration else { return }
+                progress = nil; isWorking = false; workKind = nil
                 errorMessage = error.localizedDescription
                 errorContext = .backfill
             }
@@ -208,8 +241,7 @@ final class WereadImportAuthViewModel {
         taskGeneration += 1
         isWorking = false
         workKind = nil
-        progressText = ""
-        backfillProgressText = ""
+        progress = nil
     }
 }
 
@@ -223,6 +255,7 @@ final class WereadBatchRoute: Identifiable, Hashable {
 
 @MainActor
 final class WereadPreviewRoute: Identifiable, Hashable {
+    var previewModel: NoteImportPreviewViewModel?
     let id = UUID(); let books: [WereadImportBook]; let returnsToBatch: Bool; let repository: any WereadImportRepositoryProtocol
     init(books: [WereadImportBook], returnsToBatch: Bool, repository: any WereadImportRepositoryProtocol) { self.books = books; self.returnsToBatch = returnsToBatch; self.repository = repository }
     static func == (lhs: WereadPreviewRoute, rhs: WereadPreviewRoute) -> Bool { lhs.id == rhs.id }
@@ -232,6 +265,7 @@ final class WereadPreviewRoute: Identifiable, Hashable {
 @MainActor
 @Observable
 final class WereadBatchViewModel {
+    private var previewRoutes: [UUID: WereadPreviewRoute] = [:]
     var batches: [WereadImportBatch]
     var preview: WereadPreviewRoute?
     var errorMessage: String?
@@ -256,7 +290,10 @@ final class WereadBatchViewModel {
 
     private func open(_ id: UUID, generation: Int) async {
         guard !isLoading, let index = batches.firstIndex(where: { $0.id == id }) else { return }
-        if !batches[index].books.isEmpty { preview = .init(books: batches[index].books, returnsToBatch: true, repository: route.repository); return }
+        if !batches[index].books.isEmpty {
+            preview = cachedPreview(for: batches[index])
+            return
+        }
         batches[index].status = .loading(percent: 0); errorMessage = nil
         do {
             var books = try await route.repository.fetchImportBooks(
@@ -269,7 +306,7 @@ final class WereadBatchViewModel {
             books = try await route.repository.matchLocalBooks(books)
             guard generation == taskGeneration, !Task.isCancelled else { return }
             batches[index].books = books; batches[index].status = .success
-            preview = .init(books: books, returnsToBatch: true, repository: route.repository)
+            preview = cachedPreview(for: batches[index])
         } catch is CancellationError {
             guard generation == taskGeneration else { return }
             batches[index].status = .notStarted
@@ -291,6 +328,14 @@ final class WereadBatchViewModel {
                 self.task = nil
             }
         }
+    }
+
+    /// 每个批次复用预览票据，保留用户编辑、选择与已完成结果。
+    private func cachedPreview(for batch: WereadImportBatch) -> WereadPreviewRoute {
+        if let existing = previewRoutes[batch.id] { return existing }
+        let created = WereadPreviewRoute(books: batch.books, returnsToBatch: true, repository: route.repository)
+        previewRoutes[batch.id] = created
+        return created
     }
     func cancel() {
         task?.cancel()

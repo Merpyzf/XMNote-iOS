@@ -822,6 +822,12 @@ protocol ReadingDashboardRepositoryProtocol {
 /// 微信读书扫码授权导入仓储契约，统一授权校验、远端抓取、目标书匹配与增量落库。
 @MainActor
 protocol WereadImportRepositoryProtocol {
+    /// MainActor 完成来源补全后提交同目标事务，取消继续向下传播。
+    func commitPreviewGroup(_ group: NoteImportCommitGroup) async throws -> NoteImportCommitGroupResult
+    /// 为共享预览生成完整来源快照，保留微信读书专用时间和章节语义。
+    func makePreviewDrafts(_ books: [WereadImportBook]) -> [NoteImportDraftBook]
+    /// 在会员门禁后提交已冻结预览，保留逐书事务和进度回调。
+    func commitPreviewImport(books: [NoteImportCommitBook], progress: @escaping (Int, Int) -> Void) async throws
     func fetchPreferences() -> WereadImportPreferences
     func savePreferences(_ preferences: WereadImportPreferences)
     func restoreAuthorization() async -> WereadAuthorization?
@@ -862,6 +868,19 @@ protocol WereadImportRepositoryProtocol {
 /// 全来源书摘导入仓储契约；Parser、API 和特殊入口统一通过 Draft 进入此写入边界。
 @MainActor
 protocol NoteImportRepositoryProtocol {
+    /// 按来源入口恢复额外筛选，不恢复搜索或阅读状态。
+    func fetchPreviewPreferences(sourceKey: String) -> NoteImportFilter
+    /// 通过仓储持久化最近偏好，不创建命名方案。
+    func savePreviewPreferences(_ filter: NoteImportFilter, sourceKey: String) throws
+    /// 异步只读评估本地快照，取消后不得应用旧结果。
+    func assessImportDuration(targetID: Int64?, drafts: [NoteImportDraftBook]) async throws -> NoteImportDurationAssessment
+    /// 异步提交一个目标的全部来源，失败整体回滚，取消仅影响未开始的事务。
+    func commitImportGroup(_ group: NoteImportCommitGroup) async throws -> NoteImportCommitGroupResult
+    /// 读取命名筛选方案；不恢复上次生效的条件或书籍选择。
+    /// 区分来源 ID 匹配和名称候选；MainActor 编排，取消后页面忽略过期结果。
+    func previewTargetMatch(for draft: NoteImportDraftBook) async throws -> NoteImportTargetMatch
+    func fetchPreviewBookMetadata(id: Int64) async throws -> NoteImportBookMetadata
+    func fetchPreviewEditorOptions() async throws -> BookEditorOptions
     /// 从系统文件选择器授予的 security-scoped URL 流式复制 Kindle 文件；32 MiB、4 MiB 空间预留和取消语义与 Android OTG 对齐。
     func loadKindleClippingsFile(from url: URL) async throws -> Data
     /// 通过仓储读取并解析汉王分享页正文；网络取消由调用任务向 URLSession 传播。

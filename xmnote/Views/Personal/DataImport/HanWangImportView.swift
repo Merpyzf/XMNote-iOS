@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 VisionKit 二维码扫描、NoteImportRepository 分享页读取和 HanWangNoteImportParser
+ * [INPUT]: 依赖 VisionKit 二维码扫描、NoteImportRepository 分享页读取、HanWangNoteImportParser 与系统中性表单按钮
  * [OUTPUT]: 对外提供汉王分享二维码扫描、内容确认与统一预览
  * [POS]: Views/Personal/DataImport 的汉王特殊入口，对齐 Android 扫码→抓取→编辑→解析链路
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -44,6 +44,7 @@ struct HanWangImportView: View {
                             .submitLabel(.go)
                             .onSubmit { load(scannedURL) }
                         Button("读取链接") { load(scannedURL) }
+                            .tint(Color.textPrimary)
                     }
                 }
             } else {
@@ -58,7 +59,11 @@ struct HanWangImportView: View {
                         .focused($focusedField, equals: .content)
                         .frame(minHeight: 260)
                 }
-                Section { Button("开始导入") { parse() }.disabled(bookTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || noteContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
+                Section {
+                    Button("开始导入") { parse() }
+                        .tint(Color.textPrimary)
+                        .disabled(bookTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || noteContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
             }
             if readLoadingGate.isVisible {
                 Section {

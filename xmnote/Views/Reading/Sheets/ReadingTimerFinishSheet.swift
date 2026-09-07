@@ -3,7 +3,7 @@ import UIKit
 
 /**
  * [INPUT]: 依赖应用级 ReadingTimerCoordinator 提供本次计时与保存状态，依赖 BookPickerView 选择目标书籍，依赖 ReadingTimerFinishDraft 输出结束确认字段
- * [OUTPUT]: 对外提供 ReadingTimerFinishSheet 与 ReadingTimerFinishDraft，承接停止后的保存确认交互
+ * [OUTPUT]: 对外提供 ReadingTimerFinishSheet 与 ReadingTimerFinishDraft，承接停止后的保存确认交互与中性继续计时入口
  * [POS]: Reading/Sheets 业务弹层，负责阅读计时结束后的书籍、时间、位置、感悟、读完状态与继续计时闭环
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -256,6 +256,7 @@ struct ReadingTimerFinishSheet: View {
                         .frame(minHeight: InteractionMetrics.minimumTouchTarget)
                 }
                 .buttonStyle(.bordered)
+                .tint(Color.textSecondary)
                 .disabled(coordinator.isWriting)
             }
 

@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 AppNavigationCoordinator、Kindle 导入方式选择、DataImportCollectionView、系统 scrollEdgeEffectStyle、微信读书导入 ViewModel、全屏 WebView、浮动操作面板、BookPickerView、Photos 与面板内统一反馈组件
+ * [INPUT]: 依赖 AppNavigationCoordinator、Kindle 导入方式选择、DataImportCollectionView、系统 scrollEdgeEffectStyle、微信读书导入 ViewModel、全屏 WebView、浮动操作面板、BookPickerView、Photos、导入交互式玻璃主按钮与面板内统一反馈组件
  * [OUTPUT]: 对外提供支持系统上下滚动边缘过渡、分组/组内排序的书摘导入入口、非模态授权面板、分批、WereadImportBatchStatusView、导入预览和单书内容预览页面
  * [POS]: Views/Personal/DataImport 的完整微信读书扫码授权导入交互流
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -194,6 +194,7 @@ struct WereadImportAuthView: View {
             importsReadingTime: viewModel.preferences.importsReadingTime,
             onlyBooksWithNotes: viewModel.preferences.onlyBooksWithNotes,
             primaryTitle: primaryTitle,
+            primaryProgress: viewModel.isWorking ? viewModel.progress : nil,
             showsPrimaryProgress: showsPrimaryProgress,
             isPrimaryDisabled: isSavingQRCode || viewModel.isWorking || phaseIsLoading,
             areSettingsDisabled: viewModel.isWorking,
@@ -211,25 +212,16 @@ struct WereadImportAuthView: View {
     }
 
     private var primaryTitle: String {
-        if isSavingQRCode { return "正在保存二维码…" }
+        if isSavingQRCode { return "保存中…" }
         if viewModel.isWorking {
-            switch viewModel.workKind {
-            case .backfill:
-                return viewModel.backfillProgressText.isEmpty
-                    ? "正在关联历史数据…"
-                    : viewModel.backfillProgressText
-            case .candidateFetch, nil:
-                return viewModel.progressText.isEmpty
-                    ? "正在获取候选书籍…"
-                    : viewModel.progressText
-            }
+            return viewModel.workKind == .backfill ? "关联中" : "获取中"
         }
         switch viewModel.phase {
-        case .loading: return "正在加载二维码…"
-        case .available: return "保存二维码到相册"
+        case .loading: return "加载中…"
+        case .available: return "保存二维码"
         case .expired: return "刷新二维码"
         case .failed: return "重新加载"
-        case .authorized: return "获取候选书籍"
+        case .authorized: return "获取书籍"
         }
     }
 
@@ -258,7 +250,7 @@ struct WereadImportAuthView: View {
         guard !isSavingQRCode,
               let data = viewModel.qrCodeData,
               let image = UIImage(data: data) else {
-            toastCenter.error("二维码保存失败")
+            toastCenter.error("保存二维码失败")
             return
         }
         isSavingQRCode = true
@@ -275,8 +267,8 @@ struct WereadImportAuthView: View {
             let renderer = UIGraphicsImageRenderer(size: size)
             let padded = renderer.image { context in UIColor.white.setFill(); context.fill(CGRect(origin: .zero, size: size)); image.draw(at: CGPoint(x: 50, y: 50)) }
             guard !Task.isCancelled else { return }
-            do { try await PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest.creationRequestForAsset(from: padded) }; toastCenter.success("二维码已保存到照片") }
-            catch { toastCenter.error("二维码保存失败：\(error.localizedDescription)") }
+            do { try await PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest.creationRequestForAsset(from: padded) }; toastCenter.success("二维码已保存到相册") }
+            catch { toastCenter.error("保存二维码失败：\(error.localizedDescription)") }
         }
     }
 
@@ -311,18 +303,19 @@ struct WereadImportAuthView: View {
     private var errorTitle: String {
         switch viewModel.errorContext {
         case .authorization: "授权失败"
-        case .candidateFetch: "获取候选书籍失败"
-        case .backfill: "历史数据关联失败"
+        case .candidateFetch: "获取书籍失败"
+        case .emptyCandidates: "未获取到书籍"
+        case .backfill: "关联书籍失败"
         case nil: "操作失败"
         }
     }
-    private var premiumDescriptor: XMSystemAlertDescriptor { .init(title: "会员功能", message: "微信读书授权导入是会员功能。", actions: [.init(title: "取消", role: .cancel) {}, .init(title: "升级会员") {
+    private var premiumDescriptor: XMSystemAlertDescriptor { .init(title: "会员功能", message: "微信读书导入需要会员权限。", actions: [.init(title: "取消", role: .cancel) {}, .init(title: "开通会员") {
             opensPremiumAfterPanelDismiss = true
             isActionPanelPresented = false
         }]) }
     private var backfillDescriptor: XMSystemAlertDescriptor? {
         guard let prompt = viewModel.backfillPrompt else { return nil }
-        return .init(title: "关联历史微信数据", message: "发现 \(prompt.pendingCount) 本历史导入书籍缺少微信关联信息，是否现在补全？", actions: [.init(title: "稍后", role: .cancel) { viewModel.postponeBackfill() }, .init(title: "开始") { viewModel.beginBackfill() }])
+        return .init(title: "关联已有书籍", message: "有 \(prompt.pendingCount) 本此前导入的书籍缺少微信读书关联信息，是否现在补全？", actions: [.init(title: "稍后", role: .cancel) { viewModel.postponeBackfill() }, .init(title: "关联书籍") { viewModel.beginBackfill() }])
     }
 }
 
@@ -394,179 +387,35 @@ struct WereadImportBatchStatusView: View {
     }
 }
 
+/// 微信读书共享导入预览，只保留来源转换、会员提交与批次返回差异。
 private struct WereadImportPreviewView: View {
+    @Environment(RepositoryContainer.self) private var repositories
     @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
-    @State private var viewModel: WereadPreviewViewModel
-    @State private var contentBook: WereadImportBook?
-    @State private var mappingBook: WereadImportBook?
-    @State private var editingBook: WereadImportBook?
-    @State private var editTitle = ""
-    @State private var editAuthor = ""
-    @State private var showsError = false
-
-    init(route: WereadPreviewRoute) { _viewModel = State(initialValue: WereadPreviewViewModel(route: route)) }
+    @Environment(\.dismiss) private var dismiss
+    @State private var model: NoteImportPreviewViewModel?
+    let route: WereadPreviewRoute
 
     var body: some View {
-        List {
-            Section {
-                HStack { Button("全选") { viewModel.selectAll(true) }; Spacer(); Button("取消全选") { viewModel.selectAll(false) } }
-            }
-            ForEach(viewModel.visibleBooks) { book in
-                bookSection(book)
-            }
+        Group {
+            if let model {
+                UnifiedNoteImportPreviewView(model: model, onFinished: {
+                    if route.returnsToBatch { dismiss() } else { navigationCoordinator.dismissTask() }
+                })
+            } else { Color.surfaceSheet.ignoresSafeArea() }
         }
-        .searchable(text: $viewModel.query, prompt: "搜索书名或作者")
-        .scrollDismissesKeyboard(.immediately)
-        .navigationTitle("导入预览")
-        .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .bottom) {
-            Button { viewModel.beginCommit() } label: { HStack { Spacer(); if viewModel.isCommitting { ProgressView().controlSize(.small) }; Text(viewModel.isCommitting ? viewModel.progressText : "导入（\(viewModel.selectedCount)/\(viewModel.books.count)）"); Spacer() } }
-                .buttonStyle(.borderedProminent).padding(Spacing.screenEdge).background(.ultraThinMaterial).disabled(viewModel.isCommitting)
-        }
-        .navigationDestination(item: $contentBook) { book in WereadBookContentPreviewView(book: binding(for: book.id)) }
-        .sheet(item: $mappingBook) { book in
-            BookPickerView(configuration: .init(title: "映射到已有书籍", scope: .local, selectionMode: .single, defaultQuery: book.title)) { result in
-                if case .single(.local(let selected)) = result { viewModel.map(book.id, to: selected) }
-                mappingBook = nil
-            }
-        }
-        .onChange(of: viewModel.errorMessage) { _, value in showsError = value != nil }
-        .onChange(of: viewModel.didCommit) { _, done in
-            if done {
-                navigationCoordinator.dismissTask()
-            }
-        }
-        .onDisappear { viewModel.cancel() }
-        .xmSystemAlert(isPresented: $showsError, descriptor: viewModel.errorMessage.map { message in .init(title: "无法导入", message: message, actions: [.init(title: "知道了") { viewModel.errorMessage = nil }]) })
-        .xmSystemAlert(item: $editingBook) { book in
-            .init(title: "编辑新书资料", actions: [.init(title: "取消", role: .cancel) {}, .init(title: "保存", isEnabled: !editTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) { var updated = book; updated.title = editTitle.trimmingCharacters(in: .whitespacesAndNewlines); updated.rawTitle = updated.title; updated.author = editAuthor.trimmingCharacters(in: .whitespacesAndNewlines); viewModel.updateBook(updated) }], textFields: [.init(text: $editTitle, placeholder: "书名"), .init(text: $editAuthor, placeholder: "作者")])
-        }
-    }
-
-    private func binding(for id: UUID) -> Binding<WereadImportBook> { Binding(get: { viewModel.books.first { $0.id == id }! }, set: viewModel.updateBook) }
-
-    /// 打开含书摘或书评的单书预览；空内容保持无操作。
-    private func openBookContentIfAvailable(_ book: WereadImportBook) {
-        guard book.hasBrowsableContent else { return }
-        contentBook = book
-    }
-
-    /// 进入未映射书籍的信息编辑态，已映射书籍保持原有阻断语义。
-    private func beginEditing(_ book: WereadImportBook) {
-        guard book.targetBookID == nil else { return }
-        editingBook = book
-        editTitle = book.title
-        editAuthor = book.author
-    }
-
-    @ViewBuilder
-    private func bookSection(_ book: WereadImportBook) -> some View {
-        Section {
-            HStack(alignment: .top, spacing: Spacing.base) {
-                selectionButton(book)
-                XMBookCover.fixedWidth(
-                    48,
-                    urlString: book.coverURL,
-                    cornerRadius: CornerRadius.inlaySmall,
-                    placeholderIconSize: .small
-                )
-                VStack(alignment: .leading, spacing: Spacing.compact) {
-                    Text(book.title).font(AppTypography.headline)
-                    Text(book.author).font(AppTypography.caption).foregroundStyle(Color.textSecondary)
-                    Text(summaryText(for: book)).font(AppTypography.caption).foregroundStyle(Color.textSecondary)
-                    if let target = book.targetBookTitle { Text("导入到：\(target)").font(AppTypography.caption).foregroundStyle(Color.selectionAccent) }
+        .task {
+            guard model == nil else { return }
+            if let existing = route.previewModel { model = existing; return }
+            let created = NoteImportPreviewViewModel(
+                books: route.repository.makePreviewDrafts(route.books),
+                repository: repositories.noteImportRepository,
+                preferenceKey: "weread-online",
+                commit: { group in
+                    try await route.repository.commitPreviewGroup(group)
                 }
-                Spacer()
-            }
-            .contentShape(Rectangle())
-            .onTapGesture {
-                openBookContentIfAvailable(book)
-            }
-            .onLongPressGesture {
-                beginEditing(book)
-            }
-            .accessibilityActions {
-                if book.hasBrowsableContent {
-                    Button("预览导入内容") {
-                        openBookContentIfAvailable(book)
-                    }
-                }
-                if book.targetBookID == nil {
-                    Button("编辑书籍信息") {
-                        beginEditing(book)
-                    }
-                }
-            }
-            HStack {
-                Button(book.targetBookID == nil ? "映射已有书籍" : "更换映射") { mappingBook = book }
-                if book.targetBookID != nil { Spacer(); Button("清除映射", role: .destructive) { viewModel.map(book.id, to: nil) } }
-            }
-        }
-    }
-
-    private func selectionButton(_ book: WereadImportBook) -> some View {
-        Button { viewModel.toggleBook(book.id) } label: {
-            XMSelectionIndicator(
-                style: .checkbox,
-                isSelected: book.isSelected,
-                font: AppTypography.title2,
-                showsUnselectedBase: true
             )
-            .frame(
-                width: InteractionMetrics.minimumTouchTarget,
-                height: InteractionMetrics.minimumTouchTarget
-            )
+            route.previewModel = created
+            model = created
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(book.isSelected ? "取消选择《\(book.title)》" : "选择《\(book.title)》")
-        .accessibilityAddTraits(book.isSelected ? .isSelected : [])
     }
-
-    private func summaryText(for book: WereadImportBook) -> String {
-        "\(book.readStatusID == 3 ? "已读完" : "阅读中") · \(book.notes.count) 条书摘 · \(book.reviews.count) 条书评"
-    }
-}
-
-private struct WereadBookContentPreviewView: View {
-    @Binding var book: WereadImportBook
-    var body: some View {
-        List {
-            if !book.notes.isEmpty {
-                Section { HStack { Button("全选") { selectNotes(true) }; Spacer(); Button("取消全选") { selectNotes(false) } } } header: { Text("书摘") }
-                ForEach($book.notes) { $note in
-                    HStack(alignment: .top) {
-                        Button { note.isSelected.toggle() } label: {
-                            XMSelectionIndicator(
-                                style: .checkbox,
-                                isSelected: note.isSelected,
-                                font: AppTypography.title2,
-                                showsUnselectedBase: true
-                            )
-                            .frame(
-                                width: InteractionMetrics.minimumTouchTarget,
-                                height: InteractionMetrics.minimumTouchTarget
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(note.isSelected ? "取消选择书摘" : "选择书摘")
-                        .accessibilityAddTraits(note.isSelected ? .isSelected : [])
-
-                        VStack(alignment: .leading) {
-                            Text(note.content)
-                            if !note.idea.isEmpty {
-                                Text(note.idea)
-                                    .font(AppTypography.caption)
-                                    .foregroundStyle(Color.textSecondary)
-                            }
-                        }
-                    }
-                }
-            }
-            if !book.reviews.isEmpty { Section("书评（随书导入）") { ForEach(book.reviews) { review in VStack(alignment: .leading) { if !review.title.isEmpty { Text(review.title).font(AppTypography.headline) }; Text(review.content) } } } }
-        }
-        .navigationTitle(book.title)
-        .navigationBarTitleDisplayMode(.inline)
-        .onChange(of: book.notes.map(\.isSelected)) { _, values in book.isSelected = values.contains(true) || (!book.reviews.isEmpty && book.isSelected) }
-    }
-    private func selectNotes(_ selected: Bool) { book.notes.indices.forEach { book.notes[$0].isSelected = selected }; book.isSelected = selected || (!book.reviews.isEmpty && book.isSelected) }
 }

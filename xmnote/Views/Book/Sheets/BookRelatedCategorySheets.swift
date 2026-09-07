@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 BookContentCategoryOption、XMSheetScaffold、XMSystemAlert 与设计令牌，接收书籍详情 ViewModel 提供的分类写入和异步占位书恢复回调
- * [OUTPUT]: 对外提供带顶部原位确认反馈的 BookRelatedPlaceholderSheet、BookRelatedCategoryPickerSheet 与带中性操作菜单的 BookRelatedCategoryManagementSheet
+ * [OUTPUT]: 对外提供带顶部原位确认反馈和中性辅助编辑入口的 BookRelatedPlaceholderSheet、BookRelatedCategoryPickerSheet 与带中性操作菜单的 BookRelatedCategoryManagementSheet
  * [POS]: Book 模块业务 Sheet，分别承接新建相关内容的分类选择和书内/全局相关分类管理
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -59,6 +59,7 @@ struct BookRelatedPlaceholderSheet: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
+                .tint(Color.textSecondary)
 
                 if let restoreErrorMessage {
                     XMInlineStatusBanner(

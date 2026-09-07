@@ -103,6 +103,8 @@ nonisolated protocol NoteImportFileNameAwareParser: NoteImportParser {
 }
 
 nonisolated struct NoteImportDraftBook: Equatable, Sendable {
+    var sourceReadingStatus: NoteImportReadingStatus?
+    var usesCompletionReadingStatus = false
     var name = ""
     var rawName = ""
     var doubanID: Int64 = 0
@@ -155,6 +157,7 @@ nonisolated struct NoteImportDraftNote: Equatable, Sendable {
     var chapter: NoteImportDraftChapter?
     var tags: [NoteImportDraftTag] = []
     var attachments: [NoteImportDraftAttachment] = []
+    var failedAttachmentURLs: [String] = []
 }
 
 nonisolated struct NoteImportDraftChapter: Equatable, Sendable {
@@ -217,6 +220,8 @@ nonisolated struct NoteImportFuzzyReadingDuration: Equatable, Sendable {
 nonisolated struct NoteImportCommitBook: Equatable, Sendable {
     var draft: NoteImportDraftBook
     var targetBookID: Int64?
+    var metadataPatch: NoteImportMetadataPatch?
+    var validatesPreviewTarget = false
 
     init(draft: NoteImportDraftBook, targetBookID: Int64? = nil) {
         self.draft = draft
