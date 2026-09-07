@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 接收批次准备的不可变预览、绘制指令与轻量身份
- * [OUTPUT]: 提供有成本上限的预览缓存及同代次真实内容补底
+ * [OUTPUT]: 提供按阅读排版隔离的有界预览缓存及同代次真实内容补底
  * [POS]: NoteReviewCanvas 渲染资源 owner；不读取仓储或保存正文到磁盘
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -22,6 +22,15 @@ nonisolated struct CanvasOverviewResourceKey: Hashable, Sendable {
     let generation: UUID
     let noteID: Int64
     let width: Int
+    var typography: CanvasOverviewTypography = .desktop
+}
+
+/// 两种浏览任务的页面私有字号比例；沿用阅读字体的动态字号曲线。
+nonisolated enum CanvasOverviewTypography: Hashable, Sendable {
+    case desktop, waterfall
+
+    var bodyScale: CGFloat { self == .waterfall ? 15.0 / 16 : 1 }
+    var thoughtScale: CGFloat { self == .waterfall ? 13.0 / 14 : 1 }
 }
 
 /// Foundation 富文本在准备后冻结；只传递不可变副本，不跨任务共享 Core Text 排版器。
@@ -72,7 +81,7 @@ nonisolated final class CanvasOverviewFallbackAtlas: @unchecked Sendable {
     /// 每批直接绘入真实内容；返回的轻量区域不会持有该批正文或排版。
     func append(index: Int, note: CanvasOverviewNote, content: CanvasOverviewPaperContentGeometry,
                 width: CGFloat, style: CanvasOverviewPaperStyle) -> CanvasOverviewFallbackRegion {
-        let size = CGSize(width: width, height: content.chapterRect.maxY + content.quoteRect.minX)
+        let size = CGSize(width: width, height: content.paperHeight)
         let scale = min(CGFloat(slot) / size.width, CGFloat(slot) / size.height)
         let rect = CGRect(x: CGFloat((index % columns) * slot), y: CGFloat((index / columns) * slot),
             width: size.width * scale, height: size.height * scale)

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 接收背压消费的布局源、渲染配置及取消令牌
- * [OUTPUT]: 输出精确轻量几何、预算缓存及真实低清图集
+ * [OUTPUT]: 输出桌面与瀑布流独立排版的轻量几何、预算缓存及真实低清图集
  * [POS]: NoteReviewCanvas 准备队列私有累加器；每批释放 HTML 和未保护正文
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -28,6 +28,7 @@ nonisolated final class CanvasOverviewBatchPreparation: @unchecked Sendable {
     var notes: [CanvasOverviewNote] = []
     var desktop: [Int: CanvasOverviewPaperContentGeometry] = [:]
     var waterfall: [CanvasOverviewPaperContentGeometry] = []
+    var waterfallNotes: [CanvasOverviewNote] = []
 
     /// 仓储源已经由主 actor 获取；这里仅保存准备参数和轻量累加输出。
     init(count: Int, store: CanvasOverviewPreviewStore, style: CanvasOverviewPaperStyle,
@@ -65,17 +66,21 @@ nonisolated final class CanvasOverviewBatchPreparation: @unchecked Sendable {
             desktop[index] = first.cached(in: store,
                 key: CanvasOverviewResourceKey(generation: generation, noteID: note.id, width: Int(width)), fallback: firstRegion)
             if preparesWaterfall {
-                let second = CanvasOverviewGeometryBuilder.makeContentGeometry(note: note, width: waterfallWidth)
-                let fallback = atlas.append(index: index * 2 + 1, note: note, content: second,
+                let waterfallNote = note.reflowed(for: waterfallStyle)
+                waterfallNotes.append(waterfallNote.cached(in: store, generation: generation))
+                let second = CanvasOverviewGeometryBuilder.makeContentGeometry(note: waterfallNote, width: waterfallWidth)
+                let fallback = atlas.append(index: index * 2 + 1, note: waterfallNote, content: second,
                     width: waterfallWidth, style: waterfallStyle)
                 waterfall.append(second.cached(in: store,
-                    key: CanvasOverviewResourceKey(generation: generation, noteID: note.id, width: -Int(waterfallWidth)), fallback: fallback))
+                    key: CanvasOverviewResourceKey(generation: generation, noteID: note.id, width: -Int(waterfallWidth), typography: .waterfall), fallback: fallback))
             }
             let retained = note.cached(in: store, generation: generation)
             notes.append(retained)
             // Later batches must not evict the anchor that the pending first screen will display.
             if initialProtectedIDs.contains(note.id) {
                 if let key = retained.key, let pin = store.previews.lease(for: key) { initialSourcePins.append(pin) }
+                if preparesWaterfall, let key = waterfallNotes.last?.key,
+                   let pin = store.previews.lease(for: key) { initialSourcePins.append(pin) }
                 for key in [desktop[index]?.key, waterfall.last?.key].compactMap({ $0 }) {
                     if let pin = store.drawings.lease(for: key) { initialDrawingPins.append(pin) }
                 }
@@ -91,7 +96,7 @@ nonisolated final class CanvasOverviewBatchPreparation: @unchecked Sendable {
             CanvasOverviewModelBuilder.build(notes: notes, viewportSize: size, screenScale: scale,
                 style: style, waterfallStyle: waterfallStyle, isRealData: true, desktopCardWidth: width,
                 packing: packing, cancellation: cancellation, desktopContents: desktop,
-                waterfallContents: waterfall, fixedColumns: fixedColumns, anchorID: anchorID,
+                waterfallContents: waterfall, waterfallNotes: waterfallNotes, fixedColumns: fixedColumns, anchorID: anchorID,
                 preparesWaterfall: preparesWaterfall, overviewLongEdge: overviewLongEdge)
         }
     }

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 接收 Session 的有界组目录、真实预览源和用户浏览意图
- * [OUTPUT]: 提供稳定组内桌面、真实卡片堆、组切换及统一取消/显示权交接
+ * [OUTPUT]: 提供稳定组内桌面、两列卡堆目录、滚动中整行预取与位置恢复及统一取消/显示权交接
  * [POS]: 生产与测试中心共用的总览控制器扩展；不读取 Repository 或 UserDefaults
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -25,6 +25,7 @@ extension NoteReviewCanvasOverviewController {
             UIAction(title: "\(capacity) 条", state: selectedGroupCapacity == capacity ? .on : .off) { [weak self] _ in
                 guard let self, capacity != selectedGroupCapacity else { return }
                 cancelStackBrowsingImmediately()
+                stackGridBookmark = nil
                 selectedGroupCapacity = capacity
                 if let onGroupCapacityChanged { onGroupCapacityChanged(capacity) }
                 else { requestPreparation(count: selectedCount, preservingCurrentID: currentNoteID) }
@@ -55,8 +56,8 @@ extension NoteReviewCanvasOverviewController {
         }
     }
 
-    /// 首帧仍是真实桌面；准备只覆盖当前堆前三条和当前书摘，不等待左右邻堆。
-    func presentStackBrowser() {
+    /// 首帧仍是真实桌面；主 actor 准备所在行或有界恢复窗口，取消和代次共同保护转场交接。
+    func presentStackBrowser(restoringEnvironment: Bool = false) {
         guard currentMode == .desktop, stackBrowser == nil, stackTask == nil,
               transitionState == .idle, widthSession == nil, modelPreparation == nil,
               let model = preparedModel, let id = currentNoteID, !isDisposed, !isCanvasPaused else { return }
@@ -75,21 +76,50 @@ extension NoteReviewCanvasOverviewController {
             guard let self else { return }
             do {
                 guard let group = try await readStack(.containing(id, capacity: selectedGroupCapacity)) else { throw NoteReviewDirectoryError.staleSource }
-                let preview = try await prepareStackPreview(group, currentID: id, work: work)
+                let initial = try await prepareStackGrid(group: group, currentID: id, work: work,
+                    restoringEnvironment: restoringEnvironment)
                 try Task.checkCancellation()
                 guard token == stackRequestGeneration, input == generation, !work.isCancelled else { return }
                 let browser = CanvasStackBrowserView(frame: view.bounds, reduced: UIAccessibility.isReduceMotionEnabled || reduceMotionSwitch.isOn)
                 browser.contentInsets = contentOcclusionInsets
-                browser.apply([preview], preserving: group.id)
+                browser.apply(initial.rows, preserving: initial.viewport)
                 browser.layoutIfNeeded()
                 browser.setChromeVisible(false)
                 let session = CanvasStackBrowsingSession(group: group, model: model, viewport: desktopViewport,
                     noteID: id, fullDesktop: isShowingFullDesktop)
+                if restoringEnvironment {
+                    let rect = zoomContentView.canvasView.convert(desktopScrollView.bounds, from: desktopScrollView)
+                    browser.backdrop.image = await preparedViewportImage(model: model, canvasRect: rect,
+                        size: view.bounds.size, scale: traitCollection.displayScale)
+                    try Task.checkCancellation()
+                    guard input == generation, token == stackRequestGeneration, !isDisposed, !isCanvasPaused else { return }
+                    stackSession = session; stackBrowser = browser; stackGridRows = initial.rows
+                    stackReachedStart = false; stackReachedEnd = false
+                    bindStackBrowser(browser)
+                    view.addSubview(browser)
+                    browser.material.effect = UIBlurEffect(style: .systemThinMaterial)
+                    browser.backdrop.alpha = 0.28
+                    browser.setChromeVisible(true)
+                    desktopScrollView.alpha = 0
+                    desktopScrollView.isUserInteractionEnabled = false
+                    desktopScrollView.accessibilityElementsHidden = true
+                    stackTask = nil; stackWork = nil
+                    restoresStackGridAfterPreparation = false
+                    stackGridEnvironmentCover?.removeFromSuperview(); stackGridEnvironmentCover = nil
+                    onPreparationChanged?(false, nil)
+                    updateFullDesktopButton(); onControlsChanged?(); onReady?()
+                    prepareStackNeighbors()
+                    return
+                }
+                guard let preview = initial.rows.flatMap({ $0 }).first(where: { $0.group.id == group.id }) else {
+                    throw NoteReviewDirectoryError.staleSource
+                }
                 let scene = try await makeStackTransition(model: model, preview: preview,
                     poses: browser.poses(for: group.id, in: browser), anchorID: id, work: work, reduced: browser.reduced)
                 try Task.checkCancellation()
                 guard input == generation, token == stackRequestGeneration, !isDisposed, !isCanvasPaused else { return }
-                stackSession = session; stackBrowser = browser; stackPreviews = [preview]
+                stackSession = session; stackBrowser = browser; stackGridRows = initial.rows
+                stackReachedStart = false; stackReachedEnd = false
                 bindStackBrowser(browser)
                 view.addSubview(browser)
                 view.addSubview(scene)
@@ -106,10 +136,82 @@ extension NoteReviewCanvasOverviewController {
             } catch {
                 guard token == stackRequestGeneration else { return }
                 stackTask = nil; stackWork = nil
+                restoresStackGridAfterPreparation = false
+                stackGridEnvironmentCover?.removeFromSuperview(); stackGridEnvironmentCover = nil
                 onPreparationChanged?(false, nil)
                 reportDemand()
             }
         }
+    }
+
+    /// 主 actor 校验保存的有界组目录；后台只准备当前窗口，目录变化或取消不提交旧恢复结果。
+    private func prepareStackGrid(group: NoteReviewCanvasStackGroup, currentID: Int64,
+                                  work: CanvasOverviewTransitionPreparation, restoringEnvironment: Bool) async throws
+        -> (rows: [[CanvasStackPreview]], viewport: CanvasStackGridViewport?) {
+        var groups: [[NoteReviewCanvasStackGroup]] = []
+        var viewport: CanvasStackGridViewport?
+        if let saved = stackGridBookmark, restoringEnvironment || saved.visibleIDs.contains(group.id),
+           saved.viewport.id.snapshotID == group.id.snapshotID, saved.viewport.id.capacity == group.id.capacity {
+            var valid = true
+            for row in saved.rows {
+                var verified: [NoteReviewCanvasStackGroup] = []
+                for old in row {
+                    guard let first = old.noteIDs.first,
+                          let fresh = try await readStack(.containing(first, capacity: group.id.capacity)),
+                          fresh.id == old.id, fresh.noteIDs == old.noteIDs else { valid = false; break }
+                    try Task.checkCancellation()
+                    verified.append(fresh)
+                }
+                if !valid { break }
+                groups.append(verified)
+            }
+            if valid { viewport = saved.viewport } else { groups = []; stackGridBookmark = nil }
+        } else {
+            stackGridBookmark = nil
+        }
+        if groups.isEmpty {
+            var row = [group]
+            if let next = try await readStack(.adjacent(group.id, direction: 1)) { row.append(next) }
+            groups = [row]
+            var previous: [NoteReviewCanvasStackGroup] = []
+            var cursor = group.id
+            for _ in 0..<2 {
+                guard let value = try await readStack(.adjacent(cursor, direction: -1)) else { break }
+                previous.append(value)
+                cursor = value.id
+            }
+            if !previous.isEmpty { groups.insert(Array(previous.reversed()), at: 0) }
+            cursor = row.last?.id ?? group.id
+            for _ in 0..<2 {
+                var following: [NoteReviewCanvasStackGroup] = []
+                for _ in 0..<2 {
+                    try Task.checkCancellation()
+                    guard let value = try await readStack(.adjacent(cursor, direction: 1)) else { break }
+                    following.append(value)
+                    cursor = value.id
+                }
+                if following.isEmpty { break }
+                groups.append(following)
+            }
+            viewport = .init(id: group.id, relativeY: Spacing.double)
+        }
+        let anchorRow = groups.firstIndex { $0.contains { $0.id == viewport?.id } } ?? 0
+        let order = groups.indices.sorted { abs($0 - anchorRow) < abs($1 - anchorRow) }
+        var prepared: [NoteReviewCanvasStackID: CanvasStackPreview] = [:]
+        var remaining = groups.reduce(0) { $0 + $1.count }
+        var bytes = 0
+        for index in order {
+            for value in groups[index] {
+                try Task.checkCancellation()
+                guard !work.isCancelled else { throw CancellationError() }
+                let preview = try await prepareStackPreview(value, currentID: value.id == group.id ? currentID : nil,
+                    work: work, pixelBudget: (CanvasStackContentRenderer.previewBudget - bytes) / remaining)
+                bytes += preview.pixelBytes
+                remaining -= 1
+                prepared[value.id] = preview
+            }
+        }
+        return (groups.map { $0.compactMap { prepared[$0.id] } }, viewport)
     }
 
     /// 纸张内容准备最多四条；真实桌面中的原始矩形优先，背纸只保存实际露出的前两行区域。
@@ -118,6 +220,7 @@ extension NoteReviewCanvasOverviewController {
                              pixelBudget: Int = CanvasStackContentRenderer.previewBudget) async throws -> CanvasStackPreview {
         let interval = CanvasOverviewPreparationMetrics.signposter.beginInterval("Prepare stack preview")
         defer { CanvasOverviewPreparationMetrics.signposter.endInterval("Prepare stack preview", interval) }
+        let allocatedBudget = min(pixelBudget, CanvasStackContentRenderer.stackPixelBudget)
         guard let sourceReader, let model = preparedModel else { throw CancellationError() }
         let ids = group.previewIDs(currentID: currentID)
         let pins = Dictionary(uniqueKeysWithValues: ids.compactMap { id -> (Int64, CanvasOverviewNote)? in
@@ -128,7 +231,7 @@ extension NoteReviewCanvasOverviewController {
         let sources = missing.isEmpty ? [] : try await sourceReader(missing, .userInitiated)
         try Task.checkCancellation()
         let width = selectedDesktopCardWidth
-        let displayWidth = min(320, view.bounds.width * 0.72)
+        let displayWidth = CanvasStackBrowserView.paperWidth(in: view.bounds.width)
         let backExposure = ceil(64 * width / displayWidth)
         let scale = traitCollection.displayScale * displayWidth / width
         let queue = preparationQueue
@@ -137,7 +240,7 @@ extension NoteReviewCanvasOverviewController {
                 continuation.resume(returning: autoreleasepool {
                     let restored = CanvasOverviewTextFactory.makeRealNotes(sources, style: model.style, cancellation: work)
                     let byID = pins.merging(Dictionary(uniqueKeysWithValues: restored.map { ($0.id, $0) })) { first, _ in first }
-                    var contents: [CanvasStackPaperContent] = []
+                    var samples: [(endpoint: CanvasOverviewRenderEndpoint, density: CGFloat, height: CGFloat)] = []
                     for (index, id) in ids.enumerated() {
                         guard !work.isCancelled, let note = byID[id] else { return nil }
                         let geometry = model.canvasGeometry.paper(for: id)?.contentGeometry.replaying(note)
@@ -148,10 +251,25 @@ extension NoteReviewCanvasOverviewController {
                             pose: .init(center: .zero, size: size, rotation: 0), style: model.style)
                         let density = min(scale, CanvasStackContentRenderer.maximumPreviewLongEdge / max(size.width, size.height))
                         let sampledHeight = index == 0 ? size.height : min(size.height, backExposure)
-                        let rowBytes = (Int(ceil(size.width * max(0.1, density))) * 4 + 63) / 64 * 64
-                        let projectedBytes = rowBytes * Int(ceil(sampledHeight * max(0.1, density)))
-                        guard contents.reduce(projectedBytes, { $0 + $1.pixelBytes }) <= pixelBudget else { return nil }
-                        guard let content = CanvasStackContentRenderer.paper(endpoint, pixelScale: density,
+                        samples.append((endpoint, density, sampledHeight))
+                    }
+                    // Keep logical geometry intact while sharing the bounded pixel budget after rotation.
+                    var densityFactor: CGFloat = 1
+                    var projectedBytes = Int.max
+                    for _ in 0..<24 {
+                        projectedBytes = samples.reduce(0) { bytes, sample in
+                            let density = max(0.1, sample.density * densityFactor)
+                            let rowBytes = (Int(ceil(sample.endpoint.pose.size.width * density)) * 4 + 63) / 64 * 64
+                            return bytes + rowBytes * Int(ceil(sample.height * density))
+                        }
+                        if projectedBytes <= allocatedBudget { break }
+                        densityFactor *= 0.85
+                    }
+                    guard projectedBytes <= allocatedBudget else { return nil }
+                    var contents: [CanvasStackPaperContent] = []
+                    for (index, sample) in samples.enumerated() {
+                        guard !work.isCancelled,
+                              let content = CanvasStackContentRenderer.paper(sample.endpoint, pixelScale: sample.density * densityFactor,
                             exposedHeight: index == 0 ? nil : backExposure, cancellation: work) else { return nil }
                         contents.append(content)
                     }
@@ -161,7 +279,7 @@ extension NoteReviewCanvasOverviewController {
         }
         try Task.checkCancellation()
         guard !work.isCancelled, let result, result.papers.count == ids.count,
-              result.pixelBytes <= CanvasStackContentRenderer.previewBudget else { throw NoteReviewDirectoryError.unavailable }
+              result.pixelBytes <= allocatedBudget else { throw NoteReviewDirectoryError.unavailable }
         return result
     }
 
@@ -264,7 +382,7 @@ extension NoteReviewCanvasOverviewController {
                 desktopScrollView.accessibilityElementsHidden = false
                 scene.removeFromSuperview(); session.scene = nil
                 browser.removeFromSuperview(); stackBrowser = nil
-                stackSession = nil; stackPreviews = []
+                stackSession = nil; stackGridRows = []
                 transitionState = .idle
                 setSurfaceInteractionEnabled(true)
                 if let id = currentNoteID { onCurrentChanged?(id) }
@@ -285,120 +403,114 @@ extension NoteReviewCanvasOverviewController {
         startStackAnimation(animator)
     }
 
-    /// 横滑改变的是浏览焦点，不能调用 setCurrentNoteID；停下后才滚动有界准备窗口。
+    /// 网格只更新预览需求；浏览和滚动都不能回写当前阅读身份。
     func bindStackBrowser(_ browser: CanvasStackBrowserView) {
-        browser.onActivate = { [weak self] id in self?.expandStack(id) }
+        browser.onActivate = { [weak self] id in
+            self?.saveStackGridBookmark()
+            self?.expandStack(id)
+        }
         browser.onReturn = { [weak self] in self?.dismissStackBrowser() }
         browser.onFocus = { [weak self] _ in
             self?.cancelStackTargetPreparation()
-            self?.prepareStackNeighbors()
         }
+        browser.onDemand = { [weak self] in self?.prepareStackNeighbors() }
         browser.onStable = { [weak self] in self?.prepareStackNeighbors() }
         browser.onInteraction = { [weak self] in self?.cancelStackTargetPreparation() }
     }
 
-    /// 主线程合并有界邻堆需求，正文准备沿用后台队列；横滑不取消有效预览，关闭与环境代次使旧结果失效。
+    /// 页面内只保存轻量组身份和可见锚点；重新进入时重新解析主题和纸面。
+    func saveStackGridBookmark() {
+        guard let browser = stackBrowser, let viewport = browser.viewport else { return }
+        stackGridBookmark = .init(rows: stackGridRows.map { $0.map(\.group) },
+            viewport: viewport, visibleIDs: browser.visibleIDs)
+    }
+
+    /// 主 actor 合并逐行需求；后台纸面准备逐条检查取消，代次隔离退出和环境变化。
     func prepareStackNeighbors() {
         guard let browser = stackBrowser, transitionState == .idle, stackTask == nil,
-              let focus = browser.focusedID else { return }
-        if !browser.isMoving, let pending = stackPendingPreview {
-            stackPendingPreview = nil
-            installStackNeighbor(pending, in: browser)
-        }
-        guard stackNeighborTask == nil, stackPendingPreview == nil else { return }
+              !browser.isPositioning else { return }
+        if stackReachedEnd { browser.settleRestorationAtEnd() }
+        guard stackNeighborTask == nil,
+              let direction = browser.demandDirection(reachedStart: stackReachedStart, reachedEnd: stackReachedEnd),
+              let edge = direction > 0 ? stackPreviews.last : stackPreviews.first else { return }
+        guard reserveStackRowSpace(direction: direction, in: browser) else { return }
+        let available = CanvasStackContentRenderer.previewBudget - stackPreviews.reduce(0) { $0 + $1.pixelBytes }
+        guard available > 0, stackPreviews.count <= CanvasStackContentRenderer.maximumPreviewStacks - 2 else { return }
         let token = stackNeighborGeneration
         let input = generation
         let work = CanvasOverviewTransitionPreparation()
         stackNeighborWork = work
         stackNeighborTask = Task { [weak self] in
             guard let self else { return }
+            var continues = false
             defer {
                 if token == stackNeighborGeneration {
                     stackNeighborTask = nil
                     stackNeighborWork = nil
-                    if stackBrowser === browser, browser.focusedID != focus { prepareStackNeighbors() }
+                    if continues, stackBrowser === browser { prepareStackNeighbors() }
                 }
             }
-            let preferred = browser.preferredDirection
-            for distance in 1...2 {
-                for direction in [preferred, -preferred] {
-                    do {
-                        try Task.checkCancellation()
-                        guard token == stackNeighborGeneration, input == generation, stackBrowser === browser,
-                              browser.focusedID == focus else { return }
-                        var cursor = focus
-                        var candidate: NoteReviewCanvasStackGroup?
-                        for _ in 0..<distance {
-                            guard let group = try await readStack(.adjacent(cursor, direction: direction)) else {
-                                candidate = nil
-                                break
-                            }
-                            try Task.checkCancellation()
-                            candidate = group
-                            cursor = group.id
-                        }
-                        guard let group = candidate else { continue }
-                        if stackPreviews.contains(where: { $0.group.id == group.id }) { continue }
-                        reserveStackNeighborSpace(in: browser)
-                        let available = CanvasStackContentRenderer.previewBudget - stackPreviews.reduce(0, { $0 + $1.pixelBytes })
-                        let next = try await prepareStackPreview(group, currentID: nil, work: work, pixelBudget: available)
-                        try Task.checkCancellation()
-                        guard token == stackNeighborGeneration, input == generation, stackBrowser === browser,
-                              stackTask == nil, transitionState == .idle else { return }
-                        if browser.isMoving {
-                            // Pending pixels count against the same budget; never evict a moving paper.
-                            if stackPreviews.reduce(next.pixelBytes, { $0 + $1.pixelBytes }) <= CanvasStackContentRenderer.previewBudget {
-                                stackPendingPreview = next
-                            }
-                            return
-                        }
-                        installStackNeighbor(next, in: browser)
-                    } catch { return }
+            do {
+                var cursor = edge.group.id
+                var row: [CanvasStackPreview] = []
+                var reachedBoundary = false
+                for _ in 0..<2 {
+                    try Task.checkCancellation()
+                    guard token == stackNeighborGeneration, input == generation, stackBrowser === browser else { return }
+                    guard let group = try await readStack(.adjacent(cursor, direction: direction)) else {
+                        reachedBoundary = true
+                        break
+                    }
+                    let next = try await prepareStackPreview(group, currentID: nil, work: work,
+                        pixelBudget: (available - row.reduce(0) { $0 + $1.pixelBytes }) / (2 - row.count))
+                    try Task.checkCancellation()
+                    row.append(next)
+                    cursor = group.id
                 }
+                guard token == stackNeighborGeneration, input == generation, !work.isCancelled,
+                      stackBrowser === browser, transitionState == .idle, stackTask == nil else { return }
+                if reachedBoundary {
+                    if direction > 0 { stackReachedEnd = true } else { stackReachedStart = true }
+                }
+                let ordered = direction > 0 ? row : row.reversed().map { $0 }
+                installStackRow(ordered, direction: direction, in: browser)
+                continues = true
+            } catch {
+                // Keep displayed rows. The next scrolling demand retries the same edge.
             }
         }
     }
 
-    /// 静止时仅释放最远的屏外堆，为一个进行中的真实预览预留预算；移动时不改变窗口。
-    private func reserveStackNeighborSpace(in browser: CanvasStackBrowserView) {
-        guard !browser.isMoving, let focus = browser.focusedID else { return }
-        let reserve = 6 * 1_024 * 1_024
-        var values = stackPreviews
-        while values.count > 3, values.reduce(0, { $0 + $1.pixelBytes }) > CanvasStackContentRenderer.previewBudget - reserve {
-            guard let victim = [values.startIndex, values.index(before: values.endIndex)]
-                .filter({ abs(values[$0].group.id.bucket - focus.bucket) > 1 })
-                .max(by: { abs(values[$0].group.id.bucket - focus.bucket) < abs(values[$1].group.id.bucket - focus.bucket) }) else { break }
-            values.remove(at: victim)
+    /// 滚动中释放相反方向远处整行，保留一屏反向缓冲；窗口与待交接像素共用 64MiB。
+    private func reserveStackRowSpace(direction: Int, in browser: CanvasStackBrowserView) -> Bool {
+        let reserve = 2 * CanvasStackContentRenderer.stackPixelBudget
+        while stackPreviews.count > CanvasStackContentRenderer.maximumPreviewStacks - 2
+            || stackPreviews.reduce(0, { $0 + $1.pixelBytes }) > CanvasStackContentRenderer.previewBudget - reserve {
+            let index = direction > 0 ? 0 : stackGridRows.count - 1
+            guard stackGridRows.count > 1, browser.canEvictRow(at: index) else { return false }
+            stackGridRows.remove(at: index)
+            if direction > 0 { stackReachedStart = false } else { stackReachedEnd = false }
+            browser.apply(stackGridRows)
         }
-        if values.count != stackPreviews.count {
-            stackPreviews = values
-            browser.apply(values, preserving: focus)
-        }
+        return true
     }
 
-    /// 仅静止时提交连续邻堆并补偿原点；屏外回收和待交接纹理共用既有预算。
-    private func installStackNeighbor(_ preview: CanvasStackPreview, in browser: CanvasStackBrowserView) {
-        guard !browser.isMoving, let focus = browser.focusedID,
-              abs(preview.group.id.bucket - focus.bucket) <= 2,
-              !stackPreviews.contains(where: { $0.group.id == preview.group.id }) else { return }
-        var values = (stackPreviews + [preview]).sorted { $0.group.id.bucket < $1.group.id.bucket }
-        while values.count > 5 || values.reduce(0, { $0 + $1.pixelBytes }) > CanvasStackContentRenderer.previewBudget {
-            guard let victim = [values.startIndex, values.index(before: values.endIndex)]
-                .filter({ values[$0].group.id != focus })
-                .max(by: { abs(values[$0].group.id.bucket - focus.bucket) < abs(values[$1].group.id.bucket - focus.bucket) }) else { return }
-            values.remove(at: victim)
-        }
-        guard values.contains(where: { $0.group.id == preview.group.id }) else { return }
-        stackPreviews = values
-        browser.apply(values, preserving: focus)
+    /// 一次提交完整行，不把后续单张插入已有行，因此预取和回收不会改变现有列位置。
+    private func installStackRow(_ row: [CanvasStackPreview], direction: Int, in browser: CanvasStackBrowserView) {
+        guard !row.isEmpty,
+              !row.contains(where: { next in stackPreviews.contains { $0.group.id == next.group.id } }),
+              stackPreviews.count + row.count <= CanvasStackContentRenderer.maximumPreviewStacks,
+              stackPreviews.reduce(0, { $0 + $1.pixelBytes }) + row.reduce(0, { $0 + $1.pixelBytes })
+                <= CanvasStackContentRenderer.previewBudget else { return }
+        if direction > 0 { stackGridRows.append(row) } else { stackGridRows.insert(row, at: 0) }
+        browser.apply(stackGridRows)
     }
 
-    /// 只有离开浏览、展开或环境失效才取消邻堆任务；取消后禁止后台下一工作单元与迟到提交。
+    /// 离开浏览、展开或环境失效取消所有邻行工作；待交接纹理同时释放。
     private func cancelStackNeighbors() {
         stackNeighborGeneration += 1
         stackNeighborTask?.cancel(); stackNeighborTask = nil
         stackNeighborWork?.cancel(); stackNeighborWork = nil
-        stackPendingPreview = nil
     }
 
     /// 只有点按才准备整组；源堆保持可滑动，新的拖动立即取消待展开目标。
@@ -479,6 +591,7 @@ extension NoteReviewCanvasOverviewController {
             if animator.state == .active, !animator.isRunning { animator.startAnimation() }
             return
         }
+        saveStackGridBookmark()
         cancelStackTargetPreparation()
         cancelStackNeighbors()
         browser.scrollView.stopScrollingAndZooming()
@@ -490,17 +603,14 @@ extension NoteReviewCanvasOverviewController {
             onPreparationChanged?(true, nil)
             stackTask = Task { [weak self] in
                 guard let self else { return }
-                let preview = try? await prepareStackPreview(session.group, currentID: session.noteID, work: work)
+                let available = CanvasStackContentRenderer.previewBudget - stackPreviews.reduce(0) { $0 + $1.pixelBytes }
+                let preview = try? await prepareStackPreview(session.group, currentID: session.noteID,
+                    work: work, pixelBudget: available)
                 guard token == stackRequestGeneration, stackSession === session else { return }
                 stackTask = nil; stackWork = nil; onPreparationChanged?(false, nil)
                 guard let preview else { return }
-                guard let focus = browser.focusedID,
-                      let index = stackPreviews.firstIndex(where: { $0.group.id == focus }) else { return }
-                let retained = Array(stackPreviews[max(0, index - 1)...min(stackPreviews.count - 1, index + 1)])
-                let values = (retained + [preview]).sorted { $0.group.id.bucket < $1.group.id.bucket }
-                guard values.reduce(0, { $0 + $1.pixelBytes }) <= CanvasStackContentRenderer.previewBudget else { return }
-                stackPreviews = values
-                browser.apply(values, preserving: focus)
+                stackGridRows = [[preview]]
+                browser.apply(stackGridRows)
                 browser.focus(preview.group.id) { [weak self] in self?.expandStack(preview.group.id) }
             }
         }
@@ -509,6 +619,10 @@ extension NoteReviewCanvasOverviewController {
     /// 拖动只取消待展开任务，已准备的小预览可继续使用；不会留下迟到的模式提交。
     func cancelStackTargetPreparation() {
         guard stackSession?.animator == nil else { return }
+        if stackBrowser == nil {
+            restoresStackGridAfterPreparation = false
+            stackGridEnvironmentCover?.removeFromSuperview(); stackGridEnvironmentCover = nil
+        }
         stackRequestGeneration += 1
         stackTask?.cancel(); stackTask = nil
         stackWork?.cancel(); stackWork = nil
@@ -538,7 +652,12 @@ extension NoteReviewCanvasOverviewController {
     }
 
     /// 生命周期和环境变化立即撤销全部资格；不等待排版、不让旧动画回调再次显示纸张。
-    func cancelStackBrowsingImmediately() {
+    func cancelStackBrowsingImmediately(preservingEnvironment: Bool = false) {
+        if !preservingEnvironment {
+            restoresStackGridAfterPreparation = false
+            stackGridEnvironmentCover?.removeFromSuperview(); stackGridEnvironmentCover = nil
+        }
+        if stackSession?.animator == nil { saveStackGridBookmark() }
         stackRequestGeneration += 1
         stackTask?.cancel(); stackTask = nil
         cancelStackNeighbors()
@@ -549,7 +668,7 @@ extension NoteReviewCanvasOverviewController {
         if session.hasCommittedTarget, !isDisposed { restoreStackHomeModel(session) }
         session.scene?.removeFromSuperview()
         stackBrowser?.removeFromSuperview(); stackBrowser = nil; stackSession = nil
-        stackPreviews = []; transitionPreviewPins.removeAll()
+        stackGridRows = []; transitionPreviewPins.removeAll()
         transitionState = .idle
         desktopScrollView.alpha = currentMode == .desktop ? 1 : 0
         desktopScrollView.accessibilityElementsHidden = currentMode != .desktop

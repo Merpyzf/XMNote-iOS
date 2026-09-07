@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 接收 Session 的有界目录页、可见瀑布流及既有预览缓存
- * [OUTPUT]: 提供按需瀑布流排版和保留存活 Cell 位置的连续窗口交接
+ * [OUTPUT]: 提供独立字号的按需瀑布流排版和保留存活 Cell 位置的连续窗口交接
  * [POS]: 总览控制器的单轴窗口 owner；不为瀑布流准备整个桌面
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -25,11 +25,14 @@ extension NoteReviewCanvasOverviewController {
         try Task.checkCancellation()
         var input = model
         input.waterfallGeometry = previous.waterfallGeometry
-        let keepsLayout = previous.style.bodyFont == model.style.bodyFont
-            && previous.style.annotationFont == model.style.annotationFont
-            && previous.style.display == model.style.display
-            && previous.style.alignment == model.style.alignment
-            && previous.style.traits.preferredContentSizeCategory == model.style.traits.preferredContentSizeCategory
+        let keepsLayout = previous.waterfallStyle.bodyFont == model.waterfallStyle.bodyFont
+            && previous.waterfallStyle.annotationFont == model.waterfallStyle.annotationFont
+            && previous.waterfallStyle.bodyLineSpacing == model.waterfallStyle.bodyLineSpacing
+            && previous.waterfallStyle.annotationLineSpacing == model.waterfallStyle.annotationLineSpacing
+            && previous.waterfallStyle.typography == model.waterfallStyle.typography
+            && previous.waterfallStyle.display == model.waterfallStyle.display
+            && previous.waterfallStyle.alignment == model.waterfallStyle.alignment
+            && previous.waterfallStyle.traits.preferredContentSizeCategory == model.waterfallStyle.traits.preferredContentSizeCategory
         let viewport = waterfallView.bounds.size
         let store = previewStore
         let queue = preparationQueue
@@ -196,16 +199,17 @@ nonisolated enum CanvasOverviewWaterfallWindowPreparation {
                 contents.append(model.waterfallGeometry.contentGeometries[existing])
                 continue
             }
-            let note: CanvasOverviewNote
-            if let old = model.note(for: id), let pin = pins[id] { note = old.restoringPreview(pin.value) }
-            else if let source = byID[id], let parsed = CanvasOverviewTextFactory.makeRealNotes([source], style: model.style, cancellation: work).first {
-                note = parsed
+            let sourceNote: CanvasOverviewNote
+            if let old = model.note(for: id), let pin = pins[id] { sourceNote = old.restoringPreview(pin.value) }
+            else if let source = byID[id], let parsed = CanvasOverviewTextFactory.makeRealNotes([source], style: model.waterfallStyle, cancellation: work).first {
+                sourceNote = parsed
             } else { return nil }
+            let note = sourceNote.reflowed(for: model.waterfallStyle)
             let retained = note.cached(in: store, generation: generation)
             let content = CanvasOverviewGeometryBuilder.makeContentGeometry(note: note, width: width)
             let fallback = atlas.append(index: index, note: note, content: content, width: width, style: model.waterfallStyle)
             notes.append(retained)
-            contents.append(content.cached(in: store, key: .init(generation: generation, noteID: id, width: -Int(width)), fallback: fallback))
+            contents.append(content.cached(in: store, key: .init(generation: generation, noteID: id, width: -Int(width), typography: .waterfall), fallback: fallback))
         }
         atlas.finish()
         let frames = retainsFrames ? Dictionary(uniqueKeysWithValues: model.waterfallGeometry.notes.enumerated().map {

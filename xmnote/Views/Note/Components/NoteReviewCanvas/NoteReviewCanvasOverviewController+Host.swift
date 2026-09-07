@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 接收父页面的身份、设置、生命周期及模式端点请求
- * [OUTPUT]: 提供生产和测试入口共用的窄范围宿主协议
+ * [OUTPUT]: 提供窄范围宿主协议与桌面、瀑布流各自排版的高清恢复
  * [POS]: NoteReviewCanvas 总览控制器的业务无关接线层
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -373,7 +373,7 @@ extension NoteReviewCanvasOverviewController {
         var drawingKeys = Set<CanvasOverviewResourceKey>()
         var sourceKeys = Set<CanvasOverviewResourceKey>()
         for id in previewDemand.prefix(40) {
-            if let key = model.note(for: id)?.key { sourceKeys.insert(key) }
+            if let key = model.note(for: id, mode: currentMode)?.key { sourceKeys.insert(key) }
         }
         for id in previewVisibleDemand.prefix(20) {
             guard let key = model.content(for: id, mode: currentMode)?.key else { continue }
@@ -502,7 +502,7 @@ extension NoteReviewCanvasOverviewController {
                 let batch = requested.filter { !previewsAreReady(for: $0, in: model, modes: modes) }
                 guard !batch.isEmpty else { return }
                 let cached = Dictionary(uniqueKeysWithValues: batch.compactMap { id -> (Int64, NoteReviewCanvasResourceLease<CanvasOverviewPreviewPayload>)? in
-                    guard let note = model.note(for: id), let key = note.key,
+                    guard let note = model.note(for: id, mode: modes.first ?? .desktop) ?? model.note(for: id), let key = note.key,
                           let lease = note.store?.previews.lease(for: key) else { return nil }
                     return (id, lease)
                 })
@@ -520,7 +520,7 @@ extension NoteReviewCanvasOverviewController {
                             var missing = 0, stale = 0, rejected = 0
                             for id in batch {
                                 guard !batchWork.isCancelled,
-                                      let original = model.note(for: id), let key = original.key,
+                                      let original = model.note(for: id, mode: modes.first ?? .desktop) ?? model.note(for: id), let key = original.key,
                                       let store = original.store else { continue }
                                 let note: CanvasOverviewNote
                                 if let cached = cached[id] {
@@ -528,7 +528,7 @@ extension NoteReviewCanvasOverviewController {
                                 } else if let source = byID[id],
                                           original.revision == CanvasOverviewSourceRevision(source),
                                           let fresh = CanvasOverviewPreparationMetrics.measure("Parse preview", {
-                                              CanvasOverviewTextFactory.makeRealNotes([source], style: model.style,
+                                              CanvasOverviewTextFactory.makeRealNotes([source], style: original.typography == .waterfall ? model.waterfallStyle : model.style,
                                                   cancellation: batchWork).first
                                           }) {
                                     note = fresh
@@ -541,9 +541,11 @@ extension NoteReviewCanvasOverviewController {
                                     guard let content = model.content(for: id, mode: mode) else { continue }
                                     guard !batchWork.isCancelled, let drawingKey = content.key,
                                           content.preparedBlocks == nil else { continue }
+                                    let modeNote = note.reflowed(for: mode == .waterfall ? model.waterfallStyle : model.style)
+                                    _ = modeNote.cached(in: store, generation: drawingKey.generation)
                                     // Reuse committed rectangles and truncation; sharpening never measures a new height.
                                     let payload = CanvasOverviewPreparationMetrics.measure("Restore drawing") {
-                                        CanvasOverviewDrawingPayload(blocks: content.replaying(note).blocks)
+                                        CanvasOverviewDrawingPayload(blocks: content.replaying(modeNote).blocks)
                                     }
                                     if !store.drawings.insert(payload, for: drawingKey, cost: payload.cost) { rejected += 1 }
                                 }

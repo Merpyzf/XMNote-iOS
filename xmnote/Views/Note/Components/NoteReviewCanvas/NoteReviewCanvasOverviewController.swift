@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 接收有序书摘身份、可取消源读取闭包、外观及页面动作回调
- * [OUTPUT]: 提供生产与测试中心共用的单画布、瀑布流、调宽和连续纸张转场，统一中性深色纸面与文字角色，总览保持无选中框的自由浏览
+ * [OUTPUT]: 提供单画布、独立五行瀑布流排版、调宽和连续纸张转场，统一中性深色角色与无选中框浏览
  * [POS]: NoteReviewCanvas 页面内部总览实现；不访问 Repository、偏好或导航
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -108,10 +108,15 @@ class NoteReviewCanvasOverviewController: UIViewController {
     var stackNeighborTask: Task<Void, Never>?
     var stackNeighborWork: CanvasOverviewTransitionPreparation?
     var stackNeighborGeneration = 0
-    var stackPendingPreview: CanvasStackPreview?
+    var stackReachedStart = false
+    var stackReachedEnd = false
+    var stackGridBookmark: CanvasStackGridBookmark?
+    var restoresStackGridAfterPreparation = false
+    var stackGridEnvironmentCover: UIView?
     var stackWork: CanvasOverviewTransitionPreparation?
     var stackRequestGeneration = 0
-    var stackPreviews: [CanvasStackPreview] = []
+    var stackGridRows: [[CanvasStackPreview]] = []
+    var stackPreviews: [CanvasStackPreview] { stackGridRows.flatMap { $0 } }
     var stackViewports: [NoteReviewCanvasStackID: CanvasOverviewViewportState] = [:]
     var stackAllIDs: [Int64] = []
     var stackFixtureSnapshot = UUID()
@@ -226,7 +231,8 @@ class NoteReviewCanvasOverviewController: UIViewController {
             guard controller.preparedModel != nil else { return }
             controller.requestPreparation(
                 count: controller.selectedCount,
-                preservingCurrentID: controller.currentNoteID
+                preservingCurrentID: controller.currentNoteID,
+                preservingStackGrid: true
             )
         }
     }
@@ -250,7 +256,7 @@ class NoteReviewCanvasOverviewController: UIViewController {
         } else if preparedModel != nil,
                   (abs(lastPreparedViewportSize.width - desktopScrollView.bounds.width) > 1
                    || abs(lastPreparedViewportSize.height - desktopScrollView.bounds.height) > 1) {
-            requestPreparation(count: selectedCount, preservingCurrentID: currentNoteID)
+            requestPreparation(count: selectedCount, preservingCurrentID: currentNoteID, preservingStackGrid: true)
         }
     }
 
@@ -499,9 +505,21 @@ class NoteReviewCanvasOverviewController: UIViewController {
     }
 
     /// 主 actor 接受输入，后台队列只消费不可变值；每批完成才读取下一批，代次和取消共同保护提交。
-    func requestPreparation(count: Int, preservingCurrentID: Int64?) {
+    func requestPreparation(count: Int, preservingCurrentID: Int64?, preservingStackGrid: Bool = false) {
         guard !isDisposed, !isCanvasPaused, desktopScrollView.bounds.width > 0 else { return }
-        cancelStackBrowsingImmediately()
+        if preservingStackGrid, let browser = stackBrowser, stackSession?.animator == nil {
+            restoresStackGridAfterPreparation = true
+            if stackGridEnvironmentCover == nil {
+                stackGridEnvironmentCover = browser.snapshotView(afterScreenUpdates: false)
+                if let cover = stackGridEnvironmentCover {
+                    cover.frame = view.bounds
+                    cover.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+                    cover.accessibilityElementsHidden = true
+                    view.addSubview(cover)
+                }
+            }
+        }
+        cancelStackBrowsingImmediately(preservingEnvironment: preservingStackGrid)
         selectedCount = count
         cancelRegionalPreparation()
         cancelWaterfallPagePreparation()
@@ -528,7 +546,7 @@ class NoteReviewCanvasOverviewController: UIViewController {
         lastPreparedViewportSize = size
         var style = CanvasOverviewPaperStyle(traits: traitCollection, settings: renderingSettings)
         var waterfallStyle = CanvasOverviewPaperStyle(traits: traitCollection,
-            isFlat: usesAlternateWaterfallStyle, settings: renderingSettings)
+            isFlat: usesAlternateWaterfallStyle, settings: renderingSettings, typography: .waterfall)
         let backgroundURL = renderingSettings?.cardAppearance.backgroundImageURL
         let scale = traitCollection.displayScale
         let width = selectedDesktopCardWidth
@@ -582,8 +600,11 @@ class NoteReviewCanvasOverviewController: UIViewController {
                     modelPreparation = nil
                     realDataTask = nil
                     preparationIsPending = false
-                    commit(model: seedRegionalWindow(model), preservingCurrentID: preservingCurrentID)
+                    commit(model: seedRegionalWindow(model), preservingCurrentID: preservingCurrentID,
+                           animatesEnvironmentChange: !restoresStackGridAfterPreparation)
                 } else if ids.isEmpty {
+                    restoresStackGridAfterPreparation = false
+                    stackGridEnvironmentCover?.removeFromSuperview(); stackGridEnvironmentCover = nil
                     modelPreparation = nil
                     realDataTask = nil
                     preparationIsPending = false
@@ -597,6 +618,7 @@ class NoteReviewCanvasOverviewController: UIViewController {
                 onPreparationChanged?(false, nil)
                 prewarmPreparedMenuTargetsIfNeeded()
                 onReady?()
+                if restoresStackGridAfterPreparation { presentStackBrowser(restoringEnvironment: true) }
             } catch is CancellationError {
                 // The next request or permanent close owns any subsequent presentation.
             } catch {
@@ -606,6 +628,8 @@ class NoteReviewCanvasOverviewController: UIViewController {
                 preparationIsPending = false
                 setLoadingVisible(false)
                 onPreparationChanged?(false, "暂时无法整理回顾内容，请重试")
+                restoresStackGridAfterPreparation = false
+                stackGridEnvironmentCover?.removeFromSuperview(); stackGridEnvironmentCover = nil
             }
         }
     }
@@ -1668,7 +1692,7 @@ extension NoteReviewCanvasOverviewController {
     }
 
     func endpoint(in mode: Mode, noteID: Int64) -> CanvasOverviewRenderEndpoint? {
-        guard let model = preparedModel, let note = model.note(for: noteID),
+        guard let model = preparedModel, let note = model.note(for: noteID, mode: mode),
               let pose = paperPose(in: mode, noteID: noteID) else { return nil }
         let mapping = mode == .desktop ? model.canvasGeometry.indexByID : model.waterfallGeometry.indexByID
         guard let index = mapping[noteID] else { return nil }
@@ -1797,6 +1821,11 @@ nonisolated struct CanvasOverviewPreparedModel: Sendable {
         noteByID[id] ?? waterfallGeometry.indexByID[id].map { waterfallGeometry.notes[$0] }
     }
 
+    /// 渲染端点按模式获取同源文字，避免桌面正文代替瀑布流的五行排版。
+    func note(for id: Int64, mode: NoteReviewCanvasOverviewController.Mode) -> CanvasOverviewNote? {
+        mode == .desktop ? noteByID[id] : waterfallGeometry.indexByID[id].map { waterfallGeometry.notes[$0] }
+    }
+
     /// 未准备某个模式的端点明确返回 nil，不能拿另一套排版补位。
     func content(for id: Int64, mode: NoteReviewCanvasOverviewController.Mode) -> CanvasOverviewPaperContentGeometry? {
         if mode == .desktop { return canvasGeometry.paper(for: id)?.contentGeometry }
@@ -1807,6 +1836,7 @@ nonisolated struct CanvasOverviewPreparedModel: Sendable {
 /// 长期只保留身份和无障碍短摘要；完整富文本由页面有界缓存持有。
 nonisolated struct CanvasOverviewNote: Sendable {
     let id: Int64
+    let typography: CanvasOverviewTypography
     let revision: CanvasOverviewSourceRevision
     private let immediate: CanvasOverviewPreviewPayload?
     let store: CanvasOverviewPreviewStore?
@@ -1828,8 +1858,9 @@ nonisolated struct CanvasOverviewNote: Sendable {
     init(id: Int64, quote: String, thought: String, bookTitle: String, chapter: String,
          quoteAsset: CanvasOverviewTextAsset, thoughtAsset: CanvasOverviewTextAsset,
          bookAsset: CanvasOverviewTextAsset, chapterAsset: CanvasOverviewTextAsset,
-         revision: CanvasOverviewSourceRevision = .init()) {
+         revision: CanvasOverviewSourceRevision = .init(), typography: CanvasOverviewTypography = .desktop) {
         self.id = id
+        self.typography = typography
         self.revision = revision
         immediate = CanvasOverviewPreviewPayload(quote: quoteAsset, thought: thoughtAsset, book: bookAsset, chapter: chapterAsset)
         store = nil; key = nil
@@ -1838,13 +1869,14 @@ nonisolated struct CanvasOverviewNote: Sendable {
     }
 
     private init(note: Self, store: CanvasOverviewPreviewStore, key: CanvasOverviewResourceKey) {
+        typography = note.typography
         id = note.id; revision = note.revision; immediate = nil; self.store = store; self.key = key
         summary = note.summary; summaryBook = note.summaryBook; richFormatting = note.richFormatting
     }
 
     /// 批次消费完成前移交有成本上限的缓存，不让完整清单强引用正文。
     func cached(in store: CanvasOverviewPreviewStore, generation: UUID) -> Self {
-        let key = CanvasOverviewResourceKey(generation: generation, noteID: id, width: 0)
+        let key = CanvasOverviewResourceKey(generation: generation, noteID: id, width: 0, typography: typography)
         if let payload { _ = store.previews.insert(payload, for: key, cost: payload.cost) }
         return Self(note: self, store: store, key: key)
     }
@@ -1854,7 +1886,19 @@ nonisolated struct CanvasOverviewNote: Sendable {
         Self(id: id, quote: payload.quote.text, thought: payload.thought.text,
              bookTitle: payload.book.text, chapter: payload.chapter.text,
              quoteAsset: payload.quote, thoughtAsset: payload.thought,
-             bookAsset: payload.book, chapterAsset: payload.chapter, revision: revision)
+             bookAsset: payload.book, chapterAsset: payload.chapter, revision: revision, typography: typography)
+    }
+
+    /// 准备队列内转换不可变字体与段落属性；模式间只共享内容，不共享已经排版的字形。
+    func reflowed(for style: CanvasOverviewPaperStyle) -> Self {
+        guard typography != style.typography else { return self }
+        let quote = quoteAsset.reflowed(scale: style.typography.bodyScale / typography.bodyScale,
+            lineSpacing: style.bodyLineSpacing)
+        let thought = thoughtAsset.reflowed(scale: style.typography.thoughtScale / typography.thoughtScale,
+            lineSpacing: style.annotationLineSpacing)
+        return Self(id: id, quote: quote.text, thought: thought.text, bookTitle: bookTitle, chapter: chapter,
+            quoteAsset: quote, thoughtAsset: thought, bookAsset: bookAsset, chapterAsset: chapterAsset,
+            revision: revision, typography: style.typography)
     }
 }
 
@@ -1887,9 +1931,41 @@ nonisolated struct CanvasOverviewTextAsset: @unchecked Sendable {
         )
         return ceil(size.height)
     }
+
+    /// 仅在准备队列测量实际排版行的下边界，保留富文本字体、缩进及段落间距。
+    func measuredHeight(width: CGFloat, maximumLines: Int) -> CGFloat {
+        guard !text.isEmpty, width > 0, maximumLines > 0 else { return 0 }
+        let height = measuredHeight(width: width) + 1
+        let frame = CTFramesetterCreateFrame(CTFramesetterCreateWithAttributedString(attributedText),
+            CFRange(location: 0, length: 0), CGPath(rect: CGRect(x: 0, y: 0, width: width, height: height), transform: nil), nil)
+        let lines = CTFrameGetLines(frame) as! [CTLine]
+        guard !lines.isEmpty else { return height }
+        let count = min(maximumLines, lines.count)
+        var origins = Array(repeating: CGPoint.zero, count: count)
+        CTFrameGetLineOrigins(frame, CFRange(location: 0, length: count), &origins)
+        var descent: CGFloat = 0
+        var leading: CGFloat = 0
+        CTLineGetTypographicBounds(lines[count - 1], nil, &descent, &leading)
+        return ceil(height - origins[count - 1].y + descent + leading)
+    }
+
+    /// 复制后才调整，原模式资产不变；字体描述、富文本强调及用户段落设置完整保留。
+    func reflowed(scale: CGFloat, lineSpacing: CGFloat) -> Self {
+        let value = NSMutableAttributedString(attributedString: attributedText)
+        attributedText.enumerateAttributes(in: NSRange(location: 0, length: attributedText.length)) { attributes, range, _ in
+            if let font = attributes[.font] as? UIFont { value.addAttribute(.font, value: font.withSize(font.pointSize * scale), range: range) }
+            let paragraph = (attributes[.paragraphStyle] as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle
+                ?? NSMutableParagraphStyle()
+            paragraph.lineSpacing = lineSpacing
+            value.addAttribute(.paragraphStyle, value: paragraph, range: range)
+        }
+        return Self(text: text, attributedText: NSAttributedString(attributedString: value),
+            attributeKeys: attributeKeys, hasRichFormatting: hasRichFormatting, fadeHeight: fadeHeight)
+    }
 }
 
 nonisolated struct CanvasOverviewPaperStyle: Sendable {
+    let typography: CanvasOverviewTypography
     let canvasBaseColor: CGColor
     let canvasTintColor: CGColor
     let paperColor: CGColor
@@ -1921,15 +1997,17 @@ nonisolated struct CanvasOverviewPaperStyle: Sendable {
     let backgroundOverlay: CGColor
 
     @MainActor
-    init(traits: UITraitCollection, isFlat: Bool = false, settings: NoteReviewSettings? = nil) {
+    init(traits: UITraitCollection, isFlat: Bool = false, settings: NoteReviewSettings? = nil,
+         typography: CanvasOverviewTypography = .desktop) {
+        self.typography = typography
         self.traits = traits
         textAttributes = .project
         alignment = settings?.textAlignment.nsTextAlignment ?? .natural
         metadataAlignment = settings?.textAlignment.auxiliaryNSTextAlignment ?? .natural
         display = settings?.immersiveDisplay ?? .defaultValue
         paragraphIndent = RichTextEditorView.defaultParagraphIndent
-        bodyLineSpacing = ReadingContentTypography.bodyLineSpacing
-        annotationLineSpacing = ReadingContentTypography.annotationLineSpacing
+        bodyLineSpacing = typography == .waterfall ? 5 : ReadingContentTypography.bodyLineSpacing
+        annotationLineSpacing = typography == .waterfall ? 4 : ReadingContentTypography.annotationLineSpacing
         quoteAccent = RichTextAppearance.quoteAccent.resolvedColor(with: traits)
         linkColor = UIColor.link.resolvedColor(with: traits)
         backgroundOverlay = (settings?.cardAppearance.uiOnSurface ?? NoteReviewCanvasAppearance.primary)
@@ -1948,8 +2026,10 @@ nonisolated struct CanvasOverviewPaperStyle: Sendable {
         hintTextColor = resolved(NoteReviewCanvasAppearance.hint)
         sourceTextColor = settings?.cardAppearance.canvasSourceTextColor.resolvedColor(with: traits) ?? primaryTextColor
         metadataTextColor = settings?.cardAppearance.canvasMetadataTextColor.resolvedColor(with: traits) ?? secondaryTextColor
-        bodyFont = settings?.fontSelection.uiFont(base: ReadingContentTypography.uiBody) ?? ReadingContentTypography.uiBody
-        annotationFont = settings?.fontSelection.uiFont(base: ReadingContentTypography.uiAnnotation) ?? ReadingContentTypography.uiAnnotation
+        let body = settings?.fontSelection.uiFont(base: ReadingContentTypography.uiBody) ?? ReadingContentTypography.uiBody
+        let thought = settings?.fontSelection.uiFont(base: ReadingContentTypography.uiAnnotation) ?? ReadingContentTypography.uiAnnotation
+        bodyFont = body.withSize(body.pointSize * typography.bodyScale)
+        annotationFont = thought.withSize(thought.pointSize * typography.thoughtScale)
         metadataFont = ReadingContentTypography.uiMetadata
         metadataMediumFont = ReadingContentTypography.uiMetadataMedium
         paperSkin = CanvasOverviewPaperRenderer.makeSkin(paperColor: paperColor, borderColor: borderColor,
@@ -1960,6 +2040,7 @@ nonisolated struct CanvasOverviewPaperStyle: Sendable {
 }
 
 nonisolated struct CanvasOverviewPaperContentGeometry: Sendable {
+    var paperHeight: CGFloat { chapterRect.maxY + quoteRect.minY }
     let quoteRect: CGRect
     let thoughtRect: CGRect?
     let bookRect: CGRect
@@ -2611,6 +2692,7 @@ nonisolated enum CanvasOverviewModelBuilder {
                       cancellation: CanvasOverviewTransitionPreparation? = nil,
                       desktopContents: [Int: CanvasOverviewPaperContentGeometry] = [:],
                       waterfallContents: [CanvasOverviewPaperContentGeometry]? = nil,
+                      waterfallNotes: [CanvasOverviewNote]? = nil,
                       fixedColumns: Int? = nil, anchorID: Int64? = nil,
                       preparesWaterfall: Bool = true, overviewLongEdge: CGFloat = 2_048) -> CanvasOverviewPreparedModel? {
         guard !notes.isEmpty, cancellation?.isCancelled != true else { return nil }
@@ -2627,7 +2709,7 @@ nonisolated enum CanvasOverviewModelBuilder {
                 usesAccessibleLayout: style.traits.preferredContentSizeCategory.isAccessibilityCategory)
         ) else { return nil }
         guard let waterfallGeometry = CanvasOverviewGeometryBuilder.makeWaterfall(
-            notes: preparesWaterfall ? notes : [],
+            notes: preparesWaterfall ? (waterfallNotes ?? notes.map { $0.reflowed(for: waterfallStyle) }) : [],
             viewportSize: viewportSize,
             traits: style.traits, cancellation: cancellation, preparedContents: waterfallContents
         ) else { return nil }
@@ -2719,7 +2801,7 @@ nonisolated enum CanvasOverviewTextFactory {
                 bookTitle: book, chapter: chapter, quoteAsset: visibleQuote, thoughtAsset: thought,
                 bookAsset: makeTextAsset(book, font: style.metadataMediumFont, color: style.sourceTextColor, lineSpacing: 0, keys: style.textAttributes, alignment: style.metadataAlignment),
                 chapterAsset: makeTextAsset(chapter, font: style.metadataFont, color: style.metadataTextColor, lineSpacing: 0, keys: style.textAttributes, alignment: style.metadataAlignment),
-                revision: CanvasOverviewSourceRevision(source)))
+                revision: CanvasOverviewSourceRevision(source), typography: style.typography))
         }
         return notes
     }
@@ -2887,7 +2969,7 @@ nonisolated enum CanvasOverviewGeometryBuilder {
             contents.append(preparedContents?[index] ?? makeContentGeometry(note: note, width: metrics.cardWidth))
         }
         guard let spatial = try? NoteReviewCanvasWaterfallGeometry(ids: notes.map(\.id),
-            heights: contents.map { $0.chapterRect.maxY + contentInset }, viewport: viewportSize,
+            heights: contents.map(\.paperHeight), viewport: viewportSize,
             generation: 0, accessibility: accessible, regularWidth: traits.horizontalSizeClass == .regular,
             isRTL: traits.layoutDirection == .rightToLeft,
             retainingFrames: retainingFrames,
@@ -2898,6 +2980,7 @@ nonisolated enum CanvasOverviewGeometryBuilder {
     }
 
     static func makeContentGeometry(note: CanvasOverviewNote, width: CGFloat) -> CanvasOverviewPaperContentGeometry {
+        if note.typography == .waterfall { return makeWaterfallContent(note: note, width: width) }
         let inset = contentInset
         let contentWidth = max(1, width - inset * 2)
         let quoteMeasured = note.quoteAsset.measuredHeight(width: contentWidth)
@@ -2947,6 +3030,40 @@ nonisolated enum CanvasOverviewGeometryBuilder {
                 CanvasOverviewTextBlock(asset: note.chapterAsset, rect: chapterRect),
             ]
         )
+    }
+
+    /// 瀑布流按五行正文、两行想法和单行出处自然增高，辅助功能字号不受固定高度裁切。
+    private static func makeWaterfallContent(note: CanvasOverviewNote, width: CGFloat) -> CanvasOverviewPaperContentGeometry {
+        let inset: CGFloat = 14
+        let verticalInset: CGFloat = 16
+        let contentWidth = max(1, width - inset * 2)
+        var y = verticalInset
+        let quoteHeight = note.quoteAsset.measuredHeight(width: contentWidth, maximumLines: 5)
+        let quoteRect = CGRect(x: inset, y: y, width: contentWidth, height: quoteHeight)
+        y = quoteRect.maxY
+        var thoughtRect: CGRect?
+        if !note.thoughtAsset.text.isEmpty {
+            if quoteHeight > 0 { y += blockGap }
+            thoughtRect = CGRect(x: inset, y: y, width: contentWidth,
+                height: note.thoughtAsset.measuredHeight(width: contentWidth, maximumLines: 2))
+            y = thoughtRect?.maxY ?? y
+        }
+        let hasSource = !note.bookAsset.text.isEmpty || !note.chapterAsset.text.isEmpty
+        if hasSource, y > verticalInset { y += blockGap }
+        let bookRect = CGRect(x: inset, y: y, width: contentWidth,
+            height: note.bookAsset.measuredHeight(width: contentWidth, maximumLines: 1))
+        y = bookRect.maxY
+        if bookRect.height > 0, !note.chapterAsset.text.isEmpty { y += metadataGap }
+        let chapterRect = CGRect(x: inset, y: y, width: contentWidth,
+            height: note.chapterAsset.measuredHeight(width: contentWidth, maximumLines: 1))
+        let quoteTruncated = note.quoteAsset.measuredHeight(width: contentWidth) > quoteHeight + 0.5
+        let thoughtTruncated = note.thoughtAsset.measuredHeight(width: contentWidth) > (thoughtRect?.height ?? 0) + 0.5
+        return .init(quoteRect: quoteRect, thoughtRect: thoughtRect, bookRect: bookRect, chapterRect: chapterRect,
+            isQuoteTruncated: quoteTruncated, isThoughtTruncated: thoughtTruncated,
+            blocks: [CanvasOverviewTextBlock(asset: note.quoteAsset, rect: quoteRect, truncated: quoteTruncated),
+                CanvasOverviewTextBlock(asset: note.thoughtAsset, rect: thoughtRect ?? .zero, truncated: thoughtTruncated),
+                CanvasOverviewTextBlock(asset: note.bookAsset, rect: bookRect),
+                CanvasOverviewTextBlock(asset: note.chapterAsset, rect: chapterRect)])
     }
 
     static func rotatedBoundingBox(of frame: CGRect, angle: CGFloat) -> CGRect {

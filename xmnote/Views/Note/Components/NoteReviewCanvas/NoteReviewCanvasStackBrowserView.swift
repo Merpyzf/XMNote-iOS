@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 接收有界真实纸张预览及激活/取消回调
- * [OUTPUT]: 提供可取消纸面点按的原生惯性横滑、RTL 与有序辅助功能；不提交业务当前项
+ * [OUTPUT]: 提供两列纵向纸堆网格、滚动期稳定坐标与速度预取需求、RTL 与有序辅助功能；不提交业务当前项
  * [POS]: NoteReviewCanvas 页面私有覆盖表面，卡片内容与空间交互解耦
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -21,42 +21,75 @@ nonisolated enum CanvasStackLayout {
     }
 }
 
-/// 原生惯性在真实纸堆中心吸附；浏览不启动整组正文准备。
+/// 页面内的网格锚点只保存稳定身份与相对可见位置，不改写阅读进度。
+struct CanvasStackGridViewport {
+    let id: NoteReviewCanvasStackID
+    let relativeY: CGFloat
+}
+
+/// 重新打开目录只保留轻量组身份，纸面按当前尺寸和外观重新准备。
+struct CanvasStackGridBookmark {
+    let rows: [[NoteReviewCanvasStackGroup]]
+    let viewport: CanvasStackGridViewport
+    let visibleIDs: Set<NoteReviewCanvasStackID>
+}
+
+/// 两列真实纸堆随原生纵向滚动浏览；整行更新保持可见身份与列位置。
 @MainActor
 final class CanvasStackBrowserView: UIView, UIScrollViewDelegate {
     let scrollView = CanvasStackScrollView()
     let material = UIVisualEffectView(effect: nil)
     let backdrop = UIImageView()
-    private(set) var previews: [CanvasStackPreview] = []
+    private(set) var rows: [[CanvasStackPreview]] = []
+    var previews: [CanvasStackPreview] { rows.flatMap { $0 } }
     private var piles: [NoteReviewCanvasStackID: CanvasStackPileView] = [:]
+    private var rowFrames: [CGRect] = []
     private var applying = false
     private var lastFocusedID: NoteReviewCanvasStackID?
     private var focusCompletion: (() -> Void)?
     private var chromeVisible = true
-    private var lastLayoutWidth: CGFloat = 0
+    private var lastLayoutSize: CGSize = .zero
+    private var lastOffsetY: CGFloat = 0
+    private var layoutOriginY: CGFloat = 0
+    private var lastScrollTime: CFTimeInterval = 0
+    private var scrollSpeed: CGFloat = 0
+    private var pendingViewport: CanvasStackGridViewport?
     private(set) var preferredDirection = 1
     var onFocus: ((NoteReviewCanvasStackID) -> Void)?
     var onActivate: ((NoteReviewCanvasStackID) -> Void)?
     var onReturn: (() -> Void)?
     var onStable: (() -> Void)?
     var onInteraction: (() -> Void)?
+    var onDemand: (() -> Void)?
     var contentInsets: UIEdgeInsets = .zero
     let reduced: Bool
-    var step: CGFloat { cardWidth + Spacing.screenEdge }
-    var cardWidth: CGFloat { min(320, bounds.width * 0.72) }
+
+    /// 预留背纸错位和旋转的横向范围，真实纸张在各列内继续按原比例展示。
+    static func paperWidth(in width: CGFloat) -> CGFloat {
+        max(1, min(320, (width - Spacing.screenEdge * 2 - Spacing.double) / 2 - 24))
+    }
+
+    var cardWidth: CGFloat { Self.paperWidth(in: bounds.width) }
     var isMoving: Bool { scrollView.isDragging || scrollView.isDecelerating || focusCompletion != nil }
+    var isPositioning: Bool { focusCompletion != nil }
+    private var visibleRect: CGRect {
+        CGRect(x: 0, y: scrollView.contentOffset.y + contentInsets.top,
+               width: bounds.width, height: max(1, bounds.height - contentInsets.top - contentInsets.bottom))
+    }
+    var visibleIDs: Set<NoteReviewCanvasStackID> {
+        Set(rows.enumerated().filter { rowFrames.indices.contains($0.offset) && rowFrames[$0.offset].intersects(visibleRect) }
+            .flatMap { $0.element.map { $0.group.id } })
+    }
     var focusedID: NoteReviewCanvasStackID? {
-        guard !previews.isEmpty else { return nil }
-        let index = min(previews.count - 1, max(0, Int((scrollView.contentOffset.x / max(1, step)).rounded())))
-        return previews[physicalIndex(index)].group.id
+        rows.enumerated().first { rowFrames.indices.contains($0.offset) && rowFrames[$0.offset].intersects(visibleRect) }?
+            .element.first?.group.id ?? previews.first?.group.id
+    }
+    var viewport: CanvasStackGridViewport? {
+        guard let id = focusedID, let frame = frame(for: id) else { return nil }
+        return .init(id: id, relativeY: frame.minY - visibleRect.minY)
     }
 
-    /// 仅镜像空间方向，目录和 VoiceOver 的业务顺序不反转。
-    private func physicalIndex(_ index: Int) -> Int {
-        effectiveUserInterfaceLayoutDirection == .rightToLeft ? previews.count - 1 - index : index
-    }
-
-    /// 控件覆盖内容区域而不改变桌面尺寸，模糊材质由收拢时间轴接入。
+    /// 覆盖层沿用已有背景和玻璃交接，只有纸堆内容改为纵向网格。
     init(frame: CGRect, reduced: Bool) {
         self.reduced = reduced
         super.init(frame: frame)
@@ -68,99 +101,160 @@ final class CanvasStackBrowserView: UIView, UIScrollViewDelegate {
         addSubview(material)
         scrollView.frame = bounds; scrollView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         scrollView.delegate = self
-        scrollView.alwaysBounceHorizontal = true
+        scrollView.alwaysBounceVertical = true
         scrollView.isPagingEnabled = false
-        scrollView.decelerationRate = .fast
         scrollView.showsHorizontalScrollIndicator = false
         scrollView.showsVerticalScrollIndicator = false
         scrollView.contentInsetAdjustmentBehavior = .never
         scrollView.scrollsToTop = false
         addSubview(scrollView)
     }
+
     /// 该表面依赖就绪端点，只通过代码创建。
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    /// 只摆放覆盖控件和小窗口纸堆，不向桌面提交几何。
+    /// 旋转或容器变化时以同一纸堆的可见位置重建行高。
     override func layoutSubviews() {
         super.layoutSubviews()
-        let oldStep = min(320, lastLayoutWidth * 0.72) + Spacing.screenEdge
-        let page = scrollView.contentOffset.x / max(1, oldStep)
+        guard lastLayoutSize != bounds.size else { return }
+        let anchor = pendingViewport ?? viewport
+        applying = true
+        layoutOriginY = 0
         layoutPiles()
-        if lastLayoutWidth > 0, lastLayoutWidth != bounds.width {
-            applying = true
-            scrollView.contentOffset.x = page * step
-            applying = false
-        }
-        lastLayoutWidth = bounds.width
+        if let anchor { restore(anchor) }
+        applying = false
+        lastLayoutSize = bounds.size
     }
 
-    /// 仅在静止时重置小窗口原点，等量补偿当前堆的屏幕 X，惯性期间不改滚动状态。
-    func apply(_ values: [CanvasStackPreview], preserving id: NoteReviewCanvasStackID?) {
-        guard !isMoving else { return }
+    /// 滚动中立即接入整行；复用幸存行的内容坐标，追加与回收不重设滚动偏移或惯性。
+    func apply(_ values: [[CanvasStackPreview]], preserving anchor: CanvasStackGridViewport? = nil) {
+        let saved = anchor ?? pendingViewport ?? viewport
+        let survivingID = rows.first { row in values.contains { $0.first?.group.id == row.first?.group.id } }?.first?.group.id
+        let oldY = survivingID.flatMap { frame(for: $0)?.minY }
+        let oldOffset = scrollView.contentOffset
+        let preservesCoordinates = anchor == nil && pendingViewport == nil && oldY != nil && lastLayoutSize == bounds.size
         applying = true
-        let anchor = id ?? focusedID
-        let oldIndex = anchor.flatMap { value in previews.firstIndex { $0.group.id == value } }
-        let anchorX = oldIndex.map { CGFloat(physicalIndex($0)) * step - scrollView.contentOffset.x } ?? 0
-        for (key, pile) in piles where !values.contains(where: { $0.group.id == key }) {
-            pile.removeFromSuperview(); piles.removeValue(forKey: key)
+        let ids = Set(values.flatMap { $0.map { $0.group.id } })
+        for key in Array(piles.keys) where !ids.contains(key) {
+            piles.removeValue(forKey: key)?.removeFromSuperview()
         }
-        previews = values
-        var entering: [CanvasStackPileView] = []
-        for preview in values where piles[preview.group.id] == nil {
+        rows = values.filter { !$0.isEmpty }
+        for preview in previews where piles[preview.group.id] == nil {
             let pile = CanvasStackPileView(preview: preview, reduced: reduced)
             pile.onActivate = { [weak self] in
                 guard let self, !isMoving else { return }
-                focus(preview.group.id) { [weak self] in self?.onActivate?(preview.group.id) }
+                onActivate?(preview.group.id)
             }
             pile.countLabel.alpha = chromeVisible ? 1 : 0
             scrollView.addSubview(pile)
             piles[preview.group.id] = pile
-            if window != nil { pile.alpha = 0; entering.append(pile) }
+        }
+        layoutOriginY = 0
+        layoutPiles(updatesContentSize: false)
+        var offsetAdjustment: CGFloat = 0
+        if preservesCoordinates, let survivingID, let oldY, let newY = frame(for: survivingID)?.minY {
+            layoutOriginY = oldY - newY
+            if layoutOriginY < 0 {
+                offsetAdjustment = -layoutOriginY
+                layoutOriginY = 0
+            }
         }
         layoutPiles()
-        scrollView.accessibilityElements = values.compactMap { piles[$0.group.id] }
-        if let anchor, let index = values.firstIndex(where: { $0.group.id == anchor }) {
-            scrollView.setContentOffset(CGPoint(x: CGFloat(physicalIndex(index)) * step - anchorX, y: 0), animated: false)
-        }
+        scrollView.accessibilityElements = previews.compactMap { piles[$0.group.id] }
+        if preservesCoordinates {
+            if offsetAdjustment > 0.5 {
+                scrollView.contentOffset = CGPoint(x: oldOffset.x, y: oldOffset.y + offsetAdjustment)
+            }
+        } else if let saved { restore(saved) }
         applying = false
         lastFocusedID = focusedID
-        for (index, pile) in entering.enumerated() {
-            UIView.animate(withDuration: reduced ? 0.12 : 0.16, delay: reduced ? 0 : min(0.03, Double(index) * 0.01),
-                options: [.beginFromCurrentState, .allowUserInteraction], animations: { pile.alpha = 1 })
+        lastOffsetY = scrollView.contentOffset.y
+        lastLayoutSize = bounds.size
+    }
+
+    /// 同行取真实叠纸与数量的较大高度；纸堆本身不拉伸、不截断。
+    private func layoutPiles(updatesContentSize: Bool = true) {
+        let cellWidth = cardWidth + 24
+        let gridWidth = cellWidth * 2 + Spacing.double
+        let left = (bounds.width - gridWidth) / 2
+        let rtl = effectiveUserInterfaceLayoutDirection == .rightToLeft
+        var y = layoutOriginY + contentInsets.top + Spacing.double
+        rowFrames = []
+        for row in rows {
+            let heights = row.map { piles[$0.group.id]?.gridHeight(width: cardWidth) ?? 0 }
+            let height = heights.max() ?? 0
+            rowFrames.append(CGRect(x: left, y: y, width: gridWidth, height: height))
+            for (column, preview) in row.enumerated() {
+                guard let pile = piles[preview.group.id] else { continue }
+                let physicalColumn = rtl ? 1 - column : column
+                pile.frame = CGRect(x: left + CGFloat(physicalColumn) * (cellWidth + Spacing.double),
+                    y: y, width: cellWidth, height: heights[column])
+                pile.arrangeTopAligned(width: cardWidth)
+            }
+            y += height + Spacing.double
+        }
+        let bottom = rows.isEmpty ? y : y - Spacing.double
+        if updatesContentSize {
+            scrollView.contentSize = CGSize(width: bounds.width,
+                height: max(bounds.height, bottom + Spacing.double + contentInsets.bottom))
         }
     }
 
-    /// 几何只与视口和至多五个真实堆有关，不依赖全量目录或正文。
-    private func layoutPiles() {
-        scrollView.contentSize = CGSize(width: bounds.width + CGFloat(max(0, previews.count - 1)) * step, height: bounds.height)
-        let top = contentInsets.top + Spacing.double
-        let bottom = bounds.height - contentInsets.bottom - Spacing.double
-        let centerY = (top + bottom) / 2
-        for (index, preview) in previews.enumerated() {
-            guard let pile = piles[preview.group.id] else { continue }
-            pile.frame = CGRect(x: CGFloat(physicalIndex(index)) * step, y: 0, width: bounds.width, height: bounds.height)
-            pile.arrangeCentered(center: CGPoint(x: bounds.midX, y: centerY), width: cardWidth)
-        }
+    /// 常态提前三屏，快速滑动按实际速度提前最多五屏；反向始终保留一屏半缓冲。
+    func demandDirection(reachedStart: Bool, reachedEnd: Bool) -> Int? {
+        guard let first = rowFrames.first, let last = rowFrames.last else { return nil }
+        let forward = max(visibleRect.height * 3, min(visibleRect.height * 5, scrollSpeed * 1.5))
+        let backward = visibleRect.height * 1.5
+        let needsPrevious = !reachedStart && first.minY > visibleRect.minY - (preferredDirection < 0 ? forward : backward)
+        let needsNext = !reachedEnd && last.maxY < visibleRect.maxY + (preferredDirection > 0 ? forward : backward)
+        if preferredDirection > 0, needsNext { return 1 }
+        if needsPrevious { return -1 }
+        return needsNext ? 1 : nil
     }
 
-    /// 将纸堆端点转换到唯一转场容器，身份不依赖滚动索引。
+    /// 回收仅限远离可见区域的完整边缘行，保留同方向预取空间。
+    func canEvictRow(at index: Int) -> Bool {
+        guard rowFrames.indices.contains(index) else { return false }
+        let rect = rowFrames[index]
+        return !rect.intersects(visibleRect.insetBy(dx: 0, dy: -visibleRect.height))
+    }
+
+    /// 纸堆位置用实际视图坐标导出，供现有独立纸张动画使用。
     func poses(for id: NoteReviewCanvasStackID, in container: UIView) -> [Int64: CanvasOverviewPaperPose] {
-        guard let pile = piles[id] else { return [:] }
-        return pile.poses(in: container)
+        piles[id]?.poses(in: container) ?? [:]
     }
 
-    /// 代理持有显示权期间隐藏同一堆，避免两份纸面叠加。
+    /// 代理持有显示权期间只隐藏对应纸堆。
     func setPileHidden(_ id: NoteReviewCanvasStackID, hidden: Bool) { piles[id]?.alpha = hidden ? 0 : 1 }
 
-    /// 返回按钮可连续横移到原堆；只改变预览位置，不提交阅读身份。
+    /// 还原锚点时补偿纵向原点，避免前插预览导致跳位。
+    func restore(_ viewport: CanvasStackGridViewport) {
+        guard let rect = frame(for: viewport.id) else { return }
+        let target = max(0, rect.minY - contentInsets.top - viewport.relativeY)
+        if target > clampedOffset(target) + 0.5 {
+            // A taller viewport may need the next row before its old anchor can fit naturally.
+            pendingViewport = viewport
+            scrollView.contentSize.height = target + scrollView.bounds.height
+        } else { pendingViewport = nil }
+        scrollView.setContentOffset(CGPoint(x: 0, y: target), animated: false)
+    }
+
+    /// 确认真实目录末端后移除准备期间的临时空间，短目录仍以自然底部收尾。
+    func settleRestorationAtEnd() {
+        guard pendingViewport != nil, !isMoving else { return }
+        pendingViewport = nil
+        applying = true
+        layoutPiles()
+        scrollView.setContentOffset(CGPoint(x: 0, y: clampedOffset(scrollView.contentOffset.y)), animated: false)
+        applying = false
+    }
+
+    /// 仅返回原桌面或辅助功能定位时滚动；普通点按从原位展开。
     func focus(_ id: NoteReviewCanvasStackID, completion: @escaping () -> Void) {
-        guard let index = previews.firstIndex(where: { $0.group.id == id }) else { return }
-        let target = CGPoint(x: CGFloat(physicalIndex(index)) * step, y: 0)
-        if reduced || abs(target.x - scrollView.contentOffset.x) < 1 {
-            applying = true
-            scrollView.setContentOffset(target, animated: false)
-            applying = false
-            lastFocusedID = id
+        guard let rect = frame(for: id) else { return }
+        let target = CGPoint(x: 0, y: clampedOffset(rect.minY - contentInsets.top - Spacing.double))
+        if visibleIDs.contains(id) || reduced || abs(target.y - scrollView.contentOffset.y) < 1 {
+            if !visibleIDs.contains(id) { scrollView.setContentOffset(target, animated: false) }
             completion()
         } else {
             focusCompletion = completion
@@ -168,46 +262,50 @@ final class CanvasStackBrowserView: UIView, UIScrollViewDelegate {
         }
     }
 
-    /// 控件在同一时间轴渐显，不与独立纸面争夺显示权。
+    /// 数量控件和纸面共用既有转场时间轴。
     func setChromeVisible(_ visible: Bool) {
         chromeVisible = visible
         piles.values.forEach { $0.countLabel.alpha = visible ? 1 : 0 }
     }
 
-    /// 新手势取消程序性返回和待展开请求，但不改变阅读身份。
+    /// 新拖动取消待展开请求，正文预览仍可继续准备。
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
         focusCompletion = nil
+        pendingViewport = nil
+        scrollSpeed = 0
+        lastScrollTime = CACurrentMediaTime()
         onInteraction?()
+        onDemand?()
     }
-    /// 由系统预测减速落点，快滑可跨多堆；慢拖按最近中心吸附，不在结束后追加纠偏。
-    func scrollViewWillEndDragging(_ scrollView: UIScrollView, withVelocity velocity: CGPoint,
-                                  targetContentOffset: UnsafeMutablePointer<CGPoint>) {
-        guard !previews.isEmpty else { return }
-        var page = (targetContentOffset.pointee.x / step).rounded()
-        if abs(velocity.x) > 0.35 {
-            let currentPage = scrollView.contentOffset.x / step
-            page = velocity.x > 0 ? max(page, floor(currentPage) + 1) : min(page, ceil(currentPage) - 1)
-        }
-        targetContentOffset.pointee.x = min(CGFloat(previews.count - 1), max(0, page)) * step
-    }
-    /// 浏览焦点只用于预览需求，不回写当前书摘。
-    func scrollViewDidScroll(_ scrollView: UIScrollView) {
-        if scrollView.isDragging {
-            let velocity = scrollView.panGestureRecognizer.velocity(in: scrollView).x
-            if abs(velocity) > 1 {
-                preferredDirection = (velocity < 0 ? 1 : -1) * (effectiveUserInterfaceLayoutDirection == .rightToLeft ? -1 : 1)
-            }
-        }
-        guard !applying, focusCompletion == nil, let id = focusedID, id != lastFocusedID else { return }
-        lastFocusedID = id
-        onFocus?(id)
-    }
-    /// 惯性结束后才允许等量补偿有界预览窗口。
-    func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) { onStable?() }
-    /// 无惯性的短拖动也需补齐邻堆。
-    func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) { if !decelerate { onStable?() } }
 
-    /// 原生横移结束后再展开目标，避免一边移动一边更换正文。
+    /// 滚动只更新预览需求，不提交阅读身份或吸附位置。
+    func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        guard !applying else { return }
+        let delta = scrollView.contentOffset.y - lastOffsetY
+        let now = CACurrentMediaTime()
+        let elapsed = now - lastScrollTime
+        if elapsed > 0.001, elapsed < 0.25 {
+            scrollSpeed = scrollSpeed * 0.7 + abs(delta) / elapsed * 0.3
+        }
+        lastScrollTime = now
+        if abs(delta) > 1 { preferredDirection = delta > 0 ? 1 : -1 }
+        lastOffsetY = scrollView.contentOffset.y
+        if let id = focusedID, id != lastFocusedID {
+            lastFocusedID = id
+            onFocus?(id)
+        }
+        onDemand?()
+    }
+
+    /// 惯性结束只校准预取需求，内容接入无需等待此事件。
+    func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) { scrollSpeed = 0; onStable?() }
+
+    /// 无惯性的短拖动也会触发边缘补齐与失败重试。
+    func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+        if !decelerate { onStable?() }
+    }
+
+    /// 程序定位结束后执行原桌面恢复，不能在滚动中替换动画端点。
     func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
         let completion = focusCompletion
         focusCompletion = nil
@@ -216,22 +314,31 @@ final class CanvasStackBrowserView: UIView, UIScrollViewDelegate {
         if completion == nil { onStable?() }
     }
 
-    /// 辅助功能沿目录顺序浏览，空间方向随 RTL 镜像。
+    /// 辅助功能沿纵向翻阅可见区域，网格朗读顺序保持逐行。
     override func accessibilityScroll(_ direction: UIAccessibilityScrollDirection) -> Bool {
-        guard let id = focusedID, let index = previews.firstIndex(where: { $0.group.id == id }) else { return false }
-        let delta = direction == .left ? 1 : direction == .right ? -1 : 0
-        let next = index + (effectiveUserInterfaceLayoutDirection == .rightToLeft ? -delta : delta)
-        guard next != index, previews.indices.contains(next) else { return false }
-        let nextPreview = previews[next]
-        focus(nextPreview.group.id) { [weak self] in
-            self?.onStable?()
-            UIAccessibility.post(notification: .pageScrolled, argument: "\(nextPreview.group.members.count) 条书摘")
-        }
+        guard direction == .up || direction == .down else { return false }
+        let target = clampedOffset(scrollView.contentOffset.y + (direction == .up ? -1 : 1) * visibleRect.height * 0.8)
+        guard abs(target - scrollView.contentOffset.y) > 1 else { onStable?(); return false }
+        scrollView.setContentOffset(CGPoint(x: 0, y: target), animated: false)
+        onStable?()
+        UIAccessibility.post(notification: .pageScrolled, argument: nil)
         return true
     }
 
-    /// 辅助功能退出和可见返回按钮使用同一个恢复路径。
+    /// 辅助功能退出沿用返回原桌面的恢复路径。
     override func accessibilityPerformEscape() -> Bool { onReturn?(); return true }
+
+    /// 行内两个纸堆共用纵向定位边界。
+    private func frame(for id: NoteReviewCanvasStackID) -> CGRect? {
+        guard let index = rows.firstIndex(where: { $0.contains { $0.group.id == id } }),
+              rowFrames.indices.contains(index) else { return nil }
+        return rowFrames[index]
+    }
+
+    /// 内容较少时不制造额外可滚动的空白页。
+    private func clampedOffset(_ y: CGFloat) -> CGFloat {
+        min(max(0, y), max(0, scrollView.contentSize.height - scrollView.bounds.height))
+    }
 }
 
 /// 纸堆是 UIControl；触摸交给纸堆后继续移动，仍须允许原生滚动取消点击。
@@ -264,6 +371,8 @@ private final class CanvasStackPileView: UIControl {
         countLabel.textAlignment = .center
         countLabel.font = ReadingContentTypography.uiAnnotation
         countLabel.textColor = NoteReviewCanvasAppearance.secondary
+        countLabel.numberOfLines = 0
+        countLabel.adjustsFontForContentSizeCategory = true
         addSubview(countLabel)
         isAccessibilityElement = true
         accessibilityTraits = .button
@@ -284,13 +393,25 @@ private final class CanvasStackPileView: UIControl {
         countLabel.frame = CGRect(x: center.x - width / 2, y: bottom + Spacing.double, width: width, height: 28)
     }
 
-    /// 以整个真实纸堆（含背纸和数量）的边界居中，不以最前纸张中心代替整体中心。
-    func arrangeCentered(center: CGPoint, width: CGFloat) {
-        let poses = CanvasStackLayout.poses(sizes: papers.map { $0.content.logicalSize }, center: center, cardWidth: width, reduced: reduced)
-        let paperBounds = poses.reduce(CGRect.null) { $0.union($1.boundingFrame) }
-        let countBottom = (poses.first?.boundingFrame.maxY ?? center.y) + Spacing.double + 28
-        let middle = (paperBounds.minY + max(paperBounds.maxY, countBottom)) / 2
-        arrange(center: CGPoint(x: center.x, y: center.y + center.y - middle), width: width)
+    /// 行高包含全部真实背纸及动态数量文字，不以最前纸张的高度代替整堆。
+    func gridHeight(width: CGFloat) -> CGFloat {
+        let paperBounds = gridPaperBounds(width: width)
+        return ceil(paperBounds.height + Spacing.double + countLabel.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height)
+    }
+
+    /// 整堆边界顶对齐，数量保持自身语义字号，不参与纸面缩放。
+    func arrangeTopAligned(width: CGFloat) {
+        let paperBounds = gridPaperBounds(width: width)
+        arrange(center: CGPoint(x: bounds.midX - paperBounds.midX, y: -paperBounds.minY), width: width)
+        let labelHeight = ceil(countLabel.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height)
+        countLabel.frame = CGRect(x: (bounds.width - width) / 2, y: paperBounds.height + Spacing.double,
+                                 width: width, height: labelHeight)
+    }
+
+    /// 绘制与测量复用同一组纸张端点，包含背纸旋转后的边界。
+    private func gridPaperBounds(width: CGFloat) -> CGRect {
+        CanvasStackLayout.poses(sizes: papers.map { $0.content.logicalSize }, center: .zero, cardWidth: width, reduced: reduced)
+            .reduce(CGRect.null) { $0.union($1.boundingFrame) }
     }
 
     /// 捕获端点的等比变换，供收拢或展开时直接连续接管。

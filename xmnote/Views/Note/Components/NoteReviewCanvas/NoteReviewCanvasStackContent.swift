@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 接收现有纸面端点、不可变字形、输出密度与取消令牌
- * [OUTPUT]: 提供保留真实排版的纸张像素，卡片堆不认识字体或富文本
+ * [OUTPUT]: 提供保留真实排版的纸张像素与有界网格预览预算，卡片堆不认识字体或富文本
  * [POS]: NoteReviewCanvas 内容层与堆叠骨架之间的窄边界
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -28,7 +28,9 @@ nonisolated struct CanvasStackPaperBacking: Sendable {
 /// 同一内容入口供静态堆叠与运动代理消费，绘制不依赖卡片 UIView。
 nonisolated enum CanvasStackContentRenderer {
     static let maximumPreviewLongEdge: CGFloat = 1_024
-    static let previewBudget = 16 * 1_024 * 1_024
+    static let maximumPreviewStacks = 32
+    static let previewBudget = 64 * 1_024 * 1_024
+    static let stackPixelBudget = previewBudget / maximumPreviewStacks
     static let transitionBudget = 64 * 1_024 * 1_024
 
     /// 准备队列独占 CGContext，只消费已解析字形；逐张检查取消，后台结果不可再变更。
@@ -126,7 +128,7 @@ final class CanvasStackPaperView: UIView {
     }
 }
 
-/// 预览窗口最多五堆；后纸只保存可见的真实正文区域，避免缓存整张不可见高清纸。
+/// 每堆仅持有少量代表纸张；后纸只保存可见的真实正文区域，避免缓存整张不可见高清纸。
 nonisolated struct CanvasStackPreview: Sendable {
     let group: NoteReviewCanvasStackGroup
     let papers: [CanvasStackPaperContent]

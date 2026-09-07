@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 接收 Session 目录区域和用户请求的目标模式
- * [OUTPUT]: 提供有界局部内容与按需瀑布流排版，不触发全量正文准备
+ * [OUTPUT]: 提供有界局部内容与独立字号的按需瀑布流排版，不触发全量正文准备
  * [POS]: 生产与测试共用总览的目录接入层；保持现有相机与转场 owner
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -80,22 +80,25 @@ nonisolated enum CanvasOverviewDirectoryWaterfallPreparation {
             accessibility: model.style.traits.preferredContentSizeCategory.isAccessibilityCategory,
             regularWidth: model.style.traits.horizontalSizeClass == .regular).cardWidth
         var contents: [CanvasOverviewPaperContentGeometry] = []
+        var notes: [CanvasOverviewNote] = []
         for (index, old) in model.notes.enumerated() {
             guard !cancellation.isCancelled, let key = old.key else { return nil }
-            let note: CanvasOverviewNote
-            if let pin = pins[old.id] { note = old.restoringPreview(pin.value) }
+            let sourceNote: CanvasOverviewNote
+            if let pin = pins[old.id] { sourceNote = old.restoringPreview(pin.value) }
             else if let source = byID[old.id], old.revision == CanvasOverviewSourceRevision(source),
-                    let restored = CanvasOverviewTextFactory.makeRealNotes([source], style: model.style,
+                    let restored = CanvasOverviewTextFactory.makeRealNotes([source], style: model.waterfallStyle,
                                                                           cancellation: cancellation).first {
-                note = restored
+                sourceNote = restored
             } else { return nil }
+            let note = sourceNote.reflowed(for: model.waterfallStyle)
+            notes.append(note.cached(in: store, generation: key.generation))
             let content = CanvasOverviewGeometryBuilder.makeContentGeometry(note: note, width: width)
             let fallback = atlas.append(index: index, note: note, content: content, width: width, style: model.waterfallStyle)
             contents.append(content.cached(in: store,
-                key: .init(generation: key.generation, noteID: old.id, width: -Int(width)), fallback: fallback))
+                key: .init(generation: key.generation, noteID: old.id, width: -Int(width), typography: .waterfall), fallback: fallback))
         }
         atlas.finish()
-        return CanvasOverviewGeometryBuilder.makeWaterfall(notes: model.notes, viewportSize: viewport,
+        return CanvasOverviewGeometryBuilder.makeWaterfall(notes: notes, viewportSize: viewport,
             traits: model.style.traits, cancellation: cancellation, preparedContents: contents)
     }
 }
