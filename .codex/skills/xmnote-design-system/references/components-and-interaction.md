@@ -79,6 +79,8 @@ XMSettingsPage {
 
 ### 双行 Settings 私有行
 
+`XMSettingsToggleRow` 的单标题合同不包含 subtitle；带从属说明的开关优先页面私有组合，不向公共行追加可选说明参数。先确定说明是整行宽度还是左列宽度，并核对多行时的开关对齐、点击热区与辅助技术语义。微信读书伴随式操作面板采用左列说明、标题中心对齐和 `Spacing.half`，边界见 [业务 Sheet](sheets.md)；它不改变下述普通 Settings 行的默认组合。
+
 双行说明、图标化入口和异步业务状态仍保持 feature 私有，但已有稳定的 Settings 组合语法：
 
 - 使用 `XMSettingsPageLayout.detailRowMinHeight`（当前 64pt）作为最小高度，只消费 token，不复制当前数值；不要设置固定高度。单行 canonical 行当前 52pt 的内部高度不用于双行行型。
@@ -125,19 +127,16 @@ XMSettingsPage {
 
 ## 普通按钮与输入控件
 
-机器目录目前没有可泛化到所有业务的主按钮或通用表单字段组件；catalog 缺席时使用原生控件和页面私有组合，不得从未登记文件或某个 feature 的私有按钮反推公共规范。
+机器目录目前没有可泛化到所有业务的主按钮或通用表单字段组件；catalog 缺席时使用原生控件和页面私有组合。按钮的项目设计选择由 [按钮样式与主操作](buttons-and-primary-actions.md) 明确授权，不得从未登记文件或某个 feature 的私有按钮反推公共组件身份。
 
 任务涉及文本输入焦点、键盘收起模式、滚动手势、键盘避让、提交前失焦或 UIKit first responder 桥接时，必须同时读取 [软键盘与输入焦点](keyboard-and-focus.md)。本文件只决定输入控件归位与视觉语义，不重复维护键盘策略。
 
-按钮先按任务成本分层：
+按钮的角色矩阵、材质、按压及加载状态统一读取 [按钮样式与主操作](buttons-and-primary-actions.md)，本节只维护归位边界：
 
-- 页面唯一的提交、创建或确认可以使用 `primaryActionFill + primaryActionForeground`；标准业务 Sheet 的提交外观与位置由 [业务 Sheet](sheets.md) 和 scaffold 持有，不在内容层重建。同一任务面内通常只保留一个同权主按钮。
-- 取消、返回、筛选、排序、更多和辅助跳转保持系统/中性色，不因可点击就使用品牌填充。
-- 删除与不可逆操作使用原生 destructive role 和 `feedbackError` 语义，不与品牌主按钮伪装成同一层级。
-- 原生 `.bordered` 会消费环境 tint，不能仅凭系统样式名称把它当作中性次级按钮；必须显式确认 tint 来源，并按 [颜色、表层、图标与材质](color-surfaces-and-material.md) 的操作按钮前景—背景配对规则选择语义色。
-- 标签使用结果明确的动词；图标不能是唯一语义。按钮保持 `InteractionMetrics.minimumTouchTarget`，处理中文字宽度、Dynamic Type 和 loading 前后宽度稳定。
-- 写入开始立即禁用来源；按钮内可以显示局部 spinner 和“保存中…”等状态，但业务 phase 不进入通用 ButtonStyle。失败后恢复可操作并保留上下文。
-- 不为普通按钮自行增加玻璃、渐变、重阴影或胶囊；只有 catalog 返回的场景 owner 才能提供这些外观。
+- 优先使用匹配场景的 canonical owner；无匹配时，可按已批准的按钮规则使用原生 API 和功能内组合，不为统一样式提前创建公共按钮。
+- 标准业务 Sheet 的提交位置与顶部外观由 [业务 Sheet](sheets.md) 和 scaffold 持有，页面不重复提交入口或覆盖内部玻璃。
+- 功能内 `ButtonStyle` 只持有视觉和控件状态；Repository、业务 phase、异步任务及错误恢复仍由页面 owner 持有。
+- 配色与环境 tint 按 [颜色、表层与材质](color-surfaces-and-material.md) 审查，命中范围按本文件的 [点击热区与控件语义](#点击热区与控件语义) 验证；不能仅凭样式名称判为中性或合规。
 
 输入先保留系统行为，再添加业务边界：
 

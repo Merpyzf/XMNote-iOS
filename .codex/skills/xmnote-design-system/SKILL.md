@@ -35,6 +35,8 @@ description: 为 XMNote 的 iOS/SwiftUI/UIKit 界面提供项目级设计系统�
 
 不要把“读取 owner”当作完成。对任务涉及的每个设计维度，都必须说明：内容或控件的语义角色、选择的 token/组件及 owner、为什么不选相邻入口、需要验证的状态。实现中使用当前 owner 的真实数值；Skill 参考中的数值只用于理解既有层级，不能复制为页面字面量。
 
+排版检查必须先区分页面标题、设置项标签与辅助说明。设置标签不因位于 Sheet 内就升级为 headline；从属说明应与真实所属项成组。核对截图中的实际留白，并追踪行高、控件高度、文本行框与 padding 的共同作用；仅使用 Typography/Spacing 令牌不能证明层级和亲密性合规。具体场景按 [排版、间距与布局](references/typography-and-layout.md) 和 [业务 Sheet](references/sheets.md) 判断。
+
 ## 实现选择顺序
 
 按以下顺序选择方案，前一层能够解决时不得进入后一层：
@@ -53,7 +55,8 @@ description: 为 XMNote 的 iOS/SwiftUI/UIKit 界面提供项目级设计系统�
 
 - 整体信息层级、品牌表达、文案、适配或可访问性：读取 [设计语言](references/design-language.md)。
 - 字体角色、字号层级、行距、间距、圆角、描边或布局密度：读取 [排版、间距与布局](references/typography-and-layout.md)。
-- 颜色、表层、卡片、品牌 tint、操作按钮前景—背景配对、阴影或 Liquid Glass：读取 [颜色、表层与材质](references/color-surfaces-and-material.md)。
+- 按钮样式、主次操作、Sheet 底部主操作、交互式 Liquid Glass 或按压反馈：读取 [按钮样式与主操作](references/buttons-and-primary-actions.md)；先判断承载层与角色，再选择材质。
+- 颜色、表层、卡片、品牌 tint、品牌填充上的文字与选择标记、前景—背景配对、阴影或 Liquid Glass：读取 [颜色、表层与材质](references/color-surfaces-and-material.md)；区分品牌表面内容色与普通选中强调色。
 - 图标、Reicon、SF Symbols、Filled/Outline、图标资源接入或图标视觉评审：读取 [图标设计与使用](references/iconography.md)。
 - 页面或局部空态、搜索/筛选无结果、加载、失败、内容失效、保留内容错误、状态组件治理或状态视觉评审：读取 [页面状态与反馈](references/state-presentation.md)。
 - Tab、push、Sheet、full-screen cover、返回、取消、关闭、完成、收起或退出保护：读取 [导航与退出语义](references/navigation-and-dismissal.md)。
@@ -72,6 +75,8 @@ description: 为 XMNote 的 iOS/SwiftUI/UIKit 界面提供项目级设计系统�
 - 仅凭一个场景新增全局 token、公共样式、公共组件或基础设施。
 - 仅凭页面全屏、覆盖 Tab Bar、垂直转场或支持下拉 dismiss 就使用 `chevron.down`；向下箭头只表达持续状态保留、紧凑形态可见且能够重新展开的收起。
 - 用品牌色泛化“可点击”，在内容层滥用玻璃，或用卡片嵌套、渐变、重阴影和装饰动效掩盖层级问题。
+- 给系统 toolbar 或已有玻璃按钮重复叠加玻璃，或仅因动作重要就把普通内容、列表和表单行玻璃化；交互式主按钮默认只适用于 [按钮样式与主操作](references/buttons-and-primary-actions.md) 指定的功能控制层。
+- 绕过品牌表面前景语义，在页面自行固定黑白、灰色或透明白，或抵消高对比度适配；普通外观采用不透明纯白的产品默认，仍须按 [品牌表面前景](references/color-surfaces-and-material.md#品牌表面前景) 验证配对，不能用 token 名称或旧截图替代当前表面的对比度证据。
 - 在操作按钮中把品牌派生文字或图标叠加到品牌派生实心/弱填充表层，或让 `.bordered` 无审查地继承根级 `appTint`；按钮必须按语义成对选择前景与背景，并验证实际对比度。
 - 没有运行态证据却把主观观感写成已确认缺陷。
 - 通过扩大排除范围、降低规则级别或新增 baseline 消除设计系统失败。

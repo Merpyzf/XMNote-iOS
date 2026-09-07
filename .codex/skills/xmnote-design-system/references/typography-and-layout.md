@@ -172,6 +172,15 @@ SwiftUI 文本嵌入 UIKit collection/list 或依赖绝对 cell 高度时，Typo
 
 ## 布局验收
 
+### 设置标签与从属说明
+
+- 设置项是控件标签，优先复用 `SettingsTypography.rowTitle`，当前为 `bodyMedium`；页面标题、分区标题和主操作分别使用自身角色，不为统一点数把所有文本设为 headline。
+- 微信读书伴随式面板经用户确认将三个设置标签改为 `AppTypography.body`（Regular），让主操作保持视觉强调；这是该面板的局部选择，不把全局设置标签改为 Regular，也不把此前 Medium 验证通过等同于字重已经最优。
+- 从属说明使用 `SettingsTypography.rowDescription`，保留次级可读颜色；先判断它属于单项还是整个分区，再决定组合位置。单项说明不应仅因实现方便独立排到整行容器之外。
+- 实际标题—说明距离不等于一个 spacing 值：最小行高、Toggle 高度、文本行框和额外 padding 都可能产生留白。先修分组与对齐，再调整已有令牌；不得仅减小外置 padding 或用负 offset 掩盖结构问题。
+- 点击热区与文字亲密性分开处理。收紧文字不能缩小控件命中范围；多行文本旁的开关若需对齐标题，应以标题位置为依据，避免跟随整段文本中心下移。
+- 普通双行 Settings 的默认组合继续按 [组件与交互](components-and-interaction.md) 使用 `Spacing.compact`。微信读书伴随式面板经局部视觉验证使用 `Spacing.half`，说明限定左列；这是场景选择，不是全局替换。当前源码见 `xmnote/Views/Personal/DataImport/WereadImportActionPanel.swift`。
+
 - 亲密性必须反映语义：同组更近、跨组更远；不能仅因视觉整齐把不同重要度内容等距排列。
 - 先解决对齐、留白、尺寸和信息顺序，再增加卡片或装饰层。
 - 固定尺寸只留给封面比例、图表绘制、交互基线或已有组件 owner；文本容器和普通页面不得假设单一屏宽。
