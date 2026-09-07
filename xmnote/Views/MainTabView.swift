@@ -1288,6 +1288,8 @@ struct MainTabView: View {
                 contentDestination(for: route, host: .tab(hostTab))
             case .personal(let route):
                 personalDestination(for: route, hostTab: hostTab)
+            case .export(let route):
+                ExportView(route: route)
             case .debug(let route):
                 debugDestination(for: route)
             }
@@ -1633,7 +1635,7 @@ struct MainTabView: View {
         case .webdavServers:
             WebDAVServerListView()
         case .batchExport:
-            Text("笔记导出")
+            ExportView(route: ExportRoute(scope: .allBooks))
         case .desktopWeb:
             DesktopWebView()
         case .apiIntegration:

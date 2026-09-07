@@ -1,0 +1,35 @@
+{
+  "clockMillis": 1700000000000,
+  "locale": "zh-CN",
+  "timeZone": "Asia/Shanghai",
+  "book": {
+    "id": 101,
+    "name": "A:B",
+    "author": "作者",
+    "authorIntro": "",
+    "createdTime": 1700000000000,
+    "updatedTime": 1700000000000
+  },
+  "chapterTree": [],
+  "notes": [
+    {
+      "id": 201,
+      "content": "原文<br>第二行",
+      "idea": "想法",
+      "position": "12",
+      "positionUnit": 1,
+      "includeTime": true,
+      "createdTime": 1700000000000,
+      "images": [],
+      "tags": ["Web 标签"]
+    }
+  ],
+  "reviews": [],
+  "relatedNotes": [],
+  "settings": {
+    "includesDateTime": true,
+    "includesPage": true,
+    "includesTags": true,
+    "includesBookInformation": true
+  }
+}

@@ -155,7 +155,7 @@ struct DesktopWebSettingsRepositoryTests {
     }
 
     @Test
-    func exportPatchTrimsCredentialsAndIgnoresInvalidTarget() async throws {
+    func exportPatchMovesCredentialsOutOfDefaultsAndIgnoresInvalidTarget() async throws {
         let harness = try makeHarness()
         defer { harness.defaults.removePersistentDomain(forName: harness.suiteName) }
 
@@ -163,16 +163,29 @@ struct DesktopWebSettingsRepositoryTests {
             jsonData(#"{"yuqueToken":"  token  ","lastTarget":" PDF ","includePage":false}"#)
         )
         var export = try await jsonObject(from: harness.repository.exportSettingsData())
-        #expect(export["yuqueToken"] as? String == "token")
+        #expect(export["yuqueToken"] as? String == "")
+        #expect(export["yuqueHasCredential"] as? Bool == true)
         #expect(export["lastTarget"] as? String == "pdf")
         #expect(export["includePage"] as? Bool == false)
+        var runtime = try await jsonObject(from: harness.repository.exportRuntimeSettingsData())
+        #expect(runtime["yuqueToken"] as? String == "token")
 
         try await harness.repository.updateExportSettingsData(
             jsonData(#"{"lastTarget":"unsupported","notionToken":" value "}"#)
         )
         export = try await jsonObject(from: harness.repository.exportSettingsData())
         #expect(export["lastTarget"] as? String == "pdf")
-        #expect(export["notionToken"] as? String == "value")
+        #expect(export["notionToken"] as? String == "")
+        #expect(export["notionConnected"] as? Bool == false)
+        runtime = try await jsonObject(from: harness.repository.exportRuntimeSettingsData())
+        #expect(runtime["notionToken"] as? String == "")
+
+        let persistedValues = harness.defaults.dictionaryRepresentation().values.compactMap { value -> String? in
+            if let value = value as? String { return value }
+            if let value = value as? Data { return String(data: value, encoding: .utf8) }
+            return nil
+        }
+        #expect(!persistedValues.contains(where: { $0.contains("token") || $0.contains("value") }))
     }
 
     @Test
@@ -216,10 +229,17 @@ struct DesktopWebSettingsRepositoryTests {
     private func makeHarness() throws -> Harness {
         let suiteName = "DesktopWebSettingsRepositoryTests.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))
+        let credentialStore = ExportCredentialStore(
+            service: "\(suiteName).credentials",
+            backend: .memory
+        )
         return Harness(
             suiteName: suiteName,
             defaults: defaults,
-            repository: DesktopWebSettingsRepository(defaults: defaults)
+            repository: DesktopWebSettingsRepository(
+                defaults: defaults,
+                credentialStore: credentialStore
+            )
         )
     }
 

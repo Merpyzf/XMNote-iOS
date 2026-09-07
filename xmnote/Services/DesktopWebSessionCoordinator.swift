@@ -213,9 +213,9 @@ final class DesktopWebSessionCoordinator {
         let importService = DesktopWebImportService(
             repository: repositories.noteImportRepository
         )
-        let exportService = DesktopWebExportService(
-            repository: DesktopWebExportRepository(database: database, defaults: defaults),
-            settingsRepository: settingsRepository
+        let exportService = DesktopWebUnifiedExportAdapter(
+            repository: repositories.exportRepository,
+            isPremiumProvider: isPremiumProvider
         )
         apiAdapter.configureExternalServices(
             export: exportService,

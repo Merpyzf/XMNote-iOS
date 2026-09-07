@@ -14,8 +14,234 @@ nonisolated struct DesktopWebNotionExportPage {
     let body: [String: Any]
 }
 
+/// Android v45 持续同步的最小正文单元；每个单元独立比较来源与 Notion 端指纹。
+nonisolated struct DesktopWebNotionContentUnit {
+    let key: String
+    let contentType: String
+    let isUserRecord: Bool
+    let sourceID: Int64
+    let sourceUpdatedAtMilliseconds: Int64
+    let anchorKey: String
+    let isDeletable: Bool
+    let blocks: [[String: Any]]
+}
+
+/// 单页正文与稳定内容单元的同源草稿，避免页面 JSON 和同步映射分别生成后发生顺序漂移。
+nonisolated struct DesktopWebNotionManagedPageDraft {
+    let body: [String: Any]
+    let units: [DesktopWebNotionContentUnit]
+    let selectedContentTypes: Set<String>
+
+    var children: [[String: Any]] {
+        units.flatMap(\.blocks)
+    }
+}
+
 /// 复刻 Android NotionGenerator 的 2,000 UTF-16 单元文本切片与 100 block 分页行为。
 nonisolated enum DesktopWebNotionExportGenerator {
+    /// 生成 Android v45 持续同步使用的单页正文；100 Block 仅是单次请求限制，不再拆成多页。
+    static func managedPageBody(
+        snapshot: ExportBookSnapshot,
+        selection: DesktopWebExportContentSelection,
+        settings: [String: Any]
+    ) -> [String: Any] {
+        managedPageDraft(snapshot: snapshot, selection: selection, settings: settings).body
+    }
+
+    /// 按 Android NotionPageDraft 的 unit_key、ownership、anchor 与正文顺序生成持续同步草稿。
+    static func managedPageDraft(
+        snapshot: ExportBookSnapshot,
+        selection: DesktopWebExportContentSelection,
+        settings: [String: Any]
+    ) -> DesktopWebNotionManagedPageDraft {
+        let bundle = DesktopWebExportBundle(
+            book: snapshot.book,
+            notes: snapshot.notes,
+            reviews: snapshot.reviews,
+            related: snapshot.relatedNotes
+        )
+        var units: [DesktopWebNotionContentUnit] = []
+        var bookInfoBlocks: [[String: Any]] = [heading1("书籍信息")]
+        let info = bookInfo(bundle.book, noteCount: selection.note ? bundle.notes.count : 0)
+        if !info.isEmpty { bookInfoBlocks.append(paragraph(info)) }
+        if settings.bool("includeBookInfo", fallback: true) {
+            if !bundle.book.summary.isEmpty {
+                bookInfoBlocks.append(heading2("书籍简介"))
+                bookInfoBlocks += limitedTextList(bundle.book.summary).filter { !$0.isEmpty }.map { paragraph($0) }
+            }
+            if !bundle.book.authorIntro.isEmpty {
+                bookInfoBlocks.append(heading2("作者简介"))
+                bookInfoBlocks += limitedTextList(bundle.book.authorIntro).filter { !$0.isEmpty }.map { paragraph($0) }
+            }
+        }
+        units.append(.init(
+            key: "book_info:\(bundle.book.id)",
+            contentType: "BOOK_INFO",
+            isUserRecord: false,
+            sourceID: bundle.book.id,
+            sourceUpdatedAtMilliseconds: max(bundle.book.updatedTime, bundle.book.lastModifiedTime ?? 0),
+            anchorKey: "",
+            isDeletable: false,
+            blocks: bookInfoBlocks
+        ))
+
+        let hasNotes = selection.note && !bundle.notes.isEmpty
+        let hasReviews = selection.review && !bundle.reviews.isEmpty
+        let hasRelated = selection.relevant && !bundle.related.isEmpty
+        if hasNotes || hasReviews || hasRelated {
+            units.append(.init(
+                key: "structure:toc",
+                contentType: "STRUCTURE",
+                isUserRecord: false,
+                sourceID: 0,
+                sourceUpdatedAtMilliseconds: 0,
+                anchorKey: "",
+                isDeletable: false,
+                blocks: [["object": "block", "type": "table_of_contents", "table_of_contents": ["color": "default"]]]
+            ))
+        }
+        if hasNotes {
+            units.append(sectionUnit(key: "notes", title: "书摘", contentType: "NOTE"))
+            var lastChapterID: Int64?
+            var currentAnchor = "section:notes"
+            for (index, note) in bundle.notes.enumerated() {
+                if let chapter = note.chapter, chapter.id != lastChapterID {
+                    let title = chapterDisplayTitle(chapter)
+                    if !title.isEmpty {
+                        currentAnchor = "chapter:\(chapter.id)"
+                        units.append(.init(
+                            key: currentAnchor,
+                            contentType: "NOTE",
+                            isUserRecord: false,
+                            sourceID: chapter.id,
+                            sourceUpdatedAtMilliseconds: 0,
+                            anchorKey: "section:notes",
+                            isDeletable: true,
+                            blocks: [heading2(title)]
+                        ))
+                    }
+                    lastChapterID = chapter.id
+                }
+                var blocks = limitedTextList(clearHTML(note.content)).filter { !$0.isEmpty }.map { paragraph($0) }
+                if let idea = note.idea.map(clearHTML), !idea.isEmpty {
+                    blocks += limitedTextList(idea).filter { !$0.isEmpty }.map { quote($0) }
+                }
+                blocks += note.images.map { imageBlock($0.url) }
+                if settings.bool("includeTag", fallback: true), !note.tags.isEmpty {
+                    blocks.append(paragraph(note.tags.map { "#\($0.name)" }.joined(separator: "  "), color: "gray"))
+                }
+                if let info = noteInfo(note, settings: settings) { blocks.append(info) }
+                if index != bundle.notes.count - 1 { blocks.append(divider()) }
+                units.append(.init(
+                    key: "note:\(note.id)",
+                    contentType: "NOTE",
+                    isUserRecord: true,
+                    sourceID: note.id,
+                    sourceUpdatedAtMilliseconds: max(note.updatedTime, note.createdTime),
+                    anchorKey: currentAnchor,
+                    isDeletable: true,
+                    blocks: blocks
+                ))
+            }
+        }
+        if hasReviews {
+            units.append(sectionUnit(key: "reviews", title: "书评", contentType: "REVIEW"))
+            for (index, review) in bundle.reviews.enumerated() {
+                var blocks: [[String: Any]] = []
+                let title = review.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !title.isEmpty { blocks.append(heading2(title)) }
+                blocks += limitedTextList(clearHTML(review.content)).filter { !$0.isEmpty }.map { paragraph($0) }
+                blocks += review.images.map { imageBlock($0.url) }
+                if settings.bool("includeDateTime", fallback: true) {
+                    blocks.append(paragraph(dateText(review.createdTime), color: "gray"))
+                }
+                if index != bundle.reviews.count - 1 { blocks.append(divider()) }
+                units.append(.init(
+                    key: "review:\(review.id)",
+                    contentType: "REVIEW",
+                    isUserRecord: true,
+                    sourceID: review.id,
+                    sourceUpdatedAtMilliseconds: max(review.updatedTime, review.createdTime),
+                    anchorKey: "section:reviews",
+                    isDeletable: true,
+                    blocks: blocks
+                ))
+            }
+        }
+        if hasRelated {
+            units.append(sectionUnit(key: "relevant", title: "相关笔记", contentType: "RELEVANT"))
+            var lastCategoryID: Int64?
+            var currentAnchor = "section:relevant"
+            for (index, item) in bundle.related.enumerated() {
+                if item.categoryID != lastCategoryID {
+                    currentAnchor = "category:\(item.categoryID)"
+                    units.append(.init(
+                        key: currentAnchor,
+                        contentType: "RELEVANT",
+                        isUserRecord: false,
+                        sourceID: item.categoryID,
+                        sourceUpdatedAtMilliseconds: 0,
+                        anchorKey: "section:relevant",
+                        isDeletable: true,
+                        blocks: [heading2(item.categoryTitle)]
+                    ))
+                    lastCategoryID = item.categoryID
+                }
+                var blocks: [[String: Any]] = []
+                if let relatedBook = item.contentBook {
+                    blocks.append(paragraph(relatedBookInfo(relatedBook)))
+                } else {
+                    if !item.title.isEmpty { blocks.append(heading3(item.title)) }
+                    blocks += limitedTextList(clearHTML(item.content)).filter { !$0.isEmpty }.map { paragraph($0) }
+                    blocks += item.images.map { imageBlock($0.url) }
+                }
+                if settings.bool("includeDateTime", fallback: true) {
+                    blocks.append(paragraph(dateText(item.createdTime), color: "gray"))
+                }
+                if index != bundle.related.count - 1 { blocks.append(divider()) }
+                units.append(.init(
+                    key: "relevant:\(item.id)",
+                    contentType: "RELEVANT",
+                    isUserRecord: true,
+                    sourceID: item.id,
+                    sourceUpdatedAtMilliseconds: max(item.updatedTime, item.createdTime),
+                    anchorKey: currentAnchor,
+                    isDeletable: true,
+                    blocks: blocks
+                ))
+            }
+        }
+
+        var result = pageTemplate(icon: "📖", cover: bundle.book.cover)
+        result["children"] = units.flatMap(\.blocks)
+        return DesktopWebNotionManagedPageDraft(
+            body: result,
+            units: units,
+            selectedContentTypes: Set([
+                selection.note ? "NOTE" : nil,
+                selection.review ? "REVIEW" : nil,
+                selection.relevant ? "RELEVANT" : nil
+            ].compactMap { $0 })
+        )
+    }
+
+    private static func sectionUnit(
+        key: String,
+        title: String,
+        contentType: String
+    ) -> DesktopWebNotionContentUnit {
+        .init(
+            key: "section:\(key)",
+            contentType: contentType,
+            isUserRecord: false,
+            sourceID: 0,
+            sourceUpdatedAtMilliseconds: 0,
+            anchorKey: "",
+            isDeletable: true,
+            blocks: [heading1(title)]
+        )
+    }
+
     /// 按 Android 固定顺序生成书评、相关、书摘页面，并为拆分页追加 `-1` 起始后缀。
     static func pages(
         bundle: DesktopWebExportBundle,
@@ -115,7 +341,7 @@ nonisolated extension DesktopWebNotionExportGenerator {
             }
             if let idea = note.idea.map(clearHTML), !idea.isEmpty {
                 for text in limitedTextList(idea) {
-                    paginator.append(callout(text))
+                    paginator.append(quote(text))
                 }
             }
             for image in note.images {
@@ -307,11 +533,11 @@ nonisolated extension DesktopWebNotionExportGenerator {
            let position = note.position,
            !position.isEmpty {
             let unit = switch note.positionUnit {
-            case 1: "页码"
-            case 3: "进度"
+            case 2: "页码"
+            case 0: "进度"
             default: "位置"
             }
-            items.append("\(unit)：\(position)\(note.positionUnit == 3 ? "%" : "")")
+            items.append("\(unit)：\(position)\(note.positionUnit == 0 ? "%" : "")")
         }
         if settings.bool("includeDateTime", fallback: true),
            note.createdTime != 0,
@@ -341,6 +567,11 @@ nonisolated extension DesktopWebNotionExportGenerator {
     /// 生成 heading_2 block。
     static func heading2(_ text: String) -> [String: Any] {
         textBlock(type: "heading_2", text: text)
+    }
+
+    /// 生成持续同步单页的一级业务分区标题。
+    static func heading1(_ text: String) -> [String: Any] {
+        textBlock(type: "heading_1", text: text)
     }
 
     /// 生成 heading_3 block。
@@ -374,19 +605,18 @@ nonisolated extension DesktopWebNotionExportGenerator {
         ]
     }
 
-    /// 生成想法 callout block。
-    static func callout(_ text: String) -> [String: Any] {
+    /// 生成新版普通 Quote；不附加旧实现的装饰性图标或蓝色背景。
+    static func quote(_ text: String) -> [String: Any] {
         [
             "object": "block",
-            "type": "callout",
-            "callout": [
+            "type": "quote",
+            "quote": [
                 "rich_text": [
                     [
                         "type": "text",
                         "text": ["content": text]
                     ]
                 ],
-                "icon": ["emoji": "💡"],
                 "color": "default"
             ]
         ]

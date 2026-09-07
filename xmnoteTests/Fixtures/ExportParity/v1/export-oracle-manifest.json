@@ -1,0 +1,22 @@
+{
+  "androidCommit": "f916f93528610a79ed4528f9decd772af383f6b7",
+  "locale": "zh-CN",
+  "timeZone": "Asia/Shanghai",
+  "fixtureSHA256": {
+    "expected-books.csv": "251ac335ae5cd4c419128cf429e389f59afb61d0a1d4eaca1f539c98bbff2f37",
+    "expected-note.md": "13c60caf13850e3d9b411a2bb9408eacdf64dcc5cd227b82a14fddc57ad06b26",
+    "expected-note.txt": "a4e6528bef4d8dfad4668d67b0e86a9b93d99295c3aa513e02084851285abc56",
+    "oracle-csv-input.json": "628c0e71ccb31164ae898424ab669de4f7fbb36dab0c6e80601ebff03f9d8c6d",
+    "oracle-input.json": "702efc10f9c4a720c4f2cfb38c7a17bf8194af341effc696942095eb04176afe",
+    "oracle-observations.json": "b427fc4759589ed6b555ad4ea55db2f6478d72d1ef0f4a6d413a31600b4be02f"
+  },
+  "androidSourceSHA256": {
+    "common/src/main/java/com/merpyzf/common/helper/export/content/note/MarkdownGenerator.kt": "eee76026d74360855a36ae4a6b34f9a7dccca492892822c437421372494ea060",
+    "common/src/main/java/com/merpyzf/common/helper/export/content/note/TextGenerator.kt": "6b176a57f06e50bda0bc78c10033eba432eadce50fa6ee4495b43d080d1fe1cc",
+    "common/src/main/java/com/merpyzf/common/helper/export/content/book/CSVGenerator.kt": "1e7a3a8aead8b3357a074c67ec41b32f6135478193163c9162f6442949d318eb",
+    "common/src/main/java/com/merpyzf/common/helper/export/content/book/BookExportFieldRegistry.kt": "e7d7e5105b1e2948a9e4f7d1055da5e4899a159e4ce2813a2734e29bef45d3cb",
+    "common/src/main/java/com/merpyzf/common/helper/export/content/pdf/ReadingNotesPdfGenerator.kt": "7eaf12016f74eb3aba81b2bbe50393ccb22255746579333ab7fa06ded67b1a9c",
+    "common/src/main/java/com/merpyzf/common/helper/export/content/note/NotionGenerator.kt": "e4ac08c16f14e083f62e9760030e1271d9071f728cfae69a6e4328a8ba5d8117",
+    "data/src/main/java/com/merpyzf/data/dao/NotionSyncDao.kt": "da4abbb8505c1436707b22dc102167f62510807e408d70c02d03db8136a24d2d"
+  }
+}

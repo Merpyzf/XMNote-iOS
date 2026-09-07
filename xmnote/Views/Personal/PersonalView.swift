@@ -422,6 +422,18 @@ extension PersonalView {
         }
     }
 
+    /// 批量导出直接进入统一导出路由，旧 PersonalRoute 仅保留恢复兼容。
+    private var exportSettingsRow: some View {
+        VStack(spacing: Spacing.none) {
+            NavigationLink(value: AppRoute.export(ExportRoute(scope: .allBooks))) {
+                rowContent(icon: .batchExport, title: "批量导出")
+            }
+            .buttonStyle(.plain)
+
+            PersonalSettingsDivider(leadingInset: Layout.rowDividerLeading)
+        }
+    }
+
     private func actionRow(
         _ icon: PersonalEntryIcon,
         _ title: String,

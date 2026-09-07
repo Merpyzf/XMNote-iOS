@@ -1,0 +1,33 @@
+{
+  "locale": "zh-CN",
+  "timeZone": "Asia/Shanghai",
+  "all29FieldsEnabled": true,
+  "book": {
+    "id": 102,
+    "name": "A:B, \"Oracle\"",
+    "cover": "https://example.com/cover.jpg",
+    "author": "作者",
+    "translator": "译者",
+    "press": "出版社",
+    "pubDate": "2023-11",
+    "isbn": "ISBN,\"1\"",
+    "sourceName": "豆瓣",
+    "purchaseDate": 1700000000000,
+    "price": 12.345,
+    "readStatus": 2,
+    "score": 85,
+    "tags": ["标签 一", "标签二"],
+    "groups": ["默认", "收藏"],
+    "doubanId": 123,
+    "type": 1,
+    "readStatusChangedTime": 1700000000000,
+    "readPosition": 12.34,
+    "currentPositionUnit": 0,
+    "recentReadTime": 1700000001000,
+    "totalPagination": 321,
+    "wordCount": 12345,
+    "totalReadingTime": 150,
+    "readDoneCount": 2,
+    "createdTime": 1700000000000
+  }
+}

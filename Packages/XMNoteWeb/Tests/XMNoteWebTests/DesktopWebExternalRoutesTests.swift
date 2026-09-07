@@ -181,6 +181,34 @@ struct DesktopWebExternalRoutesTests {
                 #expect(data["failCount"] as? Int == 0)
                 #expect(await port.lastRemoteExport()?.target == "markdown")
             }
+
+            let bookRequest = #"{"bookIds":[7],"target":"csv"}"#
+            try await client.execute(
+                uri: "/api/v1/export/books/local",
+                method: .post,
+                headers: [.contentType: "application/json"],
+                body: jsonBody(bookRequest)
+            ) { response in
+                #expect(response.status == .ok)
+                #expect(response.headers[.contentType] == "text/csv; charset=utf-8")
+                #expect(response.headers[.cacheControl] == "no-store")
+                #expect(response.headers[.contentDisposition]?.contains("books.csv") == true)
+                #expect(String(buffer: response.body) == "书名\nSwift Book")
+                #expect(await port.lastLocalBookExport()?.bookIds == [7])
+            }
+
+            let notionBookRequest = #"{"bookIds":[7],"target":"notion"}"#
+            try await client.execute(
+                uri: "/api/v1/export/books/remote",
+                method: .post,
+                headers: [.contentType: "application/json"],
+                body: jsonBody(notionBookRequest)
+            ) { response in
+                let data = try envelopeData(response)
+                #expect(data["total"] as? Int == 1)
+                #expect(data["successCount"] as? Int == 1)
+                #expect(await port.lastRemoteBookExport()?.target == "notion")
+            }
         }
     }
 
@@ -455,6 +483,8 @@ private actor ExternalPortStub:
     private var coverRequest: (bookID: Int64, expires: Int64?, signature: String?)?
     private var localExport: DesktopWebNoteExportRequest?
     private var remoteExport: DesktopWebNoteExportRequest?
+    private var localBookExport: DesktopWebBookExportRequest?
+    private var remoteBookExport: DesktopWebBookExportRequest?
     private var importFile: DesktopWebUploadedFile?
     private var importCommit: (id: String, request: DesktopWebImportTaskCommitRequest)?
     private var deletedImportID: String?
@@ -538,6 +568,20 @@ private actor ExternalPortStub:
         return .init(total: 1, successCount: 1, failCount: 0, failedItems: [])
     }
 
+    func exportBooksLocally(_ request: DesktopWebBookExportRequest) async throws -> DesktopWebExportFile {
+        localBookExport = request
+        return .init(
+            fileName: "books.csv",
+            mediaType: "text/csv; charset=utf-8",
+            data: Data("书名\nSwift Book".utf8)
+        )
+    }
+
+    func exportBooksRemotely(_ request: DesktopWebBookExportRequest) async throws -> DesktopWebRemoteExportResult {
+        remoteBookExport = request
+        return .init(total: 1, successCount: 1, failCount: 0, failedItems: [])
+    }
+
     func createImportTask(file: DesktopWebUploadedFile) async throws -> DesktopWebImportTaskCreateResponse {
         importFile = file
         return .init(taskId: "task-1", status: "parsing")
@@ -600,6 +644,8 @@ private actor ExternalPortStub:
     func lastCoverRequest() -> (bookID: Int64, expires: Int64?, signature: String?)? { coverRequest }
     func lastLocalExport() -> DesktopWebNoteExportRequest? { localExport }
     func lastRemoteExport() -> DesktopWebNoteExportRequest? { remoteExport }
+    func lastLocalBookExport() -> DesktopWebBookExportRequest? { localBookExport }
+    func lastRemoteBookExport() -> DesktopWebBookExportRequest? { remoteBookExport }
     func lastImportFile() -> DesktopWebUploadedFile? { importFile }
     func lastImportCommit() -> (id: String, request: DesktopWebImportTaskCommitRequest)? { importCommit }
     func lastDeletedImportID() -> String? { deletedImportID }

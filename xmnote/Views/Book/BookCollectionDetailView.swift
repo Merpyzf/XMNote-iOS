@@ -403,7 +403,28 @@ private struct BookCollectionDetailContentView: View {
     @ViewBuilder
     private var moreMenuContent: some View {
         Section {
-            // TODO(book-collection-batch-export, review-skip): Android 详情页支持“批量导出书籍”；本次按用户要求暂缓实现，迁移审查请跳过此项。
+            Button {
+                navigationCoordinator.push(.export(ExportRoute(
+                    scope: .collectionID(viewModel.collectionID),
+                    initialKind: .noteExcerpt
+                )))
+            } label: {
+                Label("导出书摘", systemImage: "text.quote")
+            }
+            .disabled(!canUseCollectionExportAction)
+
+            Button {
+                navigationCoordinator.push(.export(ExportRoute(
+                    scope: .collectionID(viewModel.collectionID),
+                    initialKind: .bookInformation
+                )))
+            } label: {
+                Label("导出书籍信息", systemImage: "tablecells")
+            }
+            .disabled(!canUseCollectionExportAction)
+
+            Divider()
+
             Button {
                 guard canUseCollectionExportAction else { return }
                 viewModel.shareCurrentCollectionImage()

@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖五个主 Tab 及各业务模块中仅表达可返回浏览页面的 Codable 路由
+ * [INPUT]: 依赖五个主 Tab 及各业务模块中仅表达可返回浏览页面的 Codable 路由，包括不保存运行态的导出路由
  * [OUTPUT]: 对外提供 AppRoute、AppTaskRoute、NavigationSceneSnapshot 路径净化与原子浏览状态
  * [POS]: Navigation 模块的类型安全路由边界，隔离可持久化浏览栈与一次性全屏任务栈
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -19,6 +19,7 @@ enum AppRoute: Hashable, Codable {
     case note(NoteRoute)
     case content(ContentRoute)
     case personal(PersonalRoute)
+    case export(ExportRoute)
     case debug(DebugRoute)
 
     /// 浏览枚举已经在类型层排除任务目标，因此成功解码的统一路由都可持久化。

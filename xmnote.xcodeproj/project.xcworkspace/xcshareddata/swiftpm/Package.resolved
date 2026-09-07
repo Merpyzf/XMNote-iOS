@@ -1,5 +1,5 @@
 {
-  "originHash" : "625c6b7596170190bd416f6d7d2ed4088d2f714325b800e0607f5d35bcbcd2d9",
+  "originHash" : "d119cac6adb3e1080dbebba949e02cb4ee19886bb79b887de87d4603e640ad04",
   "pins" : [
     {
       "identity" : "alamofire",
@@ -96,6 +96,15 @@
       "location" : "https://github.com/junyan72/iosMath",
       "state" : {
         "revision" : "ba9ab7729b151329c54fd895a7c1859981d9484c"
+      }
+    },
+    {
+      "identity" : "microsoft-authentication-library-for-objc",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/AzureAD/microsoft-authentication-library-for-objc.git",
+      "state" : {
+        "revision" : "6ec4d48696fc254f96e1be59f503251effa8b4a7",
+        "version" : "2.14.1"
       }
     },
     {

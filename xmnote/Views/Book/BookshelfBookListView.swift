@@ -329,6 +329,24 @@ private struct BookshelfBookListContentView: View {
         }
     }
 
+    /// 二级书架列表把导出意图转成当前 Tab 路由，并保持 ViewModel 冻结的选择顺序。
+    private func performEditAction(_ action: BookshelfBookListEditAction) {
+        switch action {
+        case .exportNote:
+            navigationCoordinator.push(.export(ExportRoute(
+                scope: .bookIDs(viewModel.selectedBookIDs),
+                initialKind: .noteExcerpt
+            )))
+        case .exportBook:
+            navigationCoordinator.push(.export(ExportRoute(
+                scope: .bookIDs(viewModel.selectedBookIDs),
+                initialKind: .bookInformation
+            )))
+        default:
+            viewModel.performEditAction(action)
+        }
+    }
+
     private var isEditActionBusy: Bool {
         viewModel.activeWriteAction != nil || viewModel.isLoadingBatchOptions
     }

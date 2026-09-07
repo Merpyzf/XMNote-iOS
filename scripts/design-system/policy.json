@@ -187,7 +187,8 @@
       "matchInferred": true,
       "allowedPaths": [
         "xmnote/Utilities/DesignSystem/ColorConstruction.swift",
-        "xmnote/Views/Personal/Components/AIPromptEditorAppearance.swift"
+        "xmnote/Views/Personal/Components/AIPromptEditorAppearance.swift",
+        "xmnote/Services/ExportPDFGenerator.swift"
       ],
       "replacement": "Color 语义成员或登记后的局部 Appearance"
     },
@@ -216,6 +217,7 @@
         "xmnote/Utilities/DesignSystem/ColorConstruction.swift",
         "xmnote/Views/Note/Components/NoteReviewPalette+UI.swift",
         "xmnote/RichTextEditor/HighlightColors.swift",
+        "xmnote/Services/ExportPDFGenerator.swift",
         "xmnote/ViewModels/Book/BookCollectionDetailViewModel.swift",
         "xmnote/ViewModels/Note/NoteReviewShareImageRenderer.swift",
         "xmnote/Views/Book/Components/BookReadingDetailContent.swift",
@@ -299,6 +301,7 @@
         "xmnote/UIComponents/Charts/MonthlyReadingChart.swift",
         "xmnote/UIComponents/Media/Attachments/XMAttachmentUploadStrip.swift",
         "xmnote/RichTextEditor/RichTextEditorView.swift",
+        "xmnote/Services/ExportPDFGenerator.swift",
         "xmnote/ViewModels/Book/BookCollectionDetailViewModel.swift",
         "xmnote/ViewModels/Note/NoteReviewShareImageRenderer.swift",
         "xmnote/Views/Book/BookshelfTypography.swift",

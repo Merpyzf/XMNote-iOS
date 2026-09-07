@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 UserDefaults 持久化 Web 专属设置，并复用书籍录入偏好键保持 App/Web 写入一致
- * [OUTPUT]: 对外提供设置快照、Android 局部 Patch 归一化、访问码校验与导出设置读写
+ * [INPUT]: 依赖 UserDefaults 持久化 Web 非敏感设置、ExportSettingsStore 与 Keychain 凭据，并复用书籍录入偏好键保持 App/Web 写入一致
+ * [OUTPUT]: 对外提供设置快照、Android 局部 Patch 归一化、访问码校验、脱敏导出设置和仅供执行期使用的凭据快照
  * [POS]: Data 层网页设置仓储；不依赖 XMNoteWeb、HTTP、SwiftUI 或数据库类型
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -45,16 +45,23 @@ actor DesktopWebSettingsRepository {
 
     private static let accessCodeCharacters = Array("abcdefghijklmnopqrstuvwxyz0123456789")
     private static let validExportTargets: Set<String> = [
-        "yuque", "notion", "siyuan", "obsidian", "pdf", "markdown", "text"
+        "yuque", "notion", "onenote", "siyuan", "obsidian", "pdf", "markdown", "text"
     ]
     private static let defaultStatusKeys = [
         "wantRead", "startReading", "readDone", "abandon", "onHold"
     ]
 
     private let defaults: UserDefaults
+    private let credentialStore: ExportCredentialStore
+    private let exportSettingsStore: ExportSettingsStore
 
-    init(defaults: UserDefaults = .standard) {
+    init(
+        defaults: UserDefaults = .standard,
+        credentialStore: ExportCredentialStore = ExportCredentialStore()
+    ) {
         self.defaults = defaults
+        self.credentialStore = credentialStore
+        exportSettingsStore = ExportSettingsStore(defaults: defaults, credentialStore: credentialStore)
     }
 
     /// 返回完整 Web 设置 JSON；读取与书籍录入偏好快照在 actor 内串行完成。
@@ -155,51 +162,69 @@ actor DesktopWebSettingsRepository {
         defaults.set(try Self.encodeJSONObject(current), forKey: Keys.webSettings)
     }
 
-    /// 返回 Android NoteExportSettingsDto 的完整 JSON，包括其现有明文凭据字段。
-    func exportSettingsData() throws -> Data {
-        try Self.encodeJSONObject(loadExportSettings())
+    /// 返回脱敏导出设置；只公开 hasCredential，旧凭据字段始终为空，避免 Web 响应泄露 Keychain 内容。
+    func exportSettingsData() async throws -> Data {
+        let settings = await exportSettingsStore.settings()
+        var object = Self.exportSettingsObject(settings)
+        object["yuqueHasCredential"] = await credentialStore.contains(.yuqueToken)
+        object["notionConnected"] = await credentialStore.contains(.notionAccessToken)
+        object["oneNoteConnected"] = await credentialStore.contains(.oneNoteAccount)
+        object["siyuanHasCredential"] = await credentialStore.contains(.siYuanToken)
+        object["obsidianHasCredential"] = await credentialStore.contains(.obsidianAPIKey)
+        return try Self.encodeJSONObject(object)
     }
 
-    /// 以单次 actor 事务应用 Android UpdateNoteExportSettingsRequest 的可选字段。
-    func updateExportSettingsData(_ patchData: Data) throws {
+    /// 返回仅供导出执行期使用的设置字典；明文值不编码到 HTTP 响应、不写入 UserDefaults。
+    func exportRuntimeSettingsData() async throws -> Data {
+        let settings = await exportSettingsStore.settings()
+        var object = Self.exportSettingsObject(settings)
+        object["yuqueToken"] = try await credentialStore.value(for: .yuqueToken) ?? ""
+        object["notionToken"] = try await credentialStore.value(for: .notionAccessToken) ?? ""
+        object["siyuanToken"] = try await credentialStore.value(for: .siYuanToken) ?? ""
+        object["obsidianApiKey"] = try await credentialStore.value(for: .obsidianAPIKey) ?? ""
+        return try Self.encodeJSONObject(object)
+    }
+
+    /// 以单次 actor 事务应用 Web 局部 Patch；敏感字段进入 Keychain，旧 Notion token/page ID 明确忽略。
+    func updateExportSettingsData(_ patchData: Data) async throws {
         let patch = try Self.decodeObject(patchData)
-        var current = loadExportSettings()
-        for key in [
-            "exportNote",
-            "exportRelevant",
-            "exportReview",
-            "includeDateTime",
-            "includePage",
-            "includeTag",
-            "includeBookInfo",
-            "obsidianExportTags"
-        ] {
-            Self.assignBool(key, from: patch, to: &current)
+        var settings = await exportSettingsStore.settings()
+        if let value = patch["exportNote"] as? Bool { settings.content.includesNotes = value }
+        if let value = patch["exportRelevant"] as? Bool { settings.content.includesRelatedNotes = value }
+        if let value = patch["exportReview"] as? Bool { settings.content.includesReviews = value }
+        if let value = patch["includeDateTime"] as? Bool { settings.includesDateTime = value }
+        if let value = patch["includePage"] as? Bool { settings.includesPage = value }
+        if let value = patch["includeTag"] as? Bool { settings.includesTags = value }
+        if let value = patch["includeBookInfo"] as? Bool { settings.includesBookInformation = value }
+        if let value = patch["obsidianExportTags"] as? Bool { settings.obsidianExportsTags = value }
+        if let value = patch["siyuanIp"] as? String { settings.siYuanHost = value.trimmed }
+        if let value = patch["siyuanPort"] as? String, let port = Int(value.trimmed) { settings.siYuanPort = port }
+        if let value = patch["siyuanNotebookId"] as? String { settings.siYuanNotebookID = value.trimmed }
+        if let value = patch["obsidianIp"] as? String { settings.obsidianHost = value.trimmed }
+        if let value = patch["obsidianDirName"] as? String { settings.obsidianDirectory = value.trimmed }
+        if let value = patch["obsidianPinnedCertificateSHA256"] as? String {
+            settings.obsidianPinnedCertificateSHA256 = value.trimmed
         }
-        for key in [
-            "yuqueToken",
-            // TODO(DEFERRED-P0-NOTION): Android v46 已改为 OAuth 连接字段；本轮明确保留旧字段并标记 deferred。
-            "notionToken",
-            "notionPageId",
-            "siyuanIp",
-            "siyuanPort",
-            "siyuanToken",
-            "siyuanNotebookId",
-            "obsidianIp",
-            "obsidianApiKey",
-            "obsidianDirName"
-        ] {
-            if let value = patch[key] as? String {
-                current[key] = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            }
+        if let value = patch["notionDataSourceId"] as? String {
+            settings.notionDataSourceID = value.trimmed
         }
+
+        try await saveCredentialPatch(patch["yuqueToken"], credential: .yuqueToken)
+        try await saveCredentialPatch(patch["siyuanToken"], credential: .siYuanToken)
+        try await saveCredentialPatch(patch["obsidianApiKey"], credential: .obsidianAPIKey)
+        // Notion 已切换 OAuth Broker；Integration token 与 page ID 永远不再接收或迁移。
+        try? await credentialStore.remove(.notionAccessToken)
+        defaults.removeObject(forKey: Keys.notionDatabaseID)
         if let value = patch["lastTarget"] as? String {
             let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            if Self.validExportTargets.contains(normalized) {
-                current["lastTarget"] = normalized
+            if Self.validExportTargets.contains(normalized),
+               let target = Self.exportTarget(normalized),
+               target.supports(.noteExcerpt) {
+                settings.lastNoteTarget = target
             }
         }
-        defaults.set(try Self.encodeJSONObject(current), forKey: Keys.exportSettings)
+        try await exportSettingsStore.save(settings)
+        defaults.set(try Self.encodeJSONObject(Self.exportSettingsObject(settings)), forKey: Keys.exportSettings)
     }
 
     /// 返回 Android `getNotionNoteDatabaseId` 对应的内部缓存；该值不属于 Web 导出设置响应。
@@ -260,6 +285,14 @@ actor DesktopWebSettingsRepository {
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !Self.isValidAccessCode(stored) else { return stored }
         return resetAccessCode()
+    }
+
+    /// Web Patch 中省略字段表示保留；八个圆点是脱敏回显，也不得覆盖真实凭据。
+    private func saveCredentialPatch(_ rawValue: Any?, credential: ExportCredential) async throws {
+        guard let value = rawValue as? String else { return }
+        let normalized = value.trimmed
+        guard normalized != "••••••••" else { return }
+        try await credentialStore.set(normalized, for: credential)
     }
 
     private func loadWebSettings() -> [String: Any] {
@@ -439,6 +472,7 @@ actor DesktopWebSettingsRepository {
             "yuqueToken": "",
             "notionToken": "",
             "notionPageId": "",
+            "notionDataSourceId": "",
             "siyuanIp": "",
             "siyuanPort": "6806",
             "siyuanToken": "",
@@ -449,6 +483,42 @@ actor DesktopWebSettingsRepository {
             "obsidianExportTags": true,
             "lastTarget": "markdown"
         ]
+    }
+
+    /// 把统一领域设置映射为既有 Desktop Web 字段，并强制所有历史明文凭据字段为空。
+    private static func exportSettingsObject(_ settings: ExportSettingsSnapshot) -> [String: Any] {
+        [
+            "exportNote": settings.content.includesNotes,
+            "exportRelevant": settings.content.includesRelatedNotes,
+            "exportReview": settings.content.includesReviews,
+            "includeDateTime": settings.includesDateTime,
+            "includePage": settings.includesPage,
+            "includeTag": settings.includesTags,
+            "includeBookInfo": settings.includesBookInformation,
+            "yuqueToken": "",
+            "notionToken": "",
+            "notionPageId": "",
+            "notionDataSourceId": settings.notionDataSourceID,
+            "siyuanIp": settings.siYuanHost,
+            "siyuanPort": String(settings.siYuanPort),
+            "siyuanToken": "",
+            "siyuanNotebookId": settings.siYuanNotebookID,
+            "obsidianIp": settings.obsidianHost,
+            "obsidianApiKey": "",
+            "obsidianDirName": settings.obsidianDirectory,
+            "obsidianExportTags": settings.obsidianExportsTags,
+            "obsidianPinnedCertificateSHA256": settings.obsidianPinnedCertificateSHA256,
+            "lastTarget": settings.lastNoteTarget.desktopWebIdentifier
+        ]
+    }
+
+    /// 兼容旧 Web target 字符串并映射到稳定领域 case。
+    private static func exportTarget(_ value: String) -> ExportTarget? {
+        switch value {
+        case "onenote": .oneNote
+        case "siyuan": .siYuan
+        default: ExportTarget(rawValue: value)
+        }
     }
 
     private static func normalizedBookshelfPreference(_ patch: [String: Any]) -> [String: Any] {
@@ -708,5 +778,12 @@ actor DesktopWebSettingsRepository {
                 accessCodeCharacters.randomElement(using: &generator)!
             }
         )
+    }
+}
+
+private nonisolated extension String {
+    /// 导出设置字段统一去除首尾空白，不改变中间内容。
+    var trimmed: String {
+        trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
