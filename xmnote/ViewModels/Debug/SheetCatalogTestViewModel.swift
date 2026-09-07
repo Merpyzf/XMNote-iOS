@@ -1,7 +1,7 @@
 #if DEBUG
 /**
- * [INPUT]: 依赖 Foundation、Observation、仓库内 90 个既有 Sheet 调用点、113 个生产目标与 Android a4aef673293f 只读事实快照
- * [OUTPUT]: 对外提供 SheetCatalogTestViewModel、九类历史结构索引、用途/类比事实、113 个生产预览定义与逐目标展示请求
+ * [INPUT]: 依赖 Foundation、Observation、仓库内 90 个既有 Sheet 调用点、共享标签选择 owner、113 个生产目标与 Android a4aef673293f 只读事实快照
+ * [OUTPUT]: 对外提供 SheetCatalogTestViewModel、九类历史结构索引、用途/类比事实、含公共标签范围入口的 113 个生产预览定义与逐目标展示请求
  * [POS]: Debug 测试中心 Sheet 样式校准页的目录状态 owner，数据快照由 Repository 层独立负责
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -997,7 +997,7 @@ private enum SheetCatalogManifest {
         ]),
         site("note.review-settings.destination", .production, "书摘", "NoteReviewSettingsSheet", "xmnote/Views/Note/Sheets/NoteReviewSettingsSheet.swift", 51, .item, .customBusinessShell, nested: true, purpose: "在回顾设置中进一步限定参与回顾的书籍和标签", targets: [
             target("BookPickerView", "选择参与书摘回顾的书籍范围", "Android 回顾设置中的书籍范围选择", SheetCatalogAndroidEvidence.noteReviewSettings),
-            target("NoteReviewTagSelectionSheet", "选择参与回顾的标签及匹配规则", "Android 回顾设置中的标签范围选择", SheetCatalogAndroidEvidence.noteReviewSettings)
+            target("XMTagSelectionSheet · 回顾标签范围", "选择参与回顾的标签及匹配规则", "Android 回顾设置中的标签范围选择", SheetCatalogAndroidEvidence.noteReviewSettings)
         ])
     ]
 

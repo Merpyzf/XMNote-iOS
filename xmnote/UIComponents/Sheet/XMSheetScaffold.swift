@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 DesignSystem 与 XMScrollEdgeChrome，接收标题、副标题、交互锁定、关闭动作及类型安全的顶部/底部/标题栏内容槽位
- * [OUTPUT]: 对外提供基于 iOS 26 系统导航标题与副标题的统一 Sheet 根骨架、标准内容顶部间距、Sheet 主复合面板的 xmSheetContentPanel 同心圆角语义，并组合滚动回弹、安全区边缘及可选固定栏
+ * [INPUT]: 依赖 DesignSystem、XMScrollEdgeChrome 与减少动态效果环境值，接收标题、副标题、数字转场值、交互锁定、关闭动作及类型安全的顶部/底部/标题栏内容槽位
+ * [OUTPUT]: 对外提供基于 iOS 26 系统导航标题与副标题的统一 Sheet 根骨架、动态标题副行的整行数字转场、标准内容顶部间距、Sheet 主复合面板的 xmSheetContentPanel 同心圆角语义，并组合滚动回弹、安全区边缘及可选固定栏
  * [POS]: UIComponents/Sheet 的通用业务 Sheet 根骨架；Settings、Book、Tag 等模块共享，禁止 AnyView 类型擦除
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -11,6 +11,12 @@ import SwiftUI
 enum XMSheetScaffoldLayout {
     /// 普通滚动内容在系统标题安全区之后追加的标准距离；固定内容顶栏场景不消费该值。
     static let standardContentTopSpacing = Spacing.base
+}
+
+/// 集中约束动态标题副行的数字变化节奏，并为减少动态效果提供短淡变替代。
+private enum XMSheetScaffoldMotion {
+    static let numericSubtitleDuration: TimeInterval = 0.18
+    static let reducedMotionSubtitleDuration: TimeInterval = 0.12
 }
 
 extension Shape where Self == ConcentricRectangle {
@@ -59,6 +65,8 @@ struct XMSheetScaffold<
     ContentTopBar: View,
     BottomBar: View
 >: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     let title: String
     let subtitle: String?
     let onClose: () -> Void
@@ -74,6 +82,7 @@ struct XMSheetScaffold<
     private let hasCustomLeadingAction: Bool
     private let hasTrailingAction: Bool
     private let showsCustomTitleSubtitle: Bool
+    private let titleSubtitleNumericValue: Double?
     private let showsContentTopBar: Bool
     private let showsBottomBar: Bool
 
@@ -103,6 +112,7 @@ struct XMSheetScaffold<
         self.hasCustomLeadingAction = false
         self.hasTrailingAction = false
         self.showsCustomTitleSubtitle = false
+        self.titleSubtitleNumericValue = nil
         self.showsContentTopBar = false
         self.showsBottomBar = false
     }
@@ -141,6 +151,7 @@ struct XMSheetScaffold<
         self.hasCustomLeadingAction = false
         self.hasTrailingAction = true
         self.showsCustomTitleSubtitle = false
+        self.titleSubtitleNumericValue = nil
         self.showsContentTopBar = true
         self.showsBottomBar = false
     }
@@ -154,6 +165,7 @@ struct XMSheetScaffold<
         isConfirmationDisabled: Bool = false,
         isConfirming: Bool = false,
         confirmationAction: @escaping () -> Void,
+        titleSubtitleNumericValue: Double,
         @ViewBuilder titleSubtitle: () -> TitleSubtitle,
         @ViewBuilder contentTopBar: () -> ContentTopBar,
         @ViewBuilder content: () -> Content
@@ -178,6 +190,7 @@ struct XMSheetScaffold<
         self.hasCustomLeadingAction = false
         self.hasTrailingAction = true
         self.showsCustomTitleSubtitle = true
+        self.titleSubtitleNumericValue = titleSubtitleNumericValue
         self.showsContentTopBar = true
         self.showsBottomBar = false
     }
@@ -209,6 +222,7 @@ struct XMSheetScaffold<
         self.hasCustomLeadingAction = false
         self.hasTrailingAction = false
         self.showsCustomTitleSubtitle = false
+        self.titleSubtitleNumericValue = nil
         self.showsContentTopBar = false
         self.showsBottomBar = true
     }
@@ -240,6 +254,7 @@ struct XMSheetScaffold<
         self.hasCustomLeadingAction = false
         self.hasTrailingAction = false
         self.showsCustomTitleSubtitle = false
+        self.titleSubtitleNumericValue = nil
         self.showsContentTopBar = true
         self.showsBottomBar = false
     }
@@ -271,6 +286,7 @@ struct XMSheetScaffold<
         self.hasCustomLeadingAction = false
         self.hasTrailingAction = false
         self.showsCustomTitleSubtitle = false
+        self.titleSubtitleNumericValue = nil
         self.showsContentTopBar = true
         self.showsBottomBar = true
     }
@@ -281,6 +297,7 @@ struct XMSheetScaffold<
         onClose: @escaping () -> Void,
         isInteractionLocked: Bool = false,
         scrollEdgePresentation: XMScrollEdgeChromePresentation = .overlaySoft,
+        titleSubtitleNumericValue: Double,
         @ViewBuilder titleSubtitle: () -> TitleSubtitle,
         @ViewBuilder contentTopBar: () -> ContentTopBar,
         @ViewBuilder bottomBar: () -> BottomBar,
@@ -300,6 +317,7 @@ struct XMSheetScaffold<
         self.hasCustomLeadingAction = false
         self.hasTrailingAction = false
         self.showsCustomTitleSubtitle = true
+        self.titleSubtitleNumericValue = titleSubtitleNumericValue
         self.showsContentTopBar = true
         self.showsBottomBar = true
     }
@@ -328,6 +346,7 @@ struct XMSheetScaffold<
         self.hasCustomLeadingAction = true
         self.hasTrailingAction = true
         self.showsCustomTitleSubtitle = false
+        self.titleSubtitleNumericValue = nil
         self.showsContentTopBar = false
         self.showsBottomBar = false
     }
@@ -365,6 +384,7 @@ struct XMSheetScaffold<
         self.hasCustomLeadingAction = false
         self.hasTrailingAction = true
         self.showsCustomTitleSubtitle = false
+        self.titleSubtitleNumericValue = nil
         self.showsContentTopBar = false
         self.showsBottomBar = false
     }
@@ -429,9 +449,25 @@ struct XMSheetScaffold<
                         .font(AppTypography.caption2)
                         .foregroundStyle(Color.textSecondary)
                         .lineLimit(1)
+                        .contentTransition(titleSubtitleContentTransition)
+                        .animation(titleSubtitleAnimation, value: titleSubtitleNumericValue)
                 }
             }
         }
+    }
+
+    private var titleSubtitleContentTransition: ContentTransition {
+        guard let titleSubtitleNumericValue else { return .opacity }
+        return reduceMotion
+            ? .opacity
+            : .numericText(value: titleSubtitleNumericValue)
+    }
+
+    private var titleSubtitleAnimation: Animation? {
+        guard titleSubtitleNumericValue != nil else { return nil }
+        return reduceMotion
+            ? .easeOut(duration: XMSheetScaffoldMotion.reducedMotionSubtitleDuration)
+            : .snappy(duration: XMSheetScaffoldMotion.numericSubtitleDuration)
     }
 
     @ViewBuilder
@@ -565,6 +601,7 @@ struct XMSheetScaffold<
     XMSheetScaffold(
         title: "选择书籍",
         onClose: { },
+        titleSubtitleNumericValue: 1,
         titleSubtitle: {
             // 预览复现以信息展示为主、低频且非破坏性的副标题入口；保留文字自然命中范围，避免标题栏空白响应点击。
             Button("已选择 1 本") { }

@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 NoteReviewViewModel 提供回顾设置、标签选项与已选书籍回显，依赖 BookPickerView 承接书籍范围选择
- * [OUTPUT]: 对外提供采用统一设置行文本层级的 NoteReviewSettingsSheet 与标签多选 Sheet，完成书摘回顾设置编辑
+ * [INPUT]: 依赖 NoteReviewViewModel 提供回顾设置、标签选项与已选书籍回显，依赖 BookPickerView 与 XMTagSelectionSheet 承接范围选择
+ * [OUTPUT]: 对外提供采用统一设置行文本层级的 NoteReviewSettingsSheet，完成书摘回顾范围与样式编辑
  * [POS]: Note 模块业务 Sheet，服务回顾 Tab 顶部设置入口，不直接访问数据库
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -56,10 +56,22 @@ struct NoteReviewSettingsSheet: View {
                     onComplete: handleBookPickerResult
                 )
             case .tags:
-                NoteReviewTagSelectionSheet(
-                    options: viewModel.tagOptions,
-                    selectedIDs: viewModel.settings.selectedTagIDs,
-                    onComplete: handleTagSelection
+                XMTagSelectionSheet(
+                    title: "选择标签",
+                    filteringItems: viewModel.tagOptions.map {
+                        XMTagSelectionItem(
+                            id: $0.id,
+                            title: $0.title,
+                            supportingText: "\($0.noteCount) 条书摘"
+                        )
+                    },
+                    initialSelectedIDs: Set(viewModel.settings.selectedTagIDs),
+                    emptySelectionSummary: "不限标签",
+                    allowsBulkSelection: true,
+                    onSave: { selectedItems in
+                        await viewModel.updateSelectedTagIDs(selectedItems.map(\.id))
+                        return true
+                    }
                 )
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
@@ -284,10 +296,6 @@ struct NoteReviewSettingsSheet: View {
         Task { await viewModel.updateSelectedBooks(books) }
     }
 
-    private func handleTagSelection(_ ids: [Int64]) {
-        Task { await viewModel.updateSelectedTagIDs(ids) }
-    }
-
     private func consumeBackgroundPhoto() async {
         guard let selectedBackgroundPhoto else { return }
         defer { self.selectedBackgroundPhoto = nil }
@@ -425,7 +433,7 @@ private enum NoteReviewSettingsNavigationRowLayout {
     static let minimumValueScale = 0.82
 }
 
-/// 书摘回顾设置的子选择入口，展示动态摘要并打开页面私有选择器。
+/// 书摘回顾设置的子选择入口，展示动态摘要并打开对应的范围选择流程。
 private struct NoteReviewSettingsNavigationRow: View {
     let title: LocalizedStringResource
     let value: String
@@ -456,114 +464,5 @@ private struct NoteReviewSettingsNavigationRow: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(String(localized: title))，当前\(value)")
-    }
-}
-
-private struct NoteReviewTagSelectionSheet: View {
-    let options: [NoteReviewTagOption]
-    let selectedIDs: [Int64]
-    let onComplete: ([Int64]) -> Void
-
-    @Environment(\.dismiss) private var dismiss
-    @State private var draftIDs: Set<Int64>
-
-    init(
-        options: [NoteReviewTagOption],
-        selectedIDs: [Int64],
-        onComplete: @escaping ([Int64]) -> Void
-    ) {
-        self.options = options
-        self.selectedIDs = selectedIDs
-        self.onComplete = onComplete
-        self._draftIDs = State(initialValue: Set(selectedIDs))
-    }
-
-    var body: some View {
-        XMSheetScaffold(
-            title: "选择标签",
-            subtitle: draftSummary,
-            onClose: { dismiss() },
-            confirmationAction: complete
-        ) {
-            VStack(spacing: Spacing.comfortable) {
-                if options.isEmpty {
-                    XMCompactStateView(
-                        role: .empty,
-                        title: "暂无书摘标签"
-                    )
-                        .frame(minHeight: 220)
-                } else {
-                    tagGroup
-                }
-
-                Button("清空选择", role: .destructive) {
-                    draftIDs.removeAll()
-                }
-                .font(AppTypography.subheadlineMedium)
-                .frame(minHeight: InteractionMetrics.minimumTouchTarget)
-                .disabled(draftIDs.isEmpty)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(.horizontal, Spacing.screenEdge)
-            .padding(.bottom, Spacing.contentEdge)
-        }
-    }
-
-    private var tagGroup: some View {
-        XMSettingsGroup {
-            VStack(spacing: Spacing.none) {
-                ForEach(options) { option in
-                    Button {
-                        toggle(option.id)
-                    } label: {
-                        HStack(spacing: Spacing.base) {
-                            VStack(alignment: .leading, spacing: Spacing.micro) {
-                                Text(option.title)
-                                    .font(AppTypography.subheadlineSemibold)
-                                    .foregroundStyle(Color.textPrimary)
-                                    .lineLimit(1)
-
-                                Text("\(option.noteCount) 条书摘")
-                                    .font(AppTypography.caption2)
-                                    .foregroundStyle(Color.textSecondary)
-                            }
-
-                            Spacer(minLength: Spacing.base)
-
-                            XMSelectionIndicator(
-                                style: .checkbox,
-                                isSelected: draftIDs.contains(option.id),
-                                font: AppTypography.title3,
-                                showsUnselectedBase: true
-                            )
-                        }
-                        .frame(minHeight: 52)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(option.title)
-                    .accessibilityValue(draftIDs.contains(option.id) ? "已选择" : "未选择")
-                    .accessibilityAddTraits(draftIDs.contains(option.id) ? .isSelected : [])
-                }
-            }
-        }
-    }
-
-    private func complete() {
-        onComplete(options.map(\.id).filter { draftIDs.contains($0) })
-        dismiss()
-    }
-
-    private var draftSummary: String {
-        draftIDs.isEmpty ? "不限标签" : "已选择 \(draftIDs.count) 个标签"
-    }
-
-    private func toggle(_ id: Int64) {
-        if draftIDs.contains(id) {
-            draftIDs.remove(id)
-        } else {
-            draftIDs.insert(id)
-        }
     }
 }

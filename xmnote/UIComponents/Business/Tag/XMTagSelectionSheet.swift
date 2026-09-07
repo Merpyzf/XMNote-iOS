@@ -1,11 +1,20 @@
 /**
- * [INPUT]: 依赖 XMSheetScaffold、XMSystemSearchBar、XMKeywordHighlighting、XMSelectionIndicator、XMSystemAlert、LoadingGate，以及外部注入的布局偏好与标签创建/改名/删除/保存动作
- * [OUTPUT]: 对外提供 XMTagSelectionItem、XMTagSelectionLayoutConfiguration、XMTagSelectionManagementConfiguration 与 iOS 26 系统工具栏风格的 XMTagSelectionSheet
- * [POS]: UIComponents/Business/Tag 的跨模块标签选择组件，被书摘、回顾、详情、每日阅读与书架批量编辑 Sheet 复用
+ * [INPUT]: 依赖 XMSheetScaffold 的动态标题副行数字转场、XMSystemSearchBar、XMKeywordHighlighting、XMSelectionIndicator、XMSystemAlert、LoadingGate、减少动态效果环境值，以及外部注入的标签展示值、模式能力与保存动作
+ * [OUTPUT]: 对外提供支持关系编辑、范围筛选、搜索、动态选择摘要、双数字计数过渡与原位批量操作文案切换的 XMTagSelectionSheet 组件族
+ * [POS]: UIComponents/Business/Tag 的跨模块标签选择 owner，被书摘关系编辑、回顾范围筛选与书架批量编辑 Sheet 复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
+
+/// 统一标签选择 Sheet 内的数字变化、批量文案切换与按压反馈节奏。
+private enum XMTagSelectionMotion {
+    static let numericTransitionDuration = 0.18
+    static let reducedMotionNumericTransitionDuration = 0.12
+    static let bulkActionTransitionDuration = 0.12
+    static let bulkActionPressDuration = 0.10
+    static let bulkActionPressedOpacity = 0.76
+}
 
 /// 标签选择组件内部能力与当前展示状态不一致时使用的防御性错误。
 private enum XMTagSelectionSheetError: LocalizedError {
@@ -19,15 +28,17 @@ private enum XMTagSelectionSheetError: LocalizedError {
     }
 }
 
-/// 跨业务标签选择器使用的最小展示模型，只保留稳定身份与可搜索标题。
+/// 跨业务标签选择器使用的展示模型，保留稳定身份、可搜索标题与可选支撑信息。
 struct XMTagSelectionItem: Identifiable, Hashable, Sendable {
     let id: Int64
     let title: String
+    let supportingText: String?
 
-    /// 使用业务真实 ID 与展示标题创建稳定标签项。
-    init(id: Int64, title: String) {
+    /// 使用业务真实 ID、展示标题与可选支撑信息创建稳定标签项。
+    init(id: Int64, title: String, supportingText: String? = nil) {
         self.id = id
         self.title = title
+        self.supportingText = supportingText
     }
 }
 
@@ -67,19 +78,62 @@ struct XMTagSelectionManagementConfiguration {
     }
 }
 
-/// 通用标签选择 Sheet，统一管理本地选择草稿、搜索、创建和最终异步提交。
+/// 标签选择 Sheet 的封闭业务模式，限制关系编辑与范围筛选只能获得各自需要的能力。
+private enum XMTagSelectionSheetMode {
+    case relationship(
+        layout: XMTagSelectionLayoutConfiguration,
+        management: XMTagSelectionManagementConfiguration?,
+        onCreate: @MainActor @Sendable (String) async throws -> XMTagSelectionItem
+    )
+    case filtering(emptySelectionSummary: String)
+
+    var initialLayoutMode: TagSelectionLayoutMode {
+        switch self {
+        case .relationship(let layout, _, _):
+            return layout.initialMode
+        case .filtering:
+            return .list
+        }
+    }
+
+    var layoutConfiguration: XMTagSelectionLayoutConfiguration? {
+        guard case .relationship(let layout, _, _) = self else { return nil }
+        return layout
+    }
+
+    var managementConfiguration: XMTagSelectionManagementConfiguration? {
+        guard case .relationship(_, let management, _) = self else { return nil }
+        return management
+    }
+
+    var createAction: (@MainActor @Sendable (String) async throws -> XMTagSelectionItem)? {
+        guard case .relationship(_, _, let onCreate) = self else { return nil }
+        return onCreate
+    }
+
+    var emptySelectionSummary: String? {
+        guard case .filtering(let summary) = self else { return nil }
+        return summary
+    }
+
+    var showsRelationshipTools: Bool {
+        guard case .relationship = self else { return false }
+        return true
+    }
+}
+
+/// 通用标签选择 Sheet，统一管理本地选择草稿、搜索、可见项批量选择和最终异步提交。
 struct XMTagSelectionSheet: View {
     let title: String
     let contextText: String?
     let items: [XMTagSelectionItem]
     let initialSelectedIDs: Set<Int64>
     let allowsEmptySelection: Bool
+    let allowsBulkSelection: Bool
     let isLoading: Bool
     let loadErrorMessage: String?
-    let layout: XMTagSelectionLayoutConfiguration
-    let management: XMTagSelectionManagementConfiguration?
-    let onCreate: @MainActor @Sendable (String) async throws -> XMTagSelectionItem
     let onSave: @MainActor @Sendable ([XMTagSelectionItem]) async -> Bool
+    private let mode: XMTagSelectionSheetMode
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -106,13 +160,14 @@ struct XMTagSelectionSheet: View {
     @State private var saveTask: Task<Void, Never>?
     @State private var deleteTask: Task<Void, Never>?
 
-    /// 使用外部候选项与初始关系集合创建本地草稿；创建和保存均由调用方通过异步闭包落库。
+    /// 使用外部候选项与初始关系集合创建关系编辑草稿；现有调用默认不展示批量选择入口。
     init(
         title: String = "编辑标签",
         contextText: String? = nil,
         items: [XMTagSelectionItem],
         initialSelectedIDs: Set<Int64>,
         allowsEmptySelection: Bool = true,
+        allowsBulkSelection: Bool = false,
         isLoading: Bool = false,
         loadErrorMessage: String? = nil,
         layout: XMTagSelectionLayoutConfiguration,
@@ -120,16 +175,72 @@ struct XMTagSelectionSheet: View {
         onCreate: @escaping @MainActor @Sendable (String) async throws -> XMTagSelectionItem,
         onSave: @escaping @MainActor @Sendable ([XMTagSelectionItem]) async -> Bool
     ) {
+        self.init(
+            title: title,
+            contextText: contextText,
+            items: items,
+            initialSelectedIDs: initialSelectedIDs,
+            allowsEmptySelection: allowsEmptySelection,
+            allowsBulkSelection: allowsBulkSelection,
+            isLoading: isLoading,
+            loadErrorMessage: loadErrorMessage,
+            mode: .relationship(
+                layout: layout,
+                management: management,
+                onCreate: onCreate
+            ),
+            onSave: onSave
+        )
+    }
+
+    /// 创建具有独立取消与确认边界的标签范围筛选 Sheet；该模式固定使用列表且不提供标签目录写入能力。
+    init(
+        title: String = "选择标签",
+        contextText: String? = nil,
+        filteringItems items: [XMTagSelectionItem],
+        initialSelectedIDs: Set<Int64>,
+        emptySelectionSummary: String,
+        allowsBulkSelection: Bool,
+        isLoading: Bool = false,
+        loadErrorMessage: String? = nil,
+        onSave: @escaping @MainActor @Sendable ([XMTagSelectionItem]) async -> Bool
+    ) {
+        self.init(
+            title: title,
+            contextText: contextText,
+            items: items,
+            initialSelectedIDs: initialSelectedIDs,
+            allowsEmptySelection: true,
+            allowsBulkSelection: allowsBulkSelection,
+            isLoading: isLoading,
+            loadErrorMessage: loadErrorMessage,
+            mode: .filtering(emptySelectionSummary: emptySelectionSummary),
+            onSave: onSave
+        )
+    }
+
+    /// 汇总两类公开接入方式的稳定输入，并在组件内部建立选择基线与布局状态。
+    private init(
+        title: String,
+        contextText: String?,
+        items: [XMTagSelectionItem],
+        initialSelectedIDs: Set<Int64>,
+        allowsEmptySelection: Bool,
+        allowsBulkSelection: Bool,
+        isLoading: Bool,
+        loadErrorMessage: String?,
+        mode: XMTagSelectionSheetMode,
+        onSave: @escaping @MainActor @Sendable ([XMTagSelectionItem]) async -> Bool
+    ) {
         self.title = title
         self.contextText = contextText
         self.items = items
         self.initialSelectedIDs = initialSelectedIDs
         self.allowsEmptySelection = allowsEmptySelection
+        self.allowsBulkSelection = allowsBulkSelection
         self.isLoading = isLoading
         self.loadErrorMessage = loadErrorMessage
-        self.layout = layout
-        self.management = management
-        self.onCreate = onCreate
+        self.mode = mode
         self.onSave = onSave
 
         let validIDs = Set(items.map(\.id))
@@ -139,7 +250,7 @@ struct XMTagSelectionSheet: View {
         _currentItems = State(initialValue: items)
         _baselineSelectedIDs = State(initialValue: initialDraft)
         _draftSelectedIDs = State(initialValue: initialDraft)
-        _layoutMode = State(initialValue: layout.initialMode)
+        _layoutMode = State(initialValue: mode.initialLayoutMode)
     }
 
     var body: some View {
@@ -151,6 +262,7 @@ struct XMTagSelectionSheet: View {
             isConfirmationDisabled: !canSave,
             isConfirming: isSaving,
             confirmationAction: saveSelection,
+            titleSubtitleNumericValue: Double(draftSelectedIDs.count),
             titleSubtitle: {
                 Text(selectionSummary)
             },
@@ -190,7 +302,13 @@ struct XMTagSelectionSheet: View {
     }
 
     private var selectionSummary: String {
-        let countSummary = "已选 \(draftSelectedIDs.count) 个标签"
+        let countSummary: String
+        if draftSelectedIDs.isEmpty,
+           let emptySelectionSummary = mode.emptySelectionSummary {
+            countSummary = emptySelectionSummary
+        } else {
+            countSummary = "已选 \(draftSelectedIDs.count) 个标签"
+        }
         guard let contextText else { return countSummary }
         let normalizedContext = contextText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedContext.isEmpty else { return countSummary }
@@ -209,7 +327,13 @@ struct XMTagSelectionSheet: View {
             .frame(maxWidth: .infinity)
             .layoutPriority(1)
 
-            toolbarUtilityControls
+            if mode.showsRelationshipTools {
+                toolbarUtilityControls
+            }
+
+            if showsBulkSelectionControls {
+                bulkSelectionControls
+            }
 
             if let saveErrorMessage, !saveErrorMessage.isEmpty {
                 Text(saveErrorMessage)
@@ -223,6 +347,71 @@ struct XMTagSelectionSheet: View {
         }
         .padding(.horizontal, Spacing.screenEdge)
         .padding(.bottom, Spacing.section)
+    }
+
+    @ViewBuilder
+    private var bulkSelectionControls: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: Spacing.compact) {
+                bulkSelectionStatus
+                bulkSelectionButton
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+        } else {
+            HStack(spacing: Spacing.base) {
+                bulkSelectionStatus
+
+                Spacer(minLength: Spacing.base)
+
+                bulkSelectionButton
+            }
+        }
+    }
+
+    private var bulkSelectionStatus: some View {
+        HStack(spacing: Spacing.none) {
+            Text(bulkSelectionStatusPrefix)
+            bulkSelectionCountText(bulkSelectionStatusSelectedCount)
+            Text(" / ")
+            bulkSelectionCountText(bulkSelectionStatusTotalCount)
+        }
+        .font(AppTypography.caption)
+        .foregroundStyle(Color.textSecondary)
+        .fixedSize(horizontal: false, vertical: true)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(bulkSelectionAccessibilityValue)
+    }
+
+    private var bulkSelectionButton: some View {
+        Button(action: toggleVisibleSelection) {
+            ZStack(alignment: .trailing) {
+                Text(bulkSelectionActionTitles.select)
+                    .hidden()
+                    .accessibilityHidden(true)
+
+                Text(bulkSelectionActionTitles.deselect)
+                    .hidden()
+                    .accessibilityHidden(true)
+
+                Text(bulkSelectionActionTitle)
+                    .contentTransition(bulkSelectionActionTransition)
+                    .animation(
+                        bulkSelectionActionAnimation,
+                        value: bulkSelectionActionTitle
+                    )
+            }
+        }
+        .font(AppTypography.subheadline)
+        .foregroundStyle(Color.textPrimary)
+        .frame(minHeight: XMTagSelectionLayout.minimumHitSize)
+        .contentShape(Rectangle())
+        .buttonStyle(XMTagSelectionBulkActionButtonStyle())
+        .disabled(isTagInteractionDisabled)
+        .opacity(isTagInteractionDisabled ? 0.46 : 1)
+        .accessibilityIdentifier("tag.selection.bulk-toggle")
+        .accessibilityLabel(bulkSelectionActionTitle)
+        .accessibilityValue(bulkSelectionAccessibilityValue)
+        .accessibilityHint(bulkSelectionAccessibilityHint)
     }
 
     @ViewBuilder
@@ -339,12 +528,14 @@ struct XMTagSelectionSheet: View {
     private func tagNameSheet(for presentation: XMTagNameSheetPresentation) -> some View {
         switch presentation {
         case .create:
-            XMTagNameSheet(
-                mode: .create,
-                existingTitles: currentItems.map(\.title),
-                onSubmit: onCreate,
-                onSubmitted: acceptCreatedItem
-            )
+            if let createAction = mode.createAction {
+                XMTagNameSheet(
+                    mode: .create,
+                    existingTitles: currentItems.map(\.title),
+                    onSubmit: createAction,
+                    onSubmitted: acceptCreatedItem
+                )
+            }
         case .rename(let item):
             XMTagNameSheet(
                 mode: .rename(item),
@@ -356,7 +547,11 @@ struct XMTagSelectionSheet: View {
                         throw XMTagSelectionSheetError.managementUnavailable
                     }
                     try await management.onRename(item.id, name)
-                    return XMTagSelectionItem(id: item.id, title: name)
+                    return XMTagSelectionItem(
+                        id: item.id,
+                        title: name,
+                        supportingText: item.supportingText
+                    )
                 },
                 onSubmitted: acceptRenamedItem
             )
@@ -466,6 +661,100 @@ struct XMTagSelectionSheet: View {
         visibleItems.map(\.id)
     }
 
+    private var visibleIDSet: Set<Int64> {
+        Set(visibleItemIDs)
+    }
+
+    private var visibleSelectedCount: Int {
+        draftSelectedIDs.intersection(visibleIDSet).count
+    }
+
+    private var isAllVisibleSelected: Bool {
+        !visibleIDSet.isEmpty && visibleIDSet.isSubset(of: draftSelectedIDs)
+    }
+
+    private var showsBulkSelectionControls: Bool {
+        allowsBulkSelection && !isLoading && !hasLoadError && !visibleItems.isEmpty
+    }
+
+    private var bulkSelectionStatusPrefix: String {
+        isSearchFiltering ? "搜索结果已选 " : "已选 "
+    }
+
+    private var bulkSelectionStatusSelectedCount: Int {
+        isSearchFiltering ? visibleSelectedCount : draftSelectedIDs.count
+    }
+
+    private var bulkSelectionStatusTotalCount: Int {
+        isSearchFiltering ? visibleItems.count : currentItems.count
+    }
+
+    private var bulkSelectionCountAnimation: Animation? {
+        reduceMotion
+            ? .easeOut(duration: XMTagSelectionMotion.reducedMotionNumericTransitionDuration)
+            : .snappy(duration: XMTagSelectionMotion.numericTransitionDuration)
+    }
+
+    /// 为批量状态中的单个数值提供独立方向的系统数字过渡，静态前缀与分隔符保持不动。
+    private func bulkSelectionCountText(_ count: Int) -> some View {
+        Text(verbatim: String(count))
+            .contentTransition(
+                reduceMotion
+                    ? .opacity
+                    : .numericText(value: Double(count))
+            )
+            .animation(bulkSelectionCountAnimation, value: count)
+    }
+
+    private var bulkSelectionActionTitles: (select: String, deselect: String) {
+        if isSearchFiltering {
+            return ("选择全部搜索结果", "取消选择搜索结果")
+        }
+        return ("全选", "取消全选")
+    }
+
+    private var bulkSelectionActionTitle: String {
+        isAllVisibleSelected
+            ? bulkSelectionActionTitles.deselect
+            : bulkSelectionActionTitles.select
+    }
+
+    private var bulkSelectionActionTransition: ContentTransition {
+        reduceMotion ? .identity : .opacity
+    }
+
+    private var bulkSelectionActionAnimation: Animation? {
+        reduceMotion
+            ? nil
+            : .easeOut(duration: XMTagSelectionMotion.bulkActionTransitionDuration)
+    }
+
+    private var bulkSelectionAccessibilityValue: String {
+        if isSearchFiltering {
+            return "搜索结果中已选 \(visibleSelectedCount) 个，共 \(visibleItems.count) 个标签"
+        }
+        return "已选 \(draftSelectedIDs.count) 个，共 \(currentItems.count) 个标签"
+    }
+
+    private var bulkSelectionAccessibilityHint: String {
+        if isSearchFiltering {
+            return "仅修改当前搜索结果，保留其他标签的选择"
+        }
+        return isAllVisibleSelected ? "取消选择全部标签" : "选择全部标签"
+    }
+
+    private var isSearchFiltering: Bool {
+        !normalizedSearchText.isEmpty
+    }
+
+    private var layoutConfiguration: XMTagSelectionLayoutConfiguration? {
+        mode.layoutConfiguration
+    }
+
+    private var management: XMTagSelectionManagementConfiguration? {
+        mode.managementConfiguration
+    }
+
     private var selectedItems: [XMTagSelectionItem] {
         currentItems.filter { draftSelectedIDs.contains($0.id) }
     }
@@ -547,7 +836,7 @@ struct XMTagSelectionSheet: View {
     }
 
     private func presentCreateSheet() {
-        guard !isTagInteractionDisabled else { return }
+        guard mode.createAction != nil, !isTagInteractionDisabled else { return }
         isSearchActive = false
         nameSheetPresentation = .create
     }
@@ -578,8 +867,8 @@ struct XMTagSelectionSheet: View {
     }
 
     private func updateLayoutMode(_ newLayoutMode: TagSelectionLayoutMode) {
-        guard newLayoutMode != layoutMode else { return }
-        layout.onChange(newLayoutMode)
+        guard let layoutConfiguration, newLayoutMode != layoutMode else { return }
+        layoutConfiguration.onChange(newLayoutMode)
 
         if reduceMotion {
             var transaction = Transaction(animation: nil)
@@ -602,6 +891,21 @@ struct XMTagSelectionSheet: View {
             draftSelectedIDs.remove(item.id)
         } else {
             draftSelectedIDs.insert(item.id)
+        }
+    }
+
+    /// 根据当前可见结果切换批量选择；搜索外的隐藏标签保持原草稿状态。
+    private func toggleVisibleSelection() {
+        guard allowsBulkSelection, !isTagInteractionDisabled else { return }
+        let visibleIDs = visibleIDSet
+        guard !visibleIDs.isEmpty else { return }
+
+        saveErrorMessage = nil
+        hasEditedSelection = true
+        if visibleIDs.isSubset(of: draftSelectedIDs) {
+            draftSelectedIDs.subtract(visibleIDs)
+        } else {
+            draftSelectedIDs.formUnion(visibleIDs)
         }
     }
 
@@ -710,7 +1014,11 @@ struct XMTagSelectionSheet: View {
         let reconciledItems = newItems.compactMap { item -> XMTagSelectionItem? in
             guard !locallyDeletedIDs.contains(item.id) else { return nil }
             guard let renamedTitle = locallyRenamedTitles[item.id] else { return item }
-            return XMTagSelectionItem(id: item.id, title: renamedTitle)
+            return XMTagSelectionItem(
+                id: item.id,
+                title: renamedTitle,
+                supportingText: item.supportingText
+            )
         }
         let newIDs = Set(reconciledItems.map(\.id))
         let localOnlyItems = currentItems.filter {
@@ -772,16 +1080,26 @@ private struct XMTagSelectionRow: View {
         VStack(spacing: Spacing.none) {
             Button(action: toggle) {
                 HStack(spacing: Spacing.base) {
-                    XMKeywordHighlighting.text(
-                        item.title,
-                        keyword: keyword,
-                        baseFont: AppTypography.subheadline,
-                        highlightFont: AppTypography.subheadlineSemibold,
-                        baseColor: .textPrimary
-                    )
-                    .lineLimit(layoutMode == .grid ? 1 : 2)
-                    .truncationMode(.tail)
-                    .fixedSize(horizontal: false, vertical: layoutMode == .list)
+                    VStack(alignment: .leading, spacing: Spacing.micro) {
+                        XMKeywordHighlighting.text(
+                            item.title,
+                            keyword: keyword,
+                            baseFont: AppTypography.subheadline,
+                            highlightFont: AppTypography.subheadlineSemibold,
+                            baseColor: .textPrimary
+                        )
+                        .lineLimit(layoutMode == .grid ? 1 : 2)
+                        .truncationMode(.tail)
+                        .fixedSize(horizontal: false, vertical: layoutMode == .list)
+
+                        if let supportingText {
+                            Text(supportingText)
+                                .font(AppTypography.caption2)
+                                .foregroundStyle(Color.textSecondary)
+                                .lineLimit(layoutMode == .grid ? 1 : 2)
+                                .fixedSize(horizontal: false, vertical: layoutMode == .list)
+                        }
+                    }
                     .layoutPriority(1)
 
                     Spacer(minLength: Spacing.base)
@@ -836,8 +1154,7 @@ private struct XMTagSelectionRow: View {
             )
             .xmMenuNeutralTint()
             .disabled(isDisabled)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(item.title)
+            .accessibilityLabel(accessibilityLabel)
             .accessibilityValue(
                 isDeleting ? "正在删除" : isSelected ? "已选择" : "未选择"
             )
@@ -866,6 +1183,18 @@ private struct XMTagSelectionRow: View {
 
     private var isManagementEnabled: Bool {
         allowsManagement
+    }
+
+    private var supportingText: String? {
+        guard let rawSupportingText = item.supportingText else { return nil }
+        let supportingText = rawSupportingText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !supportingText.isEmpty else { return nil }
+        return supportingText
+    }
+
+    private var accessibilityLabel: String {
+        guard let supportingText else { return item.title }
+        return "\(item.title)，\(supportingText)"
     }
 
     private var accessibilityHint: String {
@@ -1178,6 +1507,27 @@ private struct XMTagSelectionPrimaryButtonStyle: ButtonStyle {
                     cornerRadius: XMTagSelectionLayout.primaryActionCornerRadius,
                     style: .continuous
                 )
+            )
+    }
+}
+
+/// 批量选择文字按钮只用透明度表达按压，避免状态切换带动标签位置或尺寸。
+private struct XMTagSelectionBulkActionButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// 保持按钮几何不变，并在正常动态效果下提供短促、可中断的按压反馈。
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(
+                configuration.isPressed
+                    ? XMTagSelectionMotion.bulkActionPressedOpacity
+                    : 1
+            )
+            .animation(
+                reduceMotion
+                    ? nil
+                    : .easeOut(duration: XMTagSelectionMotion.bulkActionPressDuration),
+                value: configuration.isPressed
             )
     }
 }

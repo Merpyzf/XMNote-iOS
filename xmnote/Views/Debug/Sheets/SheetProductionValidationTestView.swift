@@ -1,7 +1,7 @@
 #if DEBUG
 /**
- * [INPUT]: 依赖生产 Sheet、隔离 RepositoryContainer、SheetCatalogTarget、生产快照与安全外部替身
- * [OUTPUT]: 对外提供 SheetProductionValidationTestView 与 SheetProductionTargetPreviewHost，按 113 个生产目标直接实例化真实生产 View
+ * [INPUT]: 依赖生产 Sheet、共享标签选择组件、隔离 RepositoryContainer、SheetCatalogTarget、生产快照与安全外部替身
+ * [OUTPUT]: 对外提供 SheetProductionValidationTestView 与 SheetProductionTargetPreviewHost，按 113 个生产目标直接实例化真实生产 View 并标注公共标签范围入口
  * [POS]: Views/Debug/Sheets 的生产 Sheet 渲染层；业务写入只进入本次工作副本，外部副作用由安全替身承接
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -1513,7 +1513,7 @@ private extension SheetProductionValidationTestView {
             case .readingShare: "BookReadingDetailShareSheet / 分享选项"
             case .aiText: "AITextResultSheet"
             case .aiTag: "AIAutoTagSheet"
-            case .reviewSettings: "NoteReviewSettingsSheet / NoteReviewTagSelectionSheet"
+            case .reviewSettings: "NoteReviewSettingsSheet / XMTagSelectionSheet"
             case .mergeComposer: "NoteMergeComposerSheet"
             case .mergeImages: "NoteMergeImageEditorSheet"
             case .checkIn: "ReadCalendarCheckInSheet"

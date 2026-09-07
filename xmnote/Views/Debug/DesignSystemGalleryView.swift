@@ -1,7 +1,7 @@
 #if DEBUG
 /**
- * [INPUT]: 依赖 DesignSystem 令牌、UIComponents 的基础视觉/控件/反馈/布局入口、最小命中区基础设施及现有专项调试页
- * [OUTPUT]: 对外提供 DesignSystemGalleryView，集中展示核心组件、常见状态与适配场景
+ * [INPUT]: 依赖 DesignSystem 令牌、UIComponents 的基础视觉/控件/反馈/布局入口、标签选择双模式及现有专项调试页
+ * [OUTPUT]: 对外提供 DesignSystemGalleryView，集中展示核心组件、标签关系/筛选状态与适配场景
  * [POS]: Views/Debug 的设计系统展示入口，为 Preview、人工视觉检查和组件发现提供稳定宿主
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -27,6 +27,38 @@ struct DesignSystemGalleryView: View {
         }
     }
 
+    /// 标签选择公共组件的关系编辑、范围筛选与读取状态校准场景。
+    private enum TagSheetScenario: String, CaseIterable, Identifiable {
+        case relationship
+        case filterPartial
+        case filterNone
+        case filterAll
+        case filterEmpty
+        case loading
+        case error
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .relationship:
+                return "关系编辑"
+            case .filterPartial:
+                return "范围筛选·部分选择"
+            case .filterNone:
+                return "范围筛选·未选择"
+            case .filterAll:
+                return "范围筛选·全部选择"
+            case .filterEmpty:
+                return "范围筛选·空态"
+            case .loading:
+                return "范围筛选·加载"
+            case .error:
+                return "范围筛选·失败"
+            }
+        }
+    }
+
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -40,7 +72,7 @@ struct DesignSystemGalleryView: View {
     @State private var isSettingEnabled = true
     @State private var settingsOrder = 0
     @State private var isScaffoldPresented = false
-    @State private var isTagSheetPresented = false
+    @State private var tagSheetScenario: TagSheetScenario?
     @State private var tagLayout: TagSelectionLayoutMode = .list
     @State private var sharePayload: XMActivitySharePayload?
     @State private var toastCenter = XMToastCenter()
@@ -52,6 +84,13 @@ struct DesignSystemGalleryView: View {
         XMTagSelectionItem(id: 2, title: "产品设计"),
         XMTagSelectionItem(id: 3, title: "长期阅读"),
         XMTagSelectionItem(id: 4, title: "待整理"),
+    ]
+
+    private let tagFilterItems = [
+        XMTagSelectionItem(id: 1, title: "人物", supportingText: "18 条书摘"),
+        XMTagSelectionItem(id: 2, title: "产品设计", supportingText: "12 条书摘"),
+        XMTagSelectionItem(id: 3, title: "长期阅读", supportingText: "9 条书摘"),
+        XMTagSelectionItem(id: 4, title: "待整理", supportingText: "6 条书摘"),
     ]
 
     var body: some View {
@@ -77,8 +116,8 @@ struct DesignSystemGalleryView: View {
         .sheet(isPresented: $isScaffoldPresented) {
             scaffoldSample
         }
-        .sheet(isPresented: $isTagSheetPresented) {
-            tagSelectionSample
+        .sheet(item: $tagSheetScenario) { scenario in
+            tagSelectionSample(for: scenario)
                 .environment(toastCenter)
         }
         .sheet(item: $sharePayload) { payload in
@@ -406,8 +445,12 @@ struct DesignSystemGalleryView: View {
                     Button("业务 Sheet") {
                         isScaffoldPresented = true
                     }
-                    Button("标签选择") {
-                        isTagSheetPresented = true
+                    Menu("标签选择") {
+                        ForEach(TagSheetScenario.allCases) { scenario in
+                            Button(scenario.title) {
+                                tagSheetScenario = scenario
+                            }
+                        }
                     }
                     Button("系统分享") {
                         sharePayload = XMActivitySharePayload(activityItems: ["XMNote 设计系统"])
@@ -457,18 +500,65 @@ struct DesignSystemGalleryView: View {
         }
     }
 
-    private var tagSelectionSample: some View {
+    /// 按场景实例化公共标签选择组件，确保两种封闭模式均可从展厅直接检查。
+    @ViewBuilder
+    private func tagSelectionSample(for scenario: TagSheetScenario) -> some View {
+        switch scenario {
+        case .relationship:
+            XMTagSelectionSheet(
+                items: tagItems,
+                initialSelectedIDs: [1, 3],
+                layout: XMTagSelectionLayoutConfiguration(
+                    initialMode: tagLayout,
+                    onChange: { tagLayout = $0 }
+                ),
+                onCreate: { title in
+                    XMTagSelectionItem(id: Int64(tagItems.count + 1), title: title)
+                },
+                onSave: { _ in true }
+            )
+        case .filterPartial:
+            filterTagSelectionSample(initialSelectedIDs: [1, 3])
+        case .filterNone:
+            filterTagSelectionSample(initialSelectedIDs: [])
+        case .filterAll:
+            filterTagSelectionSample(initialSelectedIDs: Set(tagFilterItems.map(\.id)))
+        case .filterEmpty:
+            filterTagSelectionSample(
+                initialSelectedIDs: [],
+                items: []
+            )
+        case .loading:
+            filterTagSelectionSample(
+                initialSelectedIDs: [],
+                isLoading: true
+            )
+        case .error:
+            filterTagSelectionSample(
+                initialSelectedIDs: [],
+                loadErrorMessage: "标签加载失败，请稍后重试"
+            )
+        }
+    }
+
+    /// 创建可观察确认 loading 的范围筛选样例，并允许注入加载或失败状态。
+    private func filterTagSelectionSample(
+        initialSelectedIDs: Set<Int64>,
+        items: [XMTagSelectionItem]? = nil,
+        isLoading: Bool = false,
+        loadErrorMessage: String? = nil
+    ) -> some View {
         XMTagSelectionSheet(
-            items: tagItems,
-            initialSelectedIDs: [1, 3],
-            layout: XMTagSelectionLayoutConfiguration(
-                initialMode: tagLayout,
-                onChange: { tagLayout = $0 }
-            ),
-            onCreate: { title in
-                XMTagSelectionItem(id: Int64(tagItems.count + 1), title: title)
-            },
-            onSave: { _ in true }
+            filteringItems: items ?? (isLoading || loadErrorMessage != nil ? [] : tagFilterItems),
+            initialSelectedIDs: initialSelectedIDs,
+            emptySelectionSummary: "不限标签",
+            allowsBulkSelection: true,
+            isLoading: isLoading,
+            loadErrorMessage: loadErrorMessage,
+            onSave: { _ in
+                try? await Task.sleep(for: .milliseconds(900))
+                return true
+            }
         )
     }
 
