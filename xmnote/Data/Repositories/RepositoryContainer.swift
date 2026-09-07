@@ -3,7 +3,7 @@ import Observation
 
 /**
  * [INPUT]: 依赖 DatabaseManager 提供数据库实例，依赖各 Repository 实现与可注入 UserDefaults 完成生产或 Debug 隔离组装
- * [OUTPUT]: 对外提供 RepositoryContainer，集中暴露业务仓储，并在 Debug 提供 Sheet 数据副本的隔离组装入口
+ * [OUTPUT]: 对外提供 RepositoryContainer，集中暴露业务仓储与统一 exportRepository，并在 Debug 提供 Sheet 数据副本的隔离组装入口
  * [POS]: App 级依赖注入容器，被视图层通过 Environment 获取并创建 ViewModel
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -41,6 +41,7 @@ final class RepositoryContainer {
     let timelineRepository: any TimelineRepositoryProtocol
     let wereadImportRepository: any WereadImportRepositoryProtocol
     let noteImportRepository: any NoteImportRepositoryProtocol
+    let exportRepository: ExportRepository
 
     /// 在应用启动阶段一次性组装所有仓储依赖，并注入共享数据库管理器。
     convenience init(databaseManager: DatabaseManager) {
@@ -165,6 +166,10 @@ final class RepositoryContainer {
             databaseManager: databaseManager,
             defaults: userDefaults,
             bookSearchRepository: bookSearchRepository
+        )
+        self.exportRepository = ExportRepository(
+            database: databaseManager.database,
+            defaults: userDefaults
         )
     }
 }

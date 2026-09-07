@@ -1,0 +1,23 @@
+{
+  "fileOrder": ["review", "related", "note"],
+  "markdownFileName": "《A_B》.md",
+  "textFileName": "《A_B》.txt",
+  "markdownRequiredFragments": [
+    "<center><font size=4>《A:B》</font></center>",
+    "<center><font color='#6e6e6e' size=2>1 条书摘</font></center>",
+    "原文<br>第二行",
+    "> 想法",
+    "位置：12 | 2023-11-15 06:13:20"
+  ],
+  "textRequiredFragments": [
+    "《A:B》",
+    "原文\n第二行",
+    "【想法】想法",
+    "位置：12 | 2023-11-15 06:13:20"
+  ],
+  "csvSettingFieldCount": 29,
+  "csvOutputFieldCount": 24,
+  "notionVersion": "2026-03-11",
+  "notionIdeaBlockType": "quote",
+  "notionIdeaForbiddenFragments": ["callout", "💡", "blue_background"]
+}

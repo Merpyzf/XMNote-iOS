@@ -134,6 +134,7 @@ struct BookContainerView: View {
 
 private struct BookContentView: View {
     @Environment(RepositoryContainer.self) private var repositories
+    @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Bindable var viewModel: BookViewModel
@@ -357,7 +358,7 @@ private struct BookContentView: View {
             Section {
                 ForEach(viewModel.defaultBottomActions) { action in
                     Button {
-                        viewModel.performBottomAction(action)
+                        performBottomAction(action)
                     } label: {
                         Label(action.title, systemImage: action.systemImage)
                     }
@@ -386,6 +387,25 @@ private struct BookContentView: View {
 
     private var isEditBatchActionBusy: Bool {
         viewModel.activeWriteAction != nil || viewModel.isLoadingBatchOptions
+    }
+
+    /// 导出动作在当前 Tab 冻结所选书籍顺序并进入统一页面，其余批量写入继续由书架 ViewModel 负责。
+    private func performBottomAction(_ action: BookshelfBookListEditAction) {
+        let ids = viewModel.selectedBookIDsIncludingGroupBooks
+        switch action {
+        case .exportNote:
+            navigationCoordinator.push(.export(ExportRoute(
+                scope: .bookIDs(ids),
+                initialKind: .noteExcerpt
+            )))
+        case .exportBook:
+            navigationCoordinator.push(.export(ExportRoute(
+                scope: .bookIDs(ids),
+                initialKind: .bookInformation
+            )))
+        default:
+            viewModel.performBottomAction(action)
+        }
     }
 
     private func isEditBatchActionEnabled(_ action: BookshelfBookListEditAction) -> Bool {

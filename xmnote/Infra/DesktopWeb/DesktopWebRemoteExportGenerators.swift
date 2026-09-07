@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Web 导出只读快照、导出设置和调用时冻结的时间戳
- * [OUTPUT]: 对外提供语雀、思源与 Obsidian 的 Android 对齐远端文档正文
+ * [OUTPUT]: 对外提供语雀、OneNote、思源与 Obsidian 的 Android 对齐远端文档正文
  * [POS]: Infra 层远端导出纯生成器；不访问数据库、网络、文件系统或 Package HTTP 类型
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -77,6 +77,37 @@ nonisolated enum DesktopWebRemoteExportGenerators {
             return tags.isEmpty ? body : "\(body)\n\(tags)"
         }
     }
+
+    /// 生成 OneNote HTML 页面；顺序与其余远端目标一致为书评、相关、书摘。
+    static func oneNotePages(
+        bundle: DesktopWebExportBundle,
+        selection: DesktopWebExportContentSelection,
+        settings: [String: Any],
+        timestamp: String,
+        createdDateTime: String
+    ) -> [DesktopWebRemoteExportPage] {
+        selectedPages(bundle: bundle, selection: selection, timestamp: timestamp) { kind in
+            let body = switch kind {
+            case .note: oneNoteNotes(bundle, settings: settings)
+            case .review: oneNoteReviews(bundle, settings: settings)
+            case .related: oneNoteRelated(bundle, settings: settings)
+            }
+            return """
+                <!DOCTYPE html>
+                <html>
+                <head>
+                <title>{title}</title>
+                <meta name ="created" content ="\(createdDateTime)" />
+                </head>
+                <body>
+                    \(body)
+                </body>
+                </html>
+                """
+        }.map { page in
+            .init(title: page.title, body: page.body.replacingOccurrences(of: "{title}", with: page.title))
+        }
+    }
 }
 
 nonisolated extension DesktopWebRemoteExportGenerators {
@@ -89,6 +120,123 @@ nonisolated extension DesktopWebRemoteExportGenerators {
     enum MarkdownStyle {
         case siYuan
         case obsidian
+    }
+
+    /// 生成 Android OneNoteGenerator 的书摘 HTML，保留蓝色想法、图片表格、标签与 includeTime 条件。
+    static func oneNoteNotes(
+        _ bundle: DesktopWebExportBundle,
+        settings: [String: Any]
+    ) -> String {
+        var body = oneNoteBookInfo(bundle.book)
+        if settings.bool("includeBookInfo", fallback: true) { body += oneNoteSummary(bundle.book) }
+        body += oneNoteDivider
+        body += "<p style=\"margin: 10px 25px 10px 0px; color: #666;\">共 \(bundle.notes.count) 条书摘</p>"
+        for (index, note) in bundle.notes.enumerated() {
+            let content = clearHTML(note.content)
+            if !content.isEmpty { body += "<p>\(content.replacingOccurrences(of: "\n", with: "<br>"))</p>" }
+            if let idea = note.idea.map(clearHTML), !idea.isEmpty {
+                body += "<p style=\"color: rgb(54, 96, 146)\">\(idea.replacingOccurrences(of: "\n", with: "<br>"))</p>"
+            }
+            body += oneNoteImages(note.images.map(\.url))
+            if settings.bool("includeTag", fallback: true), !note.tags.isEmpty {
+                body += "<p style =\"margin: 10px 25px 10px 0px; color: #666;\">\(note.tags.map { "#\($0.name)" }.joined(separator: "  "))</p>"
+            }
+            let info = noteInfo(note, settings: settings, requireIncludeTime: true)
+            if !info.isEmpty {
+                body += "<p style =\"margin: 10px 25px 10px 0px; color: #666;\">\(info)</p>"
+            }
+            if index != bundle.notes.count - 1 { body += oneNoteDivider }
+        }
+        return body
+    }
+
+    /// 生成 Android OneNoteGenerator 的关联笔记 HTML。
+    static func oneNoteRelated(
+        _ bundle: DesktopWebExportBundle,
+        settings: [String: Any]
+    ) -> String {
+        var body = oneNoteBookInfo(bundle.book)
+        if settings.bool("includeBookInfo", fallback: true) { body += oneNoteSummary(bundle.book) }
+        body += oneNoteDivider
+        for (index, value) in bundle.related.enumerated() {
+            if let book = value.contentBook {
+                body += oneNoteRelatedBookInfo(book)
+            } else {
+                if !value.title.isEmpty {
+                    body += "<p style=\"color: rgb(54, 96, 146)\">\(value.title)</p>"
+                }
+                let content = clearHTML(value.content)
+                if !content.isEmpty { body += "<p>\(content.replacingOccurrences(of: "\n", with: "<br>"))</p>" }
+                body += oneNoteImages(value.images.map(\.url))
+            }
+            var info = [value.categoryTitle]
+            if settings.bool("includeDateTime", fallback: true) { info.append(dateText(value.createdTime)) }
+            body += "<p style =\"margin: 10px 25px 10px 0px; color: #666;\">\(info.joined(separator: " | "))</p>"
+            if index != bundle.related.count - 1 { body += oneNoteDivider }
+        }
+        return body
+    }
+
+    /// 生成 Android OneNoteGenerator 的书评 HTML。
+    static func oneNoteReviews(
+        _ bundle: DesktopWebExportBundle,
+        settings: [String: Any]
+    ) -> String {
+        var body = oneNoteBookInfo(bundle.book)
+        if settings.bool("includeBookInfo", fallback: true) { body += oneNoteSummary(bundle.book) }
+        body += oneNoteDivider
+        for (index, review) in bundle.reviews.enumerated() {
+            if !review.title.isEmpty { body += "<p style=\"color: rgb(54, 96, 146)\">\(review.title)</p>" }
+            let content = clearHTML(review.content)
+            if !content.isEmpty { body += "<p>\(content.replacingOccurrences(of: "\n", with: "<br>"))</p>" }
+            body += oneNoteImages(review.images.map(\.url))
+            if settings.bool("includeDateTime", fallback: true) {
+                body += "<p style =\"margin: 10px 25px 10px 0px; color: #666;\">\(dateText(review.createdTime))</p>"
+            }
+            if index != bundle.reviews.count - 1 { body += oneNoteDivider }
+        }
+        return body
+    }
+
+    static let oneNoteDivider = "<p style=\"color: rgb(216, 216, 216)\">—————————————————————————————</p>"
+
+    /// OneNote 书籍头保持 Android 100pt 封面与表格布局。
+    static func oneNoteBookInfo(_ book: DesktopWebBookSnapshot) -> String {
+        var info = ""
+        if !book.author.isEmpty { info += "<p>作者：\(book.author)</p>" }
+        if !book.translator.isEmpty { info += "<p>译者：\(book.translator)</p>" }
+        if !book.press.isEmpty { info += "<p>出版社：\(book.press)</p>" }
+        if !book.pubDate.isEmpty { info += "<p>出版年：\(book.pubDate)</p>" }
+        if !book.isbn.isEmpty { info += "<p>ISBN：\(book.isbn)</p>" }
+        return "<table><tr><td><img height=\"100\" src=\"\(book.cover)\"></td><td><h1>\(book.name)</h1>\(info)</td></tr></table>"
+    }
+
+    /// 关联书只携带 Android DTO 中实际存在的字段。
+    static func oneNoteRelatedBookInfo(_ book: DesktopWebRelatedBookSnapshot) -> String {
+        var info = ""
+        if !book.author.isEmpty { info += "<p>作者：\(book.author)</p>" }
+        if let translator = book.translator, !translator.isEmpty { info += "<p>译者：\(translator)</p>" }
+        if !book.press.isEmpty { info += "<p>出版社：\(book.press)</p>" }
+        if let publicationDate = book.publicationDate, !publicationDate.isEmpty { info += "<p>出版年：\(publicationDate)</p>" }
+        return "<table><tr><td><img height=\"100\" src=\"\(book.cover)\"></td><td><h1>\(book.name)</h1>\(info)</td></tr></table>"
+    }
+
+    /// 输出 Android OneNote 书籍简介与作者简介段落。
+    static func oneNoteSummary(_ book: DesktopWebBookSnapshot) -> String {
+        var value = ""
+        if !book.summary.isEmpty {
+            value += "<p>书籍简介</p><p style=\"margin: 10px 25px 10px 0px; color: #666;\">  \(book.summary.replacingOccurrences(of: "\n", with: "<br>")) </p>"
+        }
+        if !book.authorIntro.isEmpty {
+            value += "<p>作者简介</p><p style=\"margin: 10px 25px 10px 0px; color: #666;\">  \(book.authorIntro.replacingOccurrences(of: "\n", with: "<br>")) </p>"
+        }
+        return value
+    }
+
+    /// 附图按 Android OneNote HTML 生成单行 table cell。
+    static func oneNoteImages(_ images: [String]) -> String {
+        guard !images.isEmpty else { return "" }
+        return "<table><tr>\(images.map { "<td><img height=\"100\" src=\"\($0)\"></td>" }.joined())</tr></table>"
     }
 
     /// 固定 Android 远端导出页面顺序：书评、相关、书摘。
@@ -501,11 +649,11 @@ nonisolated extension DesktopWebRemoteExportGenerators {
            let position = note.position,
            !position.isEmpty {
             let unit = switch note.positionUnit {
-            case 1: "页码"
-            case 3: "进度"
+            case 2: "页码"
+            case 0: "进度"
             default: "位置"
             }
-            items.append("\(unit)：\(position)\(note.positionUnit == 3 ? "%" : "")")
+            items.append("\(unit)：\(position)\(note.positionUnit == 0 ? "%" : "")")
         }
         if settings.bool("includeDateTime", fallback: true),
            note.createdTime != 0,

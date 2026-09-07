@@ -723,6 +723,22 @@ private struct BookWorkspaceContentView: View {
 
                 Divider()
 
+                Button("导出书摘", systemImage: "text.quote") {
+                    navigationCoordinator.push(.export(ExportRoute(
+                        scope: .bookIDs([bookId]),
+                        initialKind: .noteExcerpt
+                    )))
+                }
+
+                Button("导出书籍信息", systemImage: "tablecells") {
+                    navigationCoordinator.push(.export(ExportRoute(
+                        scope: .bookIDs([bookId]),
+                        initialKind: .bookInformation
+                    )))
+                }
+
+                Divider()
+
                 Button("编辑书籍", systemImage: "pencil") {
                     editBook()
                 }

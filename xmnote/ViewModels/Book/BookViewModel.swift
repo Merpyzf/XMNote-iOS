@@ -294,7 +294,9 @@ final class BookViewModel {
             .addToBookList,
             .setTag,
             .setReadStatus,
-            .setSource
+            .setSource,
+            .exportNote,
+            .exportBook
         ])
         return actions
     }

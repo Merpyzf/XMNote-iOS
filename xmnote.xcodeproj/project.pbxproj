@@ -18,6 +18,7 @@
 		89AWSI012F3D000000000002 /* AWSSDKIdentity in Frameworks */ = {isa = PBXBuildFile; productRef = 89AWSI012F3D000000000004 /* AWSSDKIdentity */; };
 		89GIFU0012F3D000000000002 /* Gifu in Frameworks */ = {isa = PBXBuildFile; productRef = 89GIFU0012F3D000000000004 /* Gifu */; };
 		89HUMM0012F8000000000002 /* Hummingbird in Frameworks */ = {isa = PBXBuildFile; productRef = 89HUMM0012F8000000000004 /* Hummingbird */; };
+		89MSAL012FC0000000000002 /* MSAL in Frameworks */ = {isa = PBXBuildFile; productRef = 89MSAL012FC0000000000004 /* MSAL */; };
 		89HZCAL12F3D000000000002 /* HorizonCalendar in Frameworks */ = {isa = PBXBuildFile; productRef = 89HZCAL12F3D000000000004 /* HorizonCalendar */; };
 		89JXPB0012F3D000000000002 /* JXPhotoBrowser in Frameworks */ = {isa = PBXBuildFile; productRef = 89JXPB0012F3D000000000004 /* JXPhotoBrowser */; };
 		89NUKE0012F3D000000000002 /* Nuke in Frameworks */ = {isa = PBXBuildFile; productRef = 89NUKE0012F3D000000000004 /* Nuke */; };
@@ -457,6 +458,7 @@
 				89VORT0012FA0000000000002 /* Vortex in Frameworks */,
 				89ZIP0012F3D000000000002 /* ZIPFoundation in Frameworks */,
 				89HUMM0012F8000000000002 /* Hummingbird in Frameworks */,
+				89MSAL012FC0000000000002 /* MSAL in Frameworks */,
 				D35B00032FA0000000000003 /* XMNoteWeb in Frameworks */,
 				13EDBCA7EBD2A99FE721F9E9 /* CoreMedia.framework in Frameworks */,
 				4C61B9167A0412B5D37618F9 /* Accelerate.framework in Frameworks */,
@@ -606,6 +608,7 @@
 				89VORT0012FA0000000000004 /* Vortex */,
 				89ZIP0012F3D000000000004 /* ZIPFoundation */,
 				89HUMM0012F8000000000004 /* Hummingbird */,
+				89MSAL012FC0000000000004 /* MSAL */,
 				D35B00022FA0000000000002 /* XMNoteWeb */,
 			);
 			productName = xmnote;
@@ -756,6 +759,7 @@
 				89VORT0012FA0000000000001 /* XCRemoteSwiftPackageReference "Vortex" */,
 				89ZIP0012F3D000000000001 /* XCRemoteSwiftPackageReference "ZIPFoundation" */,
 				89HUMM0012F8000000000001 /* XCRemoteSwiftPackageReference "hummingbird" */,
+				89MSAL012FC0000000000001 /* XCRemoteSwiftPackageReference "microsoft-authentication-library-for-objc" */,
 				D35B00012FA0000000000001 /* XCLocalSwiftPackageReference "Packages/XMNoteWeb" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -1448,6 +1452,14 @@
 				version = 2.22.0;
 			};
 		};
+		89MSAL012FC0000000000001 /* XCRemoteSwiftPackageReference "microsoft-authentication-library-for-objc" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/AzureAD/microsoft-authentication-library-for-objc.git";
+			requirement = {
+				kind = exactVersion;
+				version = 2.14.1;
+			};
+		};
 		89NUKE0012F3D000000000001 /* XCRemoteSwiftPackageReference "Nuke" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/kean/Nuke.git";
@@ -1573,6 +1585,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 89VORT0012FA0000000000001 /* XCRemoteSwiftPackageReference "Vortex" */;
 			productName = Vortex;
+		};
+		89MSAL012FC0000000000004 /* MSAL */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 89MSAL012FC0000000000001 /* XCRemoteSwiftPackageReference "microsoft-authentication-library-for-objc" */;
+			productName = MSAL;
 		};
 		89ZIP0012F3D000000000004 /* ZIPFoundation */ = {
 			isa = XCSwiftPackageProductDependency;

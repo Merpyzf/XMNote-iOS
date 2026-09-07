@@ -235,7 +235,7 @@ extension PersonalView {
             PersonalSettingsDivider(leadingInset: Layout.rowDividerLeading)
             settingsRow(.dataImport, "书摘导入", route: .dataImport)
             settingsRow(.dataBackup, "数据备份", route: .dataBackup)
-            settingsRow(.batchExport, "批量导出", route: .batchExport)
+            exportSettingsRow
             settingsRow(.apiIntegration, "API 集成", route: .apiIntegration)
             settingsRow(.aiConfiguration, "AI 配置", route: .aiConfiguration, isLast: true)
         }
@@ -336,6 +336,18 @@ extension PersonalView {
             if !isLast {
                 PersonalSettingsDivider(leadingInset: Layout.rowDividerLeading)
             }
+        }
+    }
+
+    /// 批量导出直接进入统一导出路由，旧 PersonalRoute 仅保留恢复兼容。
+    private var exportSettingsRow: some View {
+        VStack(spacing: Spacing.none) {
+            NavigationLink(value: AppRoute.export(ExportRoute(scope: .allBooks))) {
+                rowContent(icon: .batchExport, title: "批量导出")
+            }
+            .buttonStyle(.plain)
+
+            PersonalSettingsDivider(leadingInset: Layout.rowDividerLeading)
         }
     }
 

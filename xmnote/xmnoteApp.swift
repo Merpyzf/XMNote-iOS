@@ -17,6 +17,9 @@ import GRDB
 import Nuke
 import AliyunpanSDK
 import OSLog
+#if canImport(MSAL)
+import MSAL
+#endif
 
 /// 启动期一次性发布的运行时依赖，避免数据库、仓储与计时器分步写入产生不可用中间态。
 struct AppRuntimeContext {
@@ -166,6 +169,11 @@ private struct AppSceneRoot: View {
                 consumeReadingTimerSystemHandoffIfNeeded()
             }
             .onOpenURL { url in
+                #if canImport(MSAL)
+                if MSALPublicClientApplication.handleMSALResponse(url, sourceApplication: nil) {
+                    return
+                }
+                #endif
                 if Aliyunpan.handleOpenURL(url) {
                     return
                 }

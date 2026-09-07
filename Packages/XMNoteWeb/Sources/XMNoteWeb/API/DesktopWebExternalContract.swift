@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Foundation Data 与 App 注入的外部服务、导入导出和对象存储能力端口
- * [OUTPUT]: 提供 AI、在线书籍、封面代理、导入导出及图片上传共 17 条 API 的平台无关契约
+ * [OUTPUT]: 提供 AI、在线书籍、封面代理、导入导出及图片上传的跨平台契约，并区分书摘与书籍信息导出请求
  * [POS]: XMNoteWeb 外部与文件类业务边界；不公开 Hummingbird、URLSession、数据库或 App 类型
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -137,6 +137,17 @@ public struct DesktopWebNoteExportRequest: Codable, Sendable, Equatable {
     }
 }
 
+/// 书籍信息导出请求只携带稳定书籍顺序与 CSV/Notion 目标，不复用书摘内容开关。
+public struct DesktopWebBookExportRequest: Codable, Sendable, Equatable {
+    public let bookIds: [Int64]
+    public let target: String
+
+    public init(bookIds: [Int64] = [], target: String = "") {
+        self.bookIds = bookIds
+        self.target = target
+    }
+}
+
 public struct DesktopWebExportFile: Sendable, Equatable {
     public let fileName: String
     public let mediaType: String
@@ -180,6 +191,20 @@ public protocol DesktopWebExportPort: Sendable {
     func obsidianDirectories() async throws -> [DesktopWebExportPlatformOption]
     func exportNotesLocally(_ request: DesktopWebNoteExportRequest) async throws -> DesktopWebExportFile
     func exportNotesRemotely(_ request: DesktopWebNoteExportRequest) async throws -> DesktopWebRemoteExportResult
+    func exportBooksLocally(_ request: DesktopWebBookExportRequest) async throws -> DesktopWebExportFile
+    func exportBooksRemotely(_ request: DesktopWebBookExportRequest) async throws -> DesktopWebRemoteExportResult
+}
+
+public extension DesktopWebExportPort {
+    /// 兼容尚未升级的宿主实现；生产 XMNote Adapter 已覆盖该方法，其他宿主会收到明确未实现错误。
+    func exportBooksLocally(_ request: DesktopWebBookExportRequest) async throws -> DesktopWebExportFile {
+        throw DesktopWebAPIError(code: 50_001, message: "当前宿主尚未提供书籍信息本地导出")
+    }
+
+    /// 兼容尚未升级的宿主实现；生产 XMNote Adapter 已覆盖该方法，其他宿主会收到明确未实现错误。
+    func exportBooksRemotely(_ request: DesktopWebBookExportRequest) async throws -> DesktopWebRemoteExportResult {
+        throw DesktopWebAPIError(code: 50_001, message: "当前宿主尚未提供书籍信息远端导出")
+    }
 }
 
 public struct DesktopWebImportTaskCreateResponse: Codable, Sendable, Equatable {
