@@ -80,13 +80,10 @@ git log --all --pretty=format:'%H%x09%s'
 
 ```bash
 git diff --cached --check
-bash scripts/verify_glossary.sh
-bash scripts/verify_l3_protocol_headers.sh
-bash scripts/verify_arch_docs_sync.sh
-bash scripts/verify_ai_bug_knowledge.sh
-python3 scripts/ai-knowledge/kb.py validate
 python3 scripts/design-system/ds.py lint --staged
 ```
+
+文档治理校验（术语表、L3 协议头、架构文档同步、Bug 知识库校验）不作为每次提交的强制前置条件，也不由 `prepare` 自动执行。是否运行这些检查遵循用户明确要求与仓库收口阶段规则；不能仅因用户要求提交就触发文档收口。此调整不删除校验工具，也不免除收口阶段的文档要求。
 
 按变更类型追加证据：
 

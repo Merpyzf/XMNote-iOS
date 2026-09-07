@@ -51,20 +51,10 @@ GENERIC_SUBJECTS = ("提交本地全部改动", "更新代码", "修复问题", 
 
 ALWAYS_REQUIRED_VALIDATIONS = (
     "git diff --cached --check",
-    "bash scripts/verify_glossary.sh",
-    "bash scripts/verify_l3_protocol_headers.sh",
-    "bash scripts/verify_arch_docs_sync.sh",
-    "bash scripts/verify_ai_bug_knowledge.sh",
-    "python3 scripts/ai-knowledge/kb.py validate",
     "python3 scripts/design-system/ds.py lint --staged",
 )
 BASELINE_VALIDATION_ARGV = {
     "git diff --cached --check": ["git", "diff", "--cached", "--check"],
-    "bash scripts/verify_glossary.sh": ["bash", "scripts/verify_glossary.sh"],
-    "bash scripts/verify_l3_protocol_headers.sh": ["bash", "scripts/verify_l3_protocol_headers.sh"],
-    "bash scripts/verify_arch_docs_sync.sh": ["bash", "scripts/verify_arch_docs_sync.sh"],
-    "bash scripts/verify_ai_bug_knowledge.sh": ["bash", "scripts/verify_ai_bug_knowledge.sh"],
-    "python3 scripts/ai-knowledge/kb.py validate": ["python3", "scripts/ai-knowledge/kb.py", "validate"],
     "python3 scripts/design-system/ds.py lint --staged": [
         "python3",
         "scripts/design-system/ds.py",
