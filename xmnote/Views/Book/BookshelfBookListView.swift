@@ -6,31 +6,21 @@
 //
 
 /**
- * [INPUT]: 依赖 BookshelfBookListRoute、RepositoryContainer、AppNavigationCoordinator、含活动写入反馈的书架整理 accessory 协调器、系统返回手势桥接、InteractionMetrics 与外层普通浏览路由闭包
- * [OUTPUT]: 对外提供 BookshelfBookListView，组合本地顶部 chrome、搜索抽屉、BookshelfBookListCollectionView、写入失败反馈、含活动动作的根级底部编辑快照与统一批量标签 Sheet 容器
+ * [INPUT]: 依赖 BookshelfBookListRoute、RepositoryContainer、AppNavigationCoordinator、SwiftUI 原生导航栏、含活动写入反馈的书架整理 accessory 协调器与外层普通浏览路由闭包
+ * [OUTPUT]: 对外提供 BookshelfBookListView，组合原生 inline 标题、导航副标题与工具栏、搜索抽屉、BookshelfBookListCollectionView、写入失败反馈、含活动动作的根级底部编辑快照与统一批量标签 Sheet 容器
  * [POS]: Book 模块二级列表页，被 BookRoute.bookshelfList 导航目标消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
-import UIKit
 
-/// 二级列表顶部本地 chrome 的状态化尺寸，避免搜索抽屉固定与底部栏避让同帧抢布局。
+/// 二级列表搜索抽屉的状态化尺寸，避免动态字体下输入区域被压缩。
 enum BookshelfBookListChromeMetrics {
     static let normalSearchAreaHeight: CGFloat = 52
     static let accessibilitySearchAreaHeight: CGFloat = 62
-    static let titleHorizontalInset: CGFloat = 132
 
     static func searchAreaHeight(for dynamicTypeSize: DynamicTypeSize) -> CGFloat {
         dynamicTypeSize >= .accessibility1 ? accessibilitySearchAreaHeight : normalSearchAreaHeight
-    }
-
-    static func browsingHeight(for dynamicTypeSize: DynamicTypeSize) -> CGFloat {
-        BookshelfEditChromeMetrics.topBarHeight(for: dynamicTypeSize)
-    }
-
-    static func editingHeight(for dynamicTypeSize: DynamicTypeSize) -> CGFloat {
-        BookshelfEditChromeMetrics.topBarHeight(for: dynamicTypeSize)
     }
 }
 
@@ -77,7 +67,6 @@ struct BookshelfBookListView: View {
 
 /// 二级书籍列表 SwiftUI 壳层，承接搜索栏、加载态和 UIKit 集合区。
 private struct BookshelfBookListContentView: View {
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
@@ -124,8 +113,6 @@ private struct BookshelfBookListContentView: View {
 
     var body: some View {
         VStack(spacing: Spacing.none) {
-            topChrome
-                .zIndex(1)
             if chromePhase == .normal, viewModel.writeError != nil {
                 XMInlineStatusBanner(
                     "操作未完成，请稍后重试",
@@ -142,9 +129,13 @@ private struct BookshelfBookListContentView: View {
         }
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .background(Color.surfacePage.ignoresSafeArea())
-        .navigationBarBackButtonHidden(true)
-        .toolbar(.hidden, for: .navigationBar)
-        .navigationPopGuard(canPop: true, onBlockedAttempt: { })
+        .navigationTitle(viewModel.navigationTitle)
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationSubtitle(chromePhase.showsEditHeader ? editingNavigationSubtitle : "")
+        .navigationBarBackButtonHidden(chromePhase.showsEditHeader)
+        .toolbar {
+            navigationToolbarContent
+        }
         .onAppear {
             syncReadLoadingGate()
             syncChromePhaseWithEditingState()
@@ -300,44 +291,41 @@ private struct BookshelfBookListContentView: View {
         }
     }
 
-    @ViewBuilder
-    private var topChrome: some View {
-        ZStack(alignment: .top) {
-            if chromePhase == .normal {
-                BookshelfBookListBrowsingChrome(
-                    title: viewModel.navigationTitle,
-                    canEnterEditing: viewModel.canEnterEditing,
-                    topBarHeight: topBarRowHeight,
-                    onBack: { dismiss() },
-                    onShowDisplaySettings: { showsDisplaySettingSheet = true },
-                    onEnterEditing: enterEditingWithChoreography
-                )
-                .allowsHitTesting(chromePhase == .normal)
-                .transition(BookshelfManagementMotion.bookListTopChromeTransition(reduceMotion: reduceMotion))
+    @ToolbarContentBuilder
+    private var navigationToolbarContent: some ToolbarContent {
+        if chromePhase == .normal {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Button {
+                    showsDisplaySettingSheet = true
+                } label: {
+                    Label("显示设置", systemImage: "slider.horizontal.3")
+                }
+                .labelStyle(.iconOnly)
+                .xmToolbarNeutralTint()
+                .accessibilityLabel("显示设置")
+
+                Button(action: enterEditingWithChoreography) {
+                    Label("整理书籍", systemImage: "checklist")
+                }
+                .labelStyle(.iconOnly)
+                .xmToolbarNeutralTint()
+                .disabled(!viewModel.canEnterEditing)
+                .accessibilityLabel(viewModel.canEnterEditing ? "整理书籍" : "整理书籍，当前不可用")
+                .accessibilityHint(viewModel.canEnterEditing ? "进入书籍整理模式" : "当前没有可整理的书籍")
+            }
+        } else {
+            ToolbarItem(placement: .topBarLeading) {
+                Button(selectionToggleTitle, action: toggleVisibleSelection)
+                    .xmToolbarNeutralTint()
+                    .disabled(!isSelectionToggleEnabled)
+                    .accessibilityLabel(selectionToggleTitle)
             }
 
-            if chromePhase.showsEditHeader {
-                BookshelfEditChrome(
-                    title: viewModel.navigationTitle,
-                    selectedBookCount: viewModel.selectedCount,
-                    selectionScope: .booksOnly,
-                    isAllVisibleSelected: viewModel.isAllVisibleSelected,
-                    isSelectionToggleEnabled: !viewModel.visibleBookIDs.isEmpty,
-                    searchState: editSearchState,
-                    statusText: editStatusText,
-                    drawsSurfaceBackground: false,
-                    showsBottomDivider: false,
-                    onToggleSelectAll: toggleVisibleSelection,
-                    onCancel: exitEditingWithChoreography
-                )
-                .frame(height: topBarRowHeight)
-                .transition(BookshelfManagementMotion.bookListTopChromeTransition(reduceMotion: reduceMotion))
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("完成", action: exitEditingWithChoreography)
+                    .xmToolbarNeutralTint()
+                    .accessibilityLabel("退出整理模式")
             }
-        }
-        .frame(height: reservedTopChromeHeight, alignment: .top)
-        .background {
-            Color.surfacePage
-                .ignoresSafeArea(.container, edges: .top)
         }
     }
 
@@ -396,25 +384,8 @@ private struct BookshelfBookListContentView: View {
         viewModel.performEditAction(command.action)
     }
 
-    private var topBarRowHeight: CGFloat {
-        BookshelfEditChromeMetrics.topBarHeight(for: dynamicTypeSize)
-    }
-
     private var searchAreaHeight: CGFloat {
         BookshelfBookListChromeMetrics.searchAreaHeight(for: dynamicTypeSize)
-    }
-
-    private var reservedTopChromeHeight: CGFloat {
-        expectedTopChromeHeight
-    }
-
-    private var expectedTopChromeHeight: CGFloat {
-        switch chromePhase {
-        case .normal:
-            return BookshelfBookListChromeMetrics.browsingHeight(for: dynamicTypeSize)
-        case .enteringEdit, .editing, .exitingEdit:
-            return BookshelfBookListChromeMetrics.editingHeight(for: dynamicTypeSize)
-        }
     }
 
     private var browseSearchPlaceholder: String {
@@ -423,6 +394,27 @@ private struct BookshelfBookListContentView: View {
 
     private var editSearchState: BookshelfEditChromeSearchState {
         viewModel.hasSearchKeyword ? .active(resultCount: viewModel.visibleBookIDs.count) : .inactive
+    }
+
+    private var isSelectionToggleEnabled: Bool {
+        !viewModel.visibleBookIDs.isEmpty && !editSearchState.hasEmptyResult
+    }
+
+    private var selectionToggleTitle: String {
+        if editSearchState.hasEmptyResult {
+            return "无结果"
+        }
+        if editSearchState.isFiltering {
+            return viewModel.isAllVisibleSelected ? "取消选择" : "全选结果"
+        }
+        return viewModel.isAllVisibleSelected ? "取消全选" : "全选"
+    }
+
+    private var editingNavigationSubtitle: String {
+        guard let editStatusText, !editStatusText.isEmpty else {
+            return viewModel.selectedCount == 0 ? "未选择" : "已选 \(viewModel.selectedCount) 本"
+        }
+        return editStatusText
     }
 
     private var editStatusText: String? {
@@ -520,7 +512,7 @@ private struct BookshelfBookListContentView: View {
         readLoadingGate.update(intent: isInitialLoading ? .read : .none)
     }
 
-    /// 进入整理模式时以可反向动画切换顶部 chrome，并同步发布底部 accessory 快照。
+    /// 进入整理模式时切换原生工具栏内容，并同步发布底部 accessory 快照。
     /// - Note: 所有状态都在 MainActor 修改；每次请求替换 transition ID，过期 completion 无法回写新状态。
     private func enterEditingWithChoreography() {
         guard viewModel.canEnterEditing else { return }
@@ -627,7 +619,7 @@ private struct BookshelfBookListContentView: View {
         }
     }
 
-    /// 退出整理模式时同步淡出底部动作与恢复普通顶部 chrome，避免串行形成两段舞台感。
+    /// 退出整理模式时同步淡出底部动作与恢复普通原生工具栏，避免串行形成两段舞台感。
     /// - Note: 所有状态都在 MainActor 上修改；旧 completion 需同时匹配页面 transition 与 accessory presentation。
     private func exitEditingWithChoreography() {
         guard viewModel.isEditing || chromePhase != .normal else { return }
@@ -668,7 +660,7 @@ private struct BookshelfBookListContentView: View {
         }
     }
 
-    /// 同步外部编辑态变化，保证上下文菜单或页面恢复不会留下过期 chrome 阶段。
+    /// 同步外部编辑态变化，保证上下文菜单或页面恢复不会留下过期工具栏阶段。
     private func syncChromePhaseWithEditingState() {
         guard !isEditingChoreographyActive else { return }
         if viewModel.isEditing, chromePhase == .normal {
