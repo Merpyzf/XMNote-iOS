@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 ApiNoteImportViewModel、统一预览、Repository 注入与 App 生命周期
+ * [INPUT]: 依赖 ApiNoteImportViewModel、统一预览、系统中性列表按钮、受会员保护的 Repository 注入与 App 生命周期
  * [OUTPUT]: 对外提供 8080 API 导入页面，基于系统有效接口展示地址/访问码并接收多次 `/send`
  * [POS]: Views/Personal/DataImport 的 API 特殊入口；离开页面或 App 进入后台即停止服务
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -13,10 +13,10 @@ struct ApiNoteImportView: View {
     let repository: any NoteImportRepositoryProtocol
     let onOpenPremium: () -> Void
 
-    init(repository: any NoteImportRepositoryProtocol, isPremium: Bool, onOpenPremium: @escaping () -> Void) {
+    init(repository: any NoteImportRepositoryProtocol, membership: any MembershipRepositoryProtocol, onOpenPremium: @escaping () -> Void) {
         self.repository = repository
         self.onOpenPremium = onOpenPremium
-        _model = State(initialValue: ApiNoteImportViewModel(isPremium: isPremium))
+        _model = State(initialValue: ApiNoteImportViewModel(membership: membership))
     }
 
     var body: some View {
@@ -29,7 +29,10 @@ struct ApiNoteImportView: View {
             }
             Section {
                 Button(stateIsActive ? "停止服务" : "启动服务") { stateIsActive ? model.stop() : model.start() }
-                Button("预览并导入") { model.openPreview() }.disabled(model.books.isEmpty)
+                    .tint(Color.textPrimary)
+                Button("预览并导入") { model.openPreview() }
+                    .tint(Color.textPrimary)
+                    .disabled(model.books.isEmpty)
             }
             Section("请求要求") {
                 Text("向上方地址 POST Android API 导入 JSON，并在 X-XMNote-Access-Code 请求头中填写访问码。接口业务结果始终使用 HTTP 200 返回。")
@@ -42,7 +45,7 @@ struct ApiNoteImportView: View {
         .onDisappear { model.stop() }
         .onChange(of: scenePhase) { _, phase in if phase != .active { model.stop() } }
         .navigationDestination(isPresented: $model.opensPreview) {
-            UnifiedNoteImportPreviewView(books: model.books.map { $0.asNoteImportDraft() }, repository: repository)
+            UnifiedNoteImportPreviewView(books: model.books.map { $0.asNoteImportDraft() }, repository: repository, preferenceKey: "api")
         }
         .xmSystemAlert(
             isPresented: Binding(

@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 TagManagementItem/TagManagementScope、XMInlineSearchField、XMSelectionIndicator/XMKeywordHighlighting、iOS 26 UIScrollEdgeEffect、UIViewController 顶部滚动观察、范围栏实测高度与页面传入的标签及搜索状态和操作回调
- * [OUTPUT]: 对外提供 TagManagementCollectionView，封装保持系统回弹的下拉搜索、动态顶部内边距、底部 Chrome 避让、iPhone 单列/宽屏响应式双列的直接内容平面、长按管理、选择态、排序态与滚动边缘状态上报
+ * [INPUT]: 依赖 TagManagementItem/TagManagementScope、XMInlineSearchField、XMSelectionIndicator/XMKeywordHighlighting、XMSystemScrollEdgeRegistration、范围栏实测高度与页面传入的标签及搜索状态和操作回调
+ * [OUTPUT]: 对外提供 TagManagementCollectionView，封装保持系统回弹与 soft 顶部边缘过渡的下拉搜索、动态顶部内边距、底部 Chrome 避让、iPhone 单列/宽屏响应式双列的直接内容平面、长按管理、选择态与排序态
  * [POS]: Views/Personal/Components 的标签管理页面私有集合组件，被 TagManagementView 用作标签主体内容区
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -26,7 +26,6 @@ struct TagManagementCollectionView: UIViewRepresentable {
     let isDisabled: Bool
     let topBarHeight: CGFloat
     let onRetry: () -> Void
-    let onScrollEdgeWashEdgesChange: (XMScrollEdgeWashEdges) -> Void
     let onSearchTextChange: (String) -> Void
     let onSearchActiveChange: (Bool) -> Void
     let onPrimaryAction: (TagManagementItem) -> Void
@@ -71,7 +70,6 @@ struct TagManagementCollectionView: UIViewRepresentable {
             reducesMotion: reduceMotion,
             topBarHeight: topBarHeight,
             onRetry: onRetry,
-            onScrollEdgeWashEdgesChange: onScrollEdgeWashEdgesChange,
             onSearchTextChange: onSearchTextChange,
             onSearchActiveChange: onSearchActiveChange,
             onPrimaryAction: onPrimaryAction,
@@ -91,7 +89,6 @@ final class TagManagementCollectionHostView: UICollectionView {
     private var isInteractiveReordering = false
     private var didChangeOrderInCurrentSession = false
     private var didReceiveDropInCurrentSession = false
-    private var lastReportedScrollEdgeWashEdges = XMScrollEdgeWashEdges.hidden
     private var lastPreferredContentSizeCategory: UIContentSizeCategory?
     private var currentColumnCount = TagManagementCollectionMetrics.singleColumnCount
     private var hasPositionedInitialSearchHeader = false
@@ -101,7 +98,7 @@ final class TagManagementCollectionHostView: UICollectionView {
     private var shouldActivateSearchAfterReveal = false
     private weak var searchHeaderView: TagManagementCollectionHeaderView?
     private var emptyContentView: (UIView & UIContentView)?
-    private weak var observedTopContentScrollController: UIViewController?
+    private let systemScrollEdgeRegistration = XMSystemScrollEdgeRegistration(edges: .top)
     private weak var enclosingTabBarController: UITabBarController?
     private let impactFeedback = UIImpactFeedbackGenerator(style: .light)
     private let selectionFeedback = UISelectionFeedbackGenerator()
@@ -125,7 +122,6 @@ final class TagManagementCollectionHostView: UICollectionView {
         alwaysBounceVertical = true
         showsVerticalScrollIndicator = false
         contentInsetAdjustmentBehavior = .always
-        configureTopScrollEdgeEffect()
         keyboardDismissMode = .onDrag
         dragInteractionEnabled = false
         reorderingCadence = .immediate
@@ -153,7 +149,7 @@ final class TagManagementCollectionHostView: UICollectionView {
     /// 布局时维持顶部滚动观察与底部避让，并在字号或有效宽度跨过列阈值后重建布局。
     override func layoutSubviews() {
         super.layoutSubviews()
-        updateTopContentScrollObservation()
+        systemScrollEdgeRegistration.update(scrollView: self)
         updateTopChromeInsets()
         updateBottomChromeInsets()
 
@@ -184,9 +180,9 @@ final class TagManagementCollectionHostView: UICollectionView {
     override func didMoveToWindow() {
         super.didMoveToWindow()
         if window == nil {
-            clearTopContentScrollObservation()
+            systemScrollEdgeRegistration.invalidate()
         } else {
-            updateTopContentScrollObservation()
+            systemScrollEdgeRegistration.update(scrollView: self)
         }
         updateTopChromeInsets()
         updateBottomChromeInsets()
@@ -263,12 +259,11 @@ final class TagManagementCollectionHostView: UICollectionView {
         } else {
             positionInitialSearchHeaderIfNeeded()
         }
-        updateScrollEdgeWashEdges()
     }
 
     /// 清理拖拽缓存，供 SwiftUI 销毁或复用承载视图时恢复稳定状态。
     func prepareForReuse() {
-        clearTopContentScrollObservation()
+        systemScrollEdgeRegistration.invalidate()
         pendingConfiguration = nil
         originalItemsBeforeDrag = []
         isInteractiveReordering = false
@@ -284,44 +279,11 @@ final class TagManagementCollectionHostView: UICollectionView {
         emptyContentView = nil
         collectionView.backgroundView = nil
         collectionView.accessibilityCustomActions = nil
-        lastReportedScrollEdgeWashEdges = .hidden
-        let onScrollEdgeWashEdgesChange = configuration.onScrollEdgeWashEdgesChange
-        DispatchQueue.main.async {
-            onScrollEdgeWashEdgesChange(.hidden)
-        }
         collectionView.reloadData()
     }
 }
 
 private extension TagManagementCollectionHostView {
-    /// 使用系统自动顶部边缘效果，让导航控件在内容经过下方时保持清晰。
-    func configureTopScrollEdgeEffect() {
-        topEdgeEffect.isHidden = false
-        topEdgeEffect.style = .automatic
-    }
-
-    /// 将当前集合登记为页面顶部栏的真实滚动 owner，并在控制器切换时移交观察关系。
-    func updateTopContentScrollObservation() {
-        guard window != nil, let controller = nearestOwningViewController() else {
-            clearTopContentScrollObservation()
-            return
-        }
-
-        guard observedTopContentScrollController !== controller else { return }
-        clearTopContentScrollObservation()
-        controller.setContentScrollView(self, for: .top)
-        observedTopContentScrollController = controller
-    }
-
-    /// 仅在控制器仍观察当前集合时释放顶部关系，避免清除后来页面登记的滚动视图。
-    func clearTopContentScrollObservation() {
-        guard let controller = observedTopContentScrollController else { return }
-        if controller.contentScrollView(for: .top) === self {
-            controller.setContentScrollView(nil, for: .top)
-        }
-        observedTopContentScrollController = nil
-    }
-
     /// 沿响应链查找承载当前 SwiftUI 页面桥接层的最近视图控制器。
     func nearestOwningViewController() -> UIViewController? {
         var responder: UIResponder? = self
@@ -396,7 +358,6 @@ private extension TagManagementCollectionHostView {
             contentInset = nextContentInset
             verticalScrollIndicatorInsets = nextIndicatorInsets
         }
-        updateScrollEdgeWashEdges()
     }
 
     /// 从公开控制器层级中定位承载当前页面的系统 Tab Bar Controller。
@@ -581,7 +542,6 @@ private extension TagManagementCollectionHostView {
             self.collectionView.layoutIfNeeded()
             self.setNormalizedSearchOffset(nextLogicalOffset, animated: false)
             self.updateVisibleHeader()
-            self.updateScrollEdgeWashEdges()
         }
     }
 
@@ -708,7 +668,6 @@ private extension TagManagementCollectionHostView {
         let completion: (Bool) -> Void = { [weak self] _ in
             guard let self else { return }
             self.updateVisibleCells(animated: animated && !self.configuration.reducesMotion)
-            self.updateScrollEdgeWashEdges()
         }
 
         if animated && !configuration.reducesMotion {
@@ -776,30 +735,6 @@ private extension TagManagementCollectionHostView {
         Set(items.map(\.id)).count == items.count
     }
 
-    /// 将 UIKit 滚动状态转换为公共柔化层状态，并去重后回传给 SwiftUI 外层。
-    func updateScrollEdgeWashEdges() {
-        let topOffset = collectionView.contentOffset.y + collectionView.adjustedContentInset.top
-        let bottomRemaining = collectionView.contentSize.height
-            + collectionView.adjustedContentInset.bottom
-            - collectionView.bounds.height
-            - collectionView.contentOffset.y
-        let activeEdges = XMScrollEdgeWashEdges(
-            top: topOffset > Spacing.hairline,
-            bottom: bottomRemaining > Spacing.hairline
-        )
-        reportScrollEdgeWashEdges(activeEdges)
-    }
-
-    /// 异步上报边缘状态，避免 UIViewRepresentable 更新期同步写入 SwiftUI 状态。
-    func reportScrollEdgeWashEdges(_ activeEdges: XMScrollEdgeWashEdges) {
-        guard activeEdges != lastReportedScrollEdgeWashEdges else { return }
-        lastReportedScrollEdgeWashEdges = activeEdges
-        let onScrollEdgeWashEdgesChange = configuration.onScrollEdgeWashEdgesChange
-        DispatchQueue.main.async {
-            onScrollEdgeWashEdgesChange(activeEdges)
-        }
-    }
-
     /// 当前以可视内容顶部为零点的纵向位置，用于只在搜索头区间内做端点判断。
     var normalizedSearchOffset: CGFloat {
         collectionView.contentOffset.y + collectionView.adjustedContentInset.top
@@ -857,7 +792,6 @@ private extension TagManagementCollectionHostView {
             )
             self.hasPositionedInitialSearchHeader = true
             self.updateVisibleSearchHeaderRevealProgress()
-            self.updateScrollEdgeWashEdges()
         }
     }
 
@@ -1168,10 +1102,6 @@ extension TagManagementCollectionHostView: UICollectionViewDataSource {
 }
 
 extension TagManagementCollectionHostView: UICollectionViewDelegate {
-    func scrollViewDidScroll(_ scrollView: UIScrollView) {
-        updateScrollEdgeWashEdges()
-    }
-
     /// 用户接管滚动时取消尚未完成的无障碍聚焦请求，避免稍后意外抢占键盘焦点。
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
         shouldActivateSearchAfterReveal = false
@@ -1319,7 +1249,6 @@ struct TagManagementCollectionConfiguration {
     let reducesMotion: Bool
     let topBarHeight: CGFloat
     let onRetry: () -> Void
-    let onScrollEdgeWashEdgesChange: (XMScrollEdgeWashEdges) -> Void
     let onSearchTextChange: (String) -> Void
     let onSearchActiveChange: (Bool) -> Void
     let onPrimaryAction: (TagManagementItem) -> Void
@@ -1385,7 +1314,6 @@ struct TagManagementCollectionConfiguration {
         reducesMotion: false,
         topBarHeight: 0,
         onRetry: {},
-        onScrollEdgeWashEdgesChange: { _ in },
         onSearchTextChange: { _ in },
         onSearchActiveChange: { _ in },
         onPrimaryAction: { _ in },

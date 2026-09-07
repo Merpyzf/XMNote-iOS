@@ -1,12 +1,13 @@
 #if DEBUG
 /**
- * [INPUT]: 依赖 XMScrollEdgeChrome、XMScrollEdgeWash 与 DesignTokens，提供滚动边缘柔化层的多场景 Debug 验证样本
- * [OUTPUT]: 对外提供 XMScrollEdgeChromeTestView，集中验证顶部/底部/双向边界、背景、强度、高度、深色模式与点击穿透行为
+ * [INPUT]: 依赖 XMScrollEdgeChrome、XMScrollEdgeWash、XMSystemScrollEdgeRegistration 与 DesignTokens，提供系统原生和局部滚动边缘的多场景 Debug 验证样本
+ * [OUTPUT]: 对外提供 XMScrollEdgeChromeTestView，集中验证 SwiftUI/UIKit 顶部/底部/双向系统边缘，以及局部 Wash 的背景、强度、深色模式与点击穿透行为
  * [POS]: Debug 测试页，仅用于滚动边缘基础设施接入真实页面前的可视化验证
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
+import UIKit
 
 /// 滚动边缘覆盖层测试页，验证基础组件在固定栏、普通滚动区和不同表层背景下的表现。
 struct XMScrollEdgeChromeTestView: View {
@@ -20,6 +21,7 @@ struct XMScrollEdgeChromeTestView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.base) {
                 introCard
+                systemNativeSection
                 topEdgeSection
                 bottomEdgeSection
                 bothEdgesSection
@@ -35,6 +37,30 @@ struct XMScrollEdgeChromeTestView: View {
         .background(Color.surfacePage)
         .navigationTitle("滚动边缘覆盖层")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var systemNativeSection: some View {
+        XMScrollEdgeDemoCard(title: "系统原生安全区") {
+            VStack(alignment: .leading, spacing: Spacing.cozy) {
+                Text("以下样本在独立页面验证真实 NavigationStack、安全区和单一滚动 owner，不使用 Wash 或自绘柔化层。")
+                    .font(AppTypography.caption)
+                    .foregroundStyle(Color.textSecondary)
+
+                systemDemoLink(
+                    title: "SwiftUI 原生滚动",
+                    subtitle: "直接验证顶部、底部与双边缘 soft 过渡"
+                ) {
+                    XMSystemScrollEdgeSwiftUIDemo()
+                }
+
+                systemDemoLink(
+                    title: "UIKit 窄桥接",
+                    subtitle: "验证 UIViewRepresentable 注册、重建与安全释放"
+                ) {
+                    XMSystemScrollEdgeUIKitDemo()
+                }
+            }
+        }
     }
 
     private var introCard: some View {
@@ -277,6 +303,40 @@ struct XMScrollEdgeChromeTestView: View {
         .background(Color.surfaceCard)
     }
 
+    private func systemDemoLink<Destination: View>(
+        title: String,
+        subtitle: String,
+        @ViewBuilder destination: () -> Destination
+    ) -> some View {
+        NavigationLink(destination: destination()) {
+            HStack(spacing: Spacing.cozy) {
+                VStack(alignment: .leading, spacing: Spacing.tiny) {
+                    Text(title)
+                        .font(AppTypography.subheadlineMedium)
+                        .foregroundStyle(Color.textPrimary)
+                    Text(subtitle)
+                        .font(AppTypography.caption)
+                        .foregroundStyle(Color.textSecondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.forward")
+                    .font(AppTypography.captionSemibold)
+                    .foregroundStyle(Color.iconSecondary)
+                    .accessibilityHidden(true)
+            }
+            .padding(Spacing.cozy)
+            .frame(minHeight: InteractionMetrics.minimumTouchTarget)
+            .background(
+                Color.surfaceNested,
+                in: RoundedRectangle(
+                    cornerRadius: CornerRadius.blockSmall,
+                    style: .continuous
+                )
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
     private func staticSwatch(title: String, style: XMScrollEdgeWashStyle) -> some View {
         VStack(alignment: .leading, spacing: Spacing.half) {
             Text(title)
@@ -328,6 +388,263 @@ struct XMScrollEdgeChromeTestView: View {
         RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
             .stroke(Color.surfaceBorderSubtle.opacity(0.56), lineWidth: StrokeWidth.hairline)
     }
+}
+
+private struct XMSystemScrollEdgeSwiftUIDemo: View {
+    @State private var selectedEdges = XMSystemScrollEdgeDemoEdges.both
+
+    var body: some View {
+        ScrollView {
+            XMSystemScrollEdgeDemoRows(prefix: "SwiftUI")
+        }
+        .background(Color.surfacePage)
+        .ignoresSafeArea(.container, edges: selectedEdges.swiftUIEdges)
+        .modifier(
+            XMSystemScrollEdgeDemoBottomBarModifier(
+                isEnabled: selectedEdges.includesBottom
+            )
+        )
+        .scrollEdgeEffectStyle(.soft, for: selectedEdges.swiftUIEdges)
+        .navigationTitle("SwiftUI 系统边缘")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                systemEdgeMenu(selection: $selectedEdges)
+            }
+        }
+    }
+}
+
+private struct XMSystemScrollEdgeUIKitDemo: View {
+    @State private var selectedEdges = XMSystemScrollEdgeDemoEdges.both
+
+    var body: some View {
+        XMSystemScrollEdgeUIKitRepresentable(edges: selectedEdges.uiKitEdges)
+            .id(selectedEdges)
+            .background(Color.surfacePage)
+            .ignoresSafeArea(.container, edges: selectedEdges.swiftUIEdges)
+            .modifier(
+                XMSystemScrollEdgeDemoBottomBarModifier(
+                    isEnabled: selectedEdges.includesBottom
+                )
+            )
+            .navigationTitle("UIKit 系统边缘")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    systemEdgeMenu(selection: $selectedEdges)
+                }
+            }
+    }
+}
+
+private struct XMSystemScrollEdgeUIKitRepresentable: UIViewRepresentable {
+    let edges: UIRectEdge
+
+    /// 创建具备真实滚动内容和系统栏观察生命周期的 UIKit 验证宿主。
+    func makeUIView(context: Context) -> XMSystemScrollEdgeUIKitHostView {
+        XMSystemScrollEdgeUIKitHostView(edges: edges)
+    }
+
+    /// 边缘切换通过稳定枚举 ID 重建宿主，避免在验证中混合两套注册器。
+    func updateUIView(_ uiView: XMSystemScrollEdgeUIKitHostView, context: Context) {}
+
+    /// 拆卸 representable 时显式释放系统栏观察关系。
+    static func dismantleUIView(
+        _ uiView: XMSystemScrollEdgeUIKitHostView,
+        coordinator: ()
+    ) {
+        uiView.prepareForReuse()
+    }
+}
+
+private final class XMSystemScrollEdgeUIKitHostView: UIScrollView {
+    private let systemScrollEdgeRegistration: XMSystemScrollEdgeRegistration
+
+    /// 构造使用系统安全区调整的纵向 UIScrollView 样本。
+    init(edges: UIRectEdge) {
+        systemScrollEdgeRegistration = XMSystemScrollEdgeRegistration(edges: edges)
+        super.init(frame: .zero)
+        alwaysBounceVertical = true
+        showsVerticalScrollIndicator = true
+        contentInsetAdjustmentBehavior = .always
+        backgroundColor = UIColor(Color.surfacePage)
+        installRows()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    /// 入窗时建立、离窗时释放系统栏观察关系。
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window == nil {
+            systemScrollEdgeRegistration.invalidate()
+        } else {
+            systemScrollEdgeRegistration.update(scrollView: self)
+        }
+    }
+
+    /// 布局变化时幂等确认系统仍观察当前滚动视图。
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        systemScrollEdgeRegistration.update(scrollView: self)
+    }
+
+    /// 供 UIViewRepresentable 拆卸时主动释放系统栏关系。
+    func prepareForReuse() {
+        systemScrollEdgeRegistration.invalidate()
+    }
+
+    /// 使用原生 Auto Layout 构造足够跨越上下安全区的验证内容。
+    private func installRows() {
+        let stack = UIStackView()
+        stack.axis = .vertical
+        stack.spacing = Spacing.cozy
+        stack.isLayoutMarginsRelativeArrangement = true
+        stack.layoutMargins = UIEdgeInsets(
+            top: Spacing.base,
+            left: Spacing.screenEdge,
+            bottom: Spacing.base,
+            right: Spacing.screenEdge
+        )
+        stack.translatesAutoresizingMaskIntoConstraints = false
+
+        for index in 1...30 {
+            let label = UILabel()
+            label.font = UIFont.preferredFont(forTextStyle: .body)
+            label.adjustsFontForContentSizeCategory = true
+            label.textColor = UIColor(Color.textPrimary)
+            label.backgroundColor = UIColor(Color.surfaceCard)
+            label.text = "UIKit 系统滚动样本 \(index)"
+            label.layer.cornerRadius = CornerRadius.blockSmall
+            label.layer.cornerCurve = .continuous
+            label.clipsToBounds = true
+            label.layoutMargins = UIEdgeInsets(
+                top: Spacing.cozy,
+                left: Spacing.base,
+                bottom: Spacing.cozy,
+                right: Spacing.base
+            )
+            let minimumHeight = label.heightAnchor.constraint(
+                greaterThanOrEqualToConstant: InteractionMetrics.minimumTouchTarget
+            )
+            minimumHeight.isActive = true
+            stack.addArrangedSubview(label)
+        }
+
+        addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: contentLayoutGuide.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: contentLayoutGuide.trailingAnchor),
+            stack.topAnchor.constraint(equalTo: contentLayoutGuide.topAnchor),
+            stack.bottomAnchor.constraint(equalTo: contentLayoutGuide.bottomAnchor),
+            stack.widthAnchor.constraint(equalTo: frameLayoutGuide.widthAnchor)
+        ])
+    }
+}
+
+private struct XMSystemScrollEdgeDemoRows: View {
+    let prefix: String
+
+    var body: some View {
+        LazyVStack(spacing: Spacing.cozy) {
+            ForEach(1...30, id: \.self) { index in
+                Text("\(prefix) 系统滚动样本 \(index)")
+                    .font(AppTypography.body)
+                    .foregroundStyle(Color.textPrimary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(Spacing.base)
+                    .background(
+                        Color.surfaceCard,
+                        in: RoundedRectangle(
+                            cornerRadius: CornerRadius.blockSmall,
+                            style: .continuous
+                        )
+                    )
+            }
+        }
+        .padding(.horizontal, Spacing.screenEdge)
+        .padding(.vertical, Spacing.base)
+    }
+}
+
+private struct XMSystemScrollEdgeDemoBottomBarModifier: ViewModifier {
+    let isEnabled: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content.safeAreaBar(edge: .bottom, spacing: Spacing.none) {
+                HStack(spacing: Spacing.cozy) {
+                    Image(systemName: "slider.horizontal.3")
+                        .foregroundStyle(Color.iconPrimary)
+                    Text("系统 Bottom Bar")
+                        .font(AppTypography.subheadlineMedium)
+                        .foregroundStyle(Color.textPrimary)
+                    Spacer()
+                    Text("Soft")
+                        .font(AppTypography.captionMedium)
+                        .foregroundStyle(Color.textSecondary)
+                }
+                .padding(.horizontal, Spacing.screenEdge)
+                .frame(minHeight: InteractionMetrics.minimumTouchTarget)
+            }
+        } else {
+            content
+        }
+    }
+}
+
+private enum XMSystemScrollEdgeDemoEdges: String, CaseIterable, Identifiable {
+    case top = "顶部"
+    case bottom = "底部"
+    case both = "双边缘"
+
+    var id: Self { self }
+
+    var swiftUIEdges: Edge.Set {
+        switch self {
+        case .top:
+            return .top
+        case .bottom:
+            return .bottom
+        case .both:
+            return [.top, .bottom]
+        }
+    }
+
+    var uiKitEdges: UIRectEdge {
+        switch self {
+        case .top:
+            return .top
+        case .bottom:
+            return .bottom
+        case .both:
+            return [.top, .bottom]
+        }
+    }
+
+    var includesBottom: Bool {
+        self != .top
+    }
+}
+
+private func systemEdgeMenu(
+    selection: Binding<XMSystemScrollEdgeDemoEdges>
+) -> some View {
+    Menu {
+        Picker("系统边缘", selection: selection) {
+            ForEach(XMSystemScrollEdgeDemoEdges.allCases) { edges in
+                Text(edges.rawValue).tag(edges)
+            }
+        }
+    } label: {
+        Text(selection.wrappedValue.rawValue)
+    }
+    .accessibilityLabel("选择系统滚动边缘")
 }
 
 private struct XMScrollEdgeDemoCard<Content: View>: View {

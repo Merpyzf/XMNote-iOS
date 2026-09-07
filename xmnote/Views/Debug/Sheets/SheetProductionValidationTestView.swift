@@ -159,8 +159,7 @@ struct SheetProductionValidationTestView: View {
             availableTags: previewTags,
             chapterOptions: previewChapters,
             repository: repositories.noteRepository,
-            quotaRepository: repositories.noteImageUploadQuotaRepository,
-            isPremium: true
+            quotaRepository: repositories.noteImageUploadQuotaRepository
         )
         _noteMergeViewModel = State(initialValue: noteMergeViewModel)
 

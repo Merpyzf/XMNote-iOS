@@ -396,6 +396,28 @@ class CommitGateTest(unittest.TestCase):
         with self.assertRaisesRegex(gate.GateError, "缺少已通过的必需验证"):
             self.prepare(review)
 
+    def test_prepare_does_not_require_or_execute_documentation_checks(self) -> None:
+        for relative in (
+            "scripts/verify_glossary.sh",
+            "scripts/verify_l3_protocol_headers.sh",
+            "scripts/verify_arch_docs_sync.sh",
+            "scripts/verify_ai_bug_knowledge.sh",
+        ):
+            (self.repo / relative).write_text("#!/bin/sh\nexit 97\n", encoding="utf-8")
+        (self.repo / "scripts/ai-knowledge/kb.py").write_text("raise SystemExit(97)\n", encoding="utf-8")
+        self.stage()
+        review = self.review()
+        review["validation"] = [
+            {"command": "git diff --cached --check", "status": "passed", "result": "通过"},
+            {"command": "python3 scripts/design-system/ds.py lint --staged", "status": "passed", "result": "通过"},
+        ]
+        self.prepare(review)
+        self.assertNotEqual(
+            self.pre("git commit -F artifacts/git-commit-gate/message.txt")
+            .get("hookSpecificOutput", {}).get("permissionDecision"),
+            "deny",
+        )
+
     def test_commit_must_use_gate_generated_message_file(self) -> None:
         self.stage()
         with self.assertRaisesRegex(gate.GateError, "必须使用 -F"):

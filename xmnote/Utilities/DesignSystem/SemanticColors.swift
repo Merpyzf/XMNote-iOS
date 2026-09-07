@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 SwiftUI 与 UIKit 的系统动态颜色能力，以及集中式 Color 构造器
- * [OUTPUT]: 对外提供 XMNote 跨模块稳定语义颜色，包含与 Android 对齐的搜索关键字命中语义与可访问的轻量状态动作前景
+ * [OUTPUT]: 对外提供 XMNote 跨模块稳定语义颜色，包含品牌表面内容前景、搜索关键字、轻量状态动作与选择描边
  * [POS]: Utilities/DesignSystem 的颜色语义层，只表达用途，不承载页面布局
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -13,6 +13,13 @@ import UIKit
 extension Color {
     /// App 根级交互 tint，为按钮、系统控件与导航交互提供统一品牌入口。
     static let appTint = BaseColorPalette.brand500
+    /// 品牌强调表面上的内容色；普通外观采用不透明纯白，高对比度保留可辨识配对，不代表对比度已验收。
+    static let onBrandForeground = Color.xmAdaptive(
+        light: Color.white,
+        dark: Color.white,
+        highContrastLight: Color.white,
+        highContrastDark: Color.black
+    )
 }
 
 // MARK: - Background
@@ -116,12 +123,7 @@ extension Color {
     /// 承载白色文案的主提交表面；直接跟随品牌主题色，避免局部主操作出现独立色阶。
     static let primaryActionFill = Color.appTint
     /// 主提交表面的内容色，与 primaryActionFill 成对使用。
-    static let primaryActionForeground = Color.xmAdaptive(
-        light: Color.white,
-        dark: Color.white,
-        highContrastLight: Color.white,
-        highContrastDark: Color.black
-    )
+    static let primaryActionForeground = Color.onBrandForeground
     /// 主按钮禁用态背景，复用系统中性弱填充，不混入品牌色或状态色。
     static let buttonDisabled = Color.controlFillSecondary
     /// 主按钮禁用态内容色，复用中性提示文字并保持弱于可用状态。
@@ -154,7 +156,7 @@ extension Color {
     )
     /// 选择控件未激活描边；独立于提示文本，在深色模式下降低重复圆环的视觉竞争。
     static let selectionInactive = Color.xmAdaptive(
-        light: Color.xmHex(0xA1A5A3),
+        light: Color.iconSecondary,
         dark: Color.xmHex(0x696D6B),
         highContrastLight: Color.xmHex(0x707472),
         highContrastDark: Color.xmHex(0xAEB2B0)

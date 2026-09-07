@@ -246,6 +246,7 @@
       ],
       "allowedPaths": [
         "xmnote/Utilities/DesignSystem/AppTypography.swift",
+        "xmnote/Views/Personal/DataImport/NoteImportTypography.swift",
         "xmnote/Utilities/DesignSystem/SharedContentTypography.swift",
         "xmnote/UIComponents/Charts/CalendarHeatmap.swift",
         "xmnote/UIComponents/Charts/HeatmapChart.swift",
@@ -606,22 +607,6 @@
         "owner": "Note",
         "accessibilityAlternative": "TextField 保持原生可编辑元素、标签与键盘聚焦入口",
         "visualFreezeRationale": "行高已为 54pt；额外命中层没有收益，Button 包裹会破坏输入与焦点语义"
-      },
-      {
-        "path": "xmnote/Views/Personal/DataImport/DataImportView.swift",
-        "declaration": "WereadImportPreviewView.bookSection",
-        "reason": "导入行同时包含独立选择 Button、内容预览点击与长按编辑，不能嵌套为单一 Button",
-        "owner": "Personal/DataImport",
-        "accessibilityAlternative": "按当前内容和映射状态提供“预览导入内容”与“编辑书籍信息”自定义无障碍动作",
-        "visualFreezeRationale": "List 行本身超过 44pt；透明扩展会覆盖选择按钮，改成 Button 会破坏长按和子控件边界"
-      },
-      {
-        "path": "xmnote/Views/Personal/DataImport/UnifiedNoteImportViews.swift",
-        "declaration": "UnifiedNoteImportPreviewView.importBookRow",
-        "reason": "统一导入行同时包含独立选择 Button、内容预览点击与长按编辑，不能嵌套为单一 Button",
-        "owner": "Personal/DataImport",
-        "accessibilityAlternative": "按当前内容和映射状态提供“预览导入内容”与“编辑书籍信息”自定义无障碍动作",
-        "visualFreezeRationale": "List 行本身超过 44pt；透明扩展会覆盖选择按钮，改成 Button 会破坏长按和子控件边界"
       },
       {
         "path": "xmnote/Views/Reading/ReadCalendar/ReadCalendarContentView.swift",

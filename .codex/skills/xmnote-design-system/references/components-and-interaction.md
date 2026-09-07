@@ -49,6 +49,7 @@ python3 scripts/design-system/ds.py catalog
 | 内容范围/显示模式的互斥选择 | `XMScopeSelector` | 导航 Tab、独立业务动作或多选条件不用 |
 | 自定义列表/卡片选择标记 | `XMSelectionIndicator` | 系统 Toggle/Picker 能表达时优先系统控件 |
 | 内容区常驻搜索 | `XMInlineSearchField` | 导航栏搜索优先 `.searchable`；全局路由搜索由其 owner 管理 |
+| 系统安全区下的滚动渐进模糊 | SwiftUI 原生 API；UIKit 查询 `XMSystemScrollEdgeRegistration` | 局部非系统视口才查询 `XMScrollEdgeWash` |
 | 纯展示领域标签 | `XMTagLabel` | 筛选、状态、评分、指标和可点击 Capsule 不用 |
 | 书籍封面 | `XMBookCover` | 头像、任意比例图片或普通远程媒体不用 |
 | 普通远程图片、附件、图库、只读富文本 | 分别查询 `XMRemoteImage`、附件、JX Gallery、RichText owner | 不用一个通用图片/富文本组件覆盖不同生命周期 |
@@ -78,6 +79,8 @@ XMSettingsPage {
 
 ### 双行 Settings 私有行
 
+`XMSettingsToggleRow` 的单标题合同不包含 subtitle；带从属说明的开关优先页面私有组合，不向公共行追加可选说明参数。先确定说明是整行宽度还是左列宽度，并核对多行时的开关对齐、点击热区与辅助技术语义。微信读书伴随式操作面板采用左列说明、标题中心对齐和 `Spacing.half`，边界见 [业务 Sheet](sheets.md)；它不改变下述普通 Settings 行的默认组合。
+
 双行说明、图标化入口和异步业务状态仍保持 feature 私有，但已有稳定的 Settings 组合语法：
 
 - 使用 `XMSettingsPageLayout.detailRowMinHeight`（当前 64pt）作为最小高度，只消费 token，不复制当前数值；不要设置固定高度。单行 canonical 行当前 52pt 的内部高度不用于双行行型。
@@ -99,16 +102,14 @@ XMSettingsPage {
 
 ## 导航、切换与顶部操作
 
-- 当前 Tab 内继续深入：该 Tab 的 `NavigationStack`、route enum 与稳定 path。
-- 必须覆盖 `TabView` 且返回时保留底层现场：根视图 item-driven full-screen cover；cover 内需要继续深入时使用独立 NavigationStack。
-- 只补充当前页面的参数、选择、确认或短信息：Sheet、popover 或 Alert。
-- 三者都不匹配时重新判断页面关系，不自造 overlay 导航和转场系统。
+页面属于 Tab 根、push 子页、模态根、模态内子步骤还是可最小化展开态，以及 Back、Cancel、Close、Done/Save、Collapse 的选择，统一读取 [导航与退出语义](navigation-and-dismissal.md)。本节只维护对应组件与交互能力的归位，不从 presentation 类型或图标外形反推用户语义。
 
 顶部规则：
 
 - 特殊返回拦截使用 `TopBarBackButton`；没有拦截需求时优先保留系统返回，不要手写 `Button + chevron.left`。
-- 普通业务 Sheet 使用 `XMSheetScaffold` 自带关闭入口。当前 `TopBarDismissButton` 含阅读计时专用可访问性文案，不能泛化为任意 modal dismiss。
 - 需要保留系统返回手势并拦截脏状态退出时，查询 `navigationPopGuard`；无拦截需求不接入。
+- 普通业务 Sheet 使用 `XMSheetScaffold` 自带 cancellation/confirmation 入口，不在调用方重复标题栏或关闭按钮。
+- 当前 `TopBarDismissButton` 的真实 owner 与可访问性文案均为阅读计时收起；它不是任意 modal dismiss、Cancel 或 Close 的通用入口。
 - `TopBarActionIcon` 只承载顶部普通 action glyph，本身不是 Button；调用方必须使用原生 Button 并提供正确可访问性标签。它不承担页面内图标或装饰。
 - `TopBarActionPill` 只用于恰好两个同权重顶部 action；单一操作、不同权重或导航栏外胶囊不用。
 - 系统 NavigationBar 已提供外观时，不再给按钮套 glass/material。
@@ -126,19 +127,16 @@ XMSettingsPage {
 
 ## 普通按钮与输入控件
 
-机器目录目前没有可泛化到所有业务的主按钮或通用表单字段组件；catalog 缺席时使用原生控件和页面私有组合，不得从未登记文件或某个 feature 的私有按钮反推公共规范。
+机器目录目前没有可泛化到所有业务的主按钮或通用表单字段组件；catalog 缺席时使用原生控件和页面私有组合。按钮的项目设计选择由 [按钮样式与主操作](buttons-and-primary-actions.md) 明确授权，不得从未登记文件或某个 feature 的私有按钮反推公共组件身份。
 
 任务涉及文本输入焦点、键盘收起模式、滚动手势、键盘避让、提交前失焦或 UIKit first responder 桥接时，必须同时读取 [软键盘与输入焦点](keyboard-and-focus.md)。本文件只决定输入控件归位与视觉语义，不重复维护键盘策略。
 
-按钮先按任务成本分层：
+按钮的角色矩阵、材质、按压及加载状态统一读取 [按钮样式与主操作](buttons-and-primary-actions.md)，本节只维护归位边界：
 
-- 页面唯一的提交、创建或确认可以使用 `primaryActionFill + primaryActionForeground`；标准业务 Sheet 的提交外观与位置由 [业务 Sheet](sheets.md) 和 scaffold 持有，不在内容层重建。同一任务面内通常只保留一个同权主按钮。
-- 取消、返回、筛选、排序、更多和辅助跳转保持系统/中性色，不因可点击就使用品牌填充。
-- 删除与不可逆操作使用原生 destructive role 和 `feedbackError` 语义，不与品牌主按钮伪装成同一层级。
-- 原生 `.bordered` 会消费环境 tint，不能仅凭系统样式名称把它当作中性次级按钮；必须显式确认 tint 来源，并按 [颜色、表层、图标与材质](color-surfaces-and-material.md) 的操作按钮前景—背景配对规则选择语义色。
-- 标签使用结果明确的动词；图标不能是唯一语义。按钮保持 `InteractionMetrics.minimumTouchTarget`，处理中文字宽度、Dynamic Type 和 loading 前后宽度稳定。
-- 写入开始立即禁用来源；按钮内可以显示局部 spinner 和“保存中…”等状态，但业务 phase 不进入通用 ButtonStyle。失败后恢复可操作并保留上下文。
-- 不为普通按钮自行增加玻璃、渐变、重阴影或胶囊；只有 catalog 返回的场景 owner 才能提供这些外观。
+- 优先使用匹配场景的 canonical owner；无匹配时，可按已批准的按钮规则使用原生 API 和功能内组合，不为统一样式提前创建公共按钮。
+- 标准业务 Sheet 的提交位置与顶部外观由 [业务 Sheet](sheets.md) 和 scaffold 持有，页面不重复提交入口或覆盖内部玻璃。
+- 功能内 `ButtonStyle` 只持有视觉和控件状态；Repository、业务 phase、异步任务及错误恢复仍由页面 owner 持有。
+- 配色与环境 tint 按 [颜色、表层与材质](color-surfaces-and-material.md) 审查，命中范围按本文件的 [点击热区与控件语义](#点击热区与控件语义) 验证；不能仅凭样式名称判为中性或合规。
 
 输入先保留系统行为，再添加业务边界：
 
@@ -178,11 +176,14 @@ XMSettingsPage {
 
 ## 滚动与边缘
 
+任务涉及内容延伸到顶部/底部安全区、系统 Navigation Bar/Toolbar/Tab Bar 渐进模糊、`safeAreaBar`、UIKit scroll owner 或 `UIViewRepresentable` 时，必须读取 [安全区与系统滚动边缘](safe-area-and-system-scroll-edge.md)。本节只保留场景路由。
+
 - App 自有 SwiftUI `ScrollView/List/Form` 等必须继承全局 always-bounce，或由组件 owner 按有效轴显式使用 `.scrollBounceBehavior(.always)`；已继承时不机械重复 modifier，禁止 `.basedOnSize`。
 - UIKit 按真实滚动轴设置 `alwaysBounceVertical/Horizontal = true`；不显式关闭有效轴向 bounces。
 - 图片缩放画布、明确禁用滚动的静态骨架和第三方 Vendor 组件除外，不为满足列表规则破坏其物理。
-- 系统导航边缘使用原生 scroll-edge effect，不用自定义 blur、gradient 或 material 遮罩模拟。
-- 有固定顶栏/底栏且需要系统边缘协同时查询 `XMScrollEdgeChrome`；固定筛选栏或卡片内滚动视口需要非交互柔化时查询 `XMScrollEdgeWash`。Wash 不模拟系统导航栏，也不承载点击。
+- 系统导航边缘统一使用原生 `.soft` scroll-edge effect，不用自定义 blur、gradient、material、mask 或 `UIVisualEffectView` 模拟。
+- 有自定义固定顶栏/底栏且需要系统边缘协同时查询 `XMScrollEdgeChrome.overlaySoft`；固定筛选栏或卡片内滚动视口需要非交互柔化时查询 `XMScrollEdgeWash`。Wash 不模拟系统导航栏，也不承载点击。
+- UIKit 或 `UIViewRepresentable` 的真实主滚动视图需要被系统栏观察时查询 `XMSystemScrollEdgeRegistration`；纯 SwiftUI 直接使用系统 modifier，内部编辑器和嵌套滚动视图不登记为页面 owner。
 - 需要系统识别主滚动视图时，内容状态下的主滚动容器保持页面根内容的直接滚动主体；固定反馈优先通过系统安全区能力接入，避免额外容器隔断识别。
 
 ## 书籍、媒体与系统桥接

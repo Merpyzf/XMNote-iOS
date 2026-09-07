@@ -88,6 +88,7 @@ nonisolated struct ApiImportBookPayload: Sendable, Equatable {
     var purchaseDate: Int64 = 0
     var price: Double = 0
     var readStatusId: Int64 = 1
+    var providedReadingStatus: Int64?
     var readStatusChangedDate: Int64 = 0
     var score: Int64 = 0
     var createdDateTime: Int64 = 0
@@ -239,6 +240,7 @@ private extension ApiImportBookMergePolicy {
             target.totalPagination = preferLatestInt(target.totalPagination, incoming.totalPagination)
             if incoming.readStatusChangedDate != 0 || target.readStatusId == 1 {
                 target.readStatusId = incoming.readStatusId
+                target.providedReadingStatus = incoming.providedReadingStatus ?? target.providedReadingStatus
             }
             target.readStatusChangedDate = preferLatestInt(
                 target.readStatusChangedDate,

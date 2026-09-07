@@ -1,7 +1,7 @@
 import Foundation
 
 /**
- * [INPUT]: 依赖 Models 与 Services 层的数据类型定义
+ * [INPUT]: 依赖 Models 与 Services 层的数据类型定义，包含三联登录恢复快照
  * [OUTPUT]: 对外提供 Book/Note/Content/GlobalSearch/Backup/S3/AI/图片额度/标签选择布局偏好/TagManagement/BookGroupManagement/SourceManagement/ExternalAppIntegration/Statistics/ReadCalendar/封面主题/Timeline/ReadingDashboard/ReadingTimer 及书籍搜索录入协议
  * [POS]: Domain 层仓储契约，定义 Presentation 获取本地/网络数据的唯一入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -603,21 +603,19 @@ nonisolated protocol NoteImageUploadQuotaRepositoryProtocol: Sendable {
         id: String,
         owner: NoteImageUploadReservationOwner,
         draftNewImageCount: Int,
-        isPersistedDraft: Bool,
-        isPremium: Bool
+        isPersistedDraft: Bool
     ) async -> NoteImageUploadQuotaState
     /// 在共享 Actor 内按 owner 原子申请本次新增数量；申请先保持未确认，编辑器写下自动草稿后再 reconcile 确认。
     func reserveImages(
         id: String,
         owner: NoteImageUploadReservationOwner,
         currentDraftNewImageCount: Int,
-        requestedCount: Int,
-        isPremium: Bool
+        requestedCount: Int
     ) async -> NoteImageUploadReservationResult
     /// 用户明确丢弃草稿时释放当天预占；保留草稿退出不会调用此方法。
     func releaseReservation(id: String) async
     /// 仅在业务主内容成功后转换真实存在的 ticket；同一 ID 重复提交必须幂等。
-    func commitReservation(id: String, savedImageCount: Int, isPremium: Bool) async
+    func commitReservation(id: String, savedImageCount: Int) async
 }
 
 /// S3 上传契约，覆盖当前配置下的文件上传、联通性校验、删除与取消。
@@ -828,6 +826,12 @@ protocol ReadingDashboardRepositoryProtocol {
 /// 微信读书扫码授权导入仓储契约，统一授权校验、远端抓取、目标书匹配与增量落库。
 @MainActor
 protocol WereadImportRepositoryProtocol {
+    /// MainActor 完成来源补全后提交同目标事务，取消继续向下传播。
+    func commitPreviewGroup(_ group: NoteImportCommitGroup) async throws -> NoteImportCommitGroupResult
+    /// 为共享预览生成完整来源快照，保留微信读书专用时间和章节语义。
+    func makePreviewDrafts(_ books: [WereadImportBook]) -> [NoteImportDraftBook]
+    /// 在会员门禁后提交已冻结预览，保留逐书事务和进度回调。
+    func commitPreviewImport(books: [NoteImportCommitBook], progress: @escaping (Int, Int) -> Void) async throws
     func fetchPreferences() -> WereadImportPreferences
     func savePreferences(_ preferences: WereadImportPreferences)
     func restoreAuthorization() async -> WereadAuthorization?
@@ -868,12 +872,33 @@ protocol WereadImportRepositoryProtocol {
 /// 全来源书摘导入仓储契约；Parser、API 和特殊入口统一通过 Draft 进入此写入边界。
 @MainActor
 protocol NoteImportRepositoryProtocol {
+    /// 按来源入口恢复额外筛选，不恢复搜索或阅读状态。
+    func fetchPreviewPreferences(sourceKey: String) -> NoteImportFilter
+    /// 通过仓储持久化最近偏好，不创建命名方案。
+    func savePreviewPreferences(_ filter: NoteImportFilter, sourceKey: String) throws
+    /// 异步只读评估本地快照，取消后不得应用旧结果。
+    func assessImportDuration(targetID: Int64?, drafts: [NoteImportDraftBook]) async throws -> NoteImportDurationAssessment
+    /// 异步提交一个目标的全部来源，失败整体回滚，取消仅影响未开始的事务。
+    func commitImportGroup(_ group: NoteImportCommitGroup) async throws -> NoteImportCommitGroupResult
+    /// 读取命名筛选方案；不恢复上次生效的条件或书籍选择。
+    /// 区分来源 ID 匹配和名称候选；MainActor 编排，取消后页面忽略过期结果。
+    func previewTargetMatch(for draft: NoteImportDraftBook) async throws -> NoteImportTargetMatch
+    func fetchPreviewBookMetadata(id: Int64) async throws -> NoteImportBookMetadata
+    func fetchPreviewEditorOptions() async throws -> BookEditorOptions
     /// 从系统文件选择器授予的 security-scoped URL 流式复制 Kindle 文件；32 MiB、4 MiB 空间预留和取消语义与 Android OTG 对齐。
     func loadKindleClippingsFile(from url: URL) async throws -> Data
     /// 通过仓储读取并解析汉王分享页正文；网络取消由调用任务向 URLSession 传播。
     func fetchHanWangShareContent(from sharedURL: String) async throws -> String
-    /// 通过仓储封装三联中读登录与书摘获取，避免页面直接持有网络 Service。
-    func fetchLifeWeekBooks(phoneNumber: String, password: String) async throws -> [NoteImportDraftBook]
+    /// 在 MainActor 编排三联凭证恢复；Keychain 访问在专属 actor 执行，页面取消后丢弃快照。
+    func loadLifeWeekLoginState() async -> LifeWeekLoginState
+    /// 在 MainActor 编排记住偏好更新，专属 actor 串行删除密码并提交偏好；失败保留先前状态。
+    func setLifeWeekRemembersPassword(_ enabled: Bool) async throws
+    /// 在 MainActor 编排认证与抓取，认证后回报可恢复的存储问题；父任务取消沿请求链传播。
+    func fetchLifeWeekBooks(
+        phoneNumber: String,
+        password: String,
+        onAuthenticated: @MainActor @Sendable (String?) -> Void
+    ) async throws -> [NoteImportDraftBook]
     func matchLocalBook(for draft: NoteImportDraftBook) async throws -> BookPickerBook?
     /// 按 Android `BookDao.queryByIdSuspend` 语义判断显式导入目标是否存在；软删除记录仍是可解析目标。
     func hasImportTargetBook(id: Int64) async throws -> Bool

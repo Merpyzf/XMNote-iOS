@@ -2,6 +2,17 @@
   "schemaVersion": 3,
   "components": [
     {
+      "path": "xmnote/UIComponents/Feedback/XMInlineInfoView.swift",
+      "symbols": ["XMInlineInfoView"],
+      "status": "canonical", "category": "foundationVisual", "layer": "feedback", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "readOnly"],
+      "dependencies": ["DesignSystem", "ReiconInfoCircleOutline"],
+      "useWhen": "表单或页面需要无背景、无交互的常驻辅助说明，使用轻量信息图标与单段文案",
+      "avoidWhen": "警告或错误、可恢复状态横幅、帮助按钮、Toast、标题与正文复合说明",
+      "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Feedback/XMInlineInfoView.swift"},
+      "guidePath": null
+    },
+    {
       "path": "xmnote/UIComponents/Business/Book/XMBookRatingSheet.swift",
       "symbols": ["XMBookRatingSheet"],
       "status": "canonical", "category": "business", "layer": "business", "framework": "swiftui", "usageScope": "crossFeature",
@@ -518,9 +529,19 @@
       "status": "canonical", "category": "layout", "layer": "navigation", "framework": "swiftui", "usageScope": "crossFeature",
       "stateCoverage": ["normal", "readOnly"],
       "dependencies": ["DesignSystem", "XMScrollEdgeWash", "SwiftUI.scrollEdgeEffectStyle"],
-      "useWhen": "滚动页面需要固定顶栏/底栏与系统 scroll-edge effect 协同", "avoidWhen": "无滚动容器、系统导航栏已自动处理或自定义模糊遮罩",
-      "previewPolicy": {"kind": "hosted", "path": "xmnote/Views/Debug/XMScrollEdgeChromeTestView.swift", "reason": "需要顶部/底部/双向滚动、点击穿透和浅深色矩阵"},
+      "useWhen": "自定义固定顶栏/底栏需要通过 safeAreaBar 与系统 soft scroll-edge effect 协同，或局部 contained 视口需要 Wash", "avoidWhen": "纯系统 Navigation Bar/Tab Bar 已能直接观察 SwiftUI 主滚动容器、无滚动容器或需要自定义模糊遮罩",
+      "previewPolicy": {"kind": "hosted", "path": "xmnote/Views/Debug/XMScrollEdgeChromeTestView.swift", "reason": "需要系统原生与局部 Wash 的顶部/底部/双边缘、点击穿透和浅深色矩阵"},
       "guidePath": "docs/component-guides/XMScrollEdgeChrome使用说明.md"
+    },
+    {
+      "path": "xmnote/UIComponents/Navigation/ScrollEdge/XMSystemScrollEdgeRegistration.swift",
+      "symbols": ["XMSystemScrollEdgeRegistration"],
+      "status": "canonical", "category": "designInfrastructure", "layer": "navigation", "framework": "bridge", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "readOnly"],
+      "dependencies": ["UIKit.UIScrollView", "UIKit.UIViewController", "UIKit.UIScrollEdgeEffect"],
+      "useWhen": "UIKit 或 UIViewRepresentable 的真实页面主滚动视图需要被系统 Navigation Bar、Toolbar 或 Tab Bar 观察并使用 soft 边缘过渡", "avoidWhen": "纯 SwiftUI 滚动容器、局部 contained 视口、内部编辑器/嵌套滚动视图、非滚动内容或任何自绘模糊需求",
+      "previewPolicy": {"kind": "hosted", "path": "xmnote/Views/Debug/XMScrollEdgeChromeTestView.swift", "reason": "需要真实 NavigationStack、安全区、UIViewRepresentable 重建与顶部/底部/双边缘生命周期验证"},
+      "guidePath": null
     },
     {
       "path": "xmnote/UIComponents/Navigation/ScrollEdge/XMScrollEdgeWash.swift",
@@ -528,7 +549,7 @@
       "status": "canonical", "category": "designInfrastructure", "layer": "navigation", "framework": "swiftui", "usageScope": "crossFeature",
       "stateCoverage": ["normal", "readOnly"],
       "dependencies": ["DesignSystem", "SwiftUI.ScrollGeometry"],
-      "useWhen": "固定筛选栏或卡片内滚动视口需要非交互边缘柔化", "avoidWhen": "模拟系统导航栏渐进模糊或承载任何点击交互",
+      "useWhen": "不与系统 Navigation Bar、Toolbar 或 Tab Bar 重叠的固定筛选栏、卡片内滚动视口需要非交互边缘柔化", "avoidWhen": "模拟任何系统栏渐进模糊、页面主滚动视图安全区过渡或承载点击交互",
       "previewPolicy": {"kind": "hosted", "path": "xmnote/Views/Debug/XMScrollEdgeChromeTestView.swift", "reason": "需要滚动几何、强度、表层和点击穿透矩阵"},
       "guidePath": null
     },

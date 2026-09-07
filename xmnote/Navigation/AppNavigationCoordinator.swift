@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 SwiftUI Binding、AppRoute/AppTaskRoute、AppSceneSnapshot、书摘回顾启动负载、各业务编辑/查看/导入参数与阅读日历初始日期
+ * [INPUT]: 依赖 SwiftUI Binding、AppRoute/AppTaskRoute、AppSceneSnapshot、书摘回顾启动负载、各业务编辑/查看/导入参数、Kindle 前置入口类型与阅读日历初始日期
  * [OUTPUT]: 对外提供 AppNavigationCoordinator、AppFullScreenTaskDestination、全屏书摘回顾会话、五个受控浏览栈、一次性浏览回流与 Tab chrome 抑制票据
  * [POS]: Navigation 模块的 scene 级唯一导航 owner，统一约束浏览 push/pop、深链替换与临时全屏任务
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -20,7 +20,7 @@ enum DataImportTaskDestination: Hashable {
     case desktopComputer
     case lifeWeek
     case wereadAuthorization
-    case kindle
+    case kindle(KindleImportEntryPoint)
     case api
     case hanwang
     case file(title: String, parserID: NoteImportParserID?)

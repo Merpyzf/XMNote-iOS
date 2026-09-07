@@ -31,6 +31,7 @@
 | 主容器/普通/弱边界 | `surfaceBorderStrong/Default/Subtle` | 按实际表层层级选择，不按“越深越重要”机械套用 |
 | 内容分隔 | `surfaceDividerDefault/Subtle` | 分节或卡片内部弱分组；不与卡片边框竞争 |
 | 页面唯一主提交 | `primaryActionFill` + `primaryActionForeground` | 仅表达主操作语义归属；使用前仍须验证实际前景—背景对比度，不用于普通可点击项 |
+| 品牌强调表面上的内容 | `onBrandForeground` | 普通外观为不透明纯白，高对比度遵循 owner；不是中性表面上的选中强调色 |
 | 禁用主操作 | `buttonDisabled` + `buttonDisabledForeground` | 视觉必须同时体现不可用且保留可读性 |
 | 选择 | `selectionAccent/Foreground/Inactive` | 选中状态，不替代链接、成功或普通品牌装饰 |
 | 删除/错误、警告、成功 | `feedbackError/Warning/Success` | 必须同时有文案、图标或控件语义，不能只靠颜色 |
@@ -63,15 +64,34 @@ token 存在不等于每个层级都必须使用。`surfaceBorderStrong`、`surf
 - 阅读状态、热力图、日历主题、评分、封面装饰等业务颜色由各自 catalog/Appearance owner 管理；页面不得把其颜色提升为全局 token。
 - Domain 只保留状态、等级或数值，颜色与图标映射留在 UIComponents 或具体页面 presentation owner。
 
+## 品牌表面前景
+
+XMNote 的产品默认是：普通外观下，已获准采用品牌强调填充的控件，其内容使用不透明纯白，避免自行叠加灰色、透明白或同品牌色前景。白色没有饱和度；规范使用“不透明纯白”，不使用“高饱和度白色”。这是产品选择，不是 Apple 强制要求，也不是对比度合格证明。
+
+- `onBrandForeground` 表达品牌强调表面上的文字或图标；主操作继续消费角色入口 `primaryActionForeground`，后者为前者的别名。品牌填充选择标记消费 `onBrandForeground`，底色消费 `selectionAccent`。
+- `selectionForeground` 仍用于中性表面上的选中文案与图标；`selectionInactive` 用于未选中描边。不能因名称含 Foreground 就把前者叠到品牌填充上，也不能用普通 `iconSecondary` 代替品牌表面内容色。
+- 规则不推广到弱填充、透明背景、正文链接、危险操作、禁用态或系统 toolbar。已存在的 canonical owner 不由调用处覆盖，不触发无关页面迁移。
+- 当前普通浅色、深色及增强对比度浅色采用白色，增强对比度深色采用黑色；具体解析以 `SemanticColors.swift` 为准。页面不得硬编码白色抵消辅助功能分支。
+- 品牌染色玻璃可以使用对应语义，但不是实心填充；仍需在真实背景、外观和状态下验证，不从实心表面的测量推定玻璃达标。
+
+### 已确认的局部对比度例外
+
+三联中读导入页 `LifeWeekRememberPasswordToggleStyle` 的选中 Checkbox，普通浅色和深色保留当前品牌绿 `#2ECF77` 与纯白对勾，配对约为 `2.04:1`，低于关键图标 `3:1` 的通用目标。用户已明确选择保留绿色并使用白色对勾；此项仅记录该页面、该控件、普通外观下的产品例外，不等于可访问性达标。高对比度分支继续适配。
+
+不得把此例外推广给其他选择器或按钮，不据此宣称现有导入主按钮已经全部达标，也不降低通用阈值或静态策略。其他配对不足时报告真实 owner、状态与最小调整方案；例外需要明确授权，不能通过换 token 名称自动放行。
+
 ## 操作按钮前景—背景配对
 
 本节只约束执行动作的 `Button`，不把规则扩展到 Toggle、Picker、选择器、标签、状态徽记或纯展示内容；这些控件继续使用各自的选择、状态或内容语义。
+
+按钮角色与材质选择统一读取 [按钮样式与主操作](buttons-and-primary-actions.md)。本节继续持有配色和对比度，不因采用交互式 Liquid Glass 放宽要求。
 
 按钮颜色必须按“前景 + 表层 + 状态”成对判断，不能只看到某个 token 名称就认定合规：
 
 | 按钮角色 | 前景 | 表层 | 约束 |
 | --- | --- | --- | --- |
-| 页面唯一主操作 | 经验证的中性前景，语义入口为 `primaryActionForeground` | 品牌主操作填充，语义入口为 `primaryActionFill` | 只用于提交、创建或确认；token 成对命名不代表已经通过对比度验证 |
+| 经场景审查采用实心填充的唯一主操作 | 经验证的中性前景，语义入口为 `primaryActionForeground` | 品牌主操作填充，语义入口为 `primaryActionFill` | 只用于提交、创建或确认；不是所有主操作的默认材质，token 成对命名不代表已经通过对比度验证 |
+| 符合功能控制层条件的玻璃主操作 | 保留系统 owner；自定义品牌主操作采用 `primaryActionForeground` 的普通纯白默认及辅助功能适配 | `.regular.tint(Color.appTint)` 玻璃表面 | 染色玻璃不等于实心填充；实际背景、外观和状态分别验证 |
 | 普通次级操作 | `textPrimary/textSecondary`、对应中性图标或系统默认前景 | 透明表层或 `controlFillSecondary` 等中性弱表层 | 必须隔离根级品牌 tint，不因可点击而产生品牌弱填充 |
 | 品牌文字型操作 | 经过测量的品牌派生前景；优先使用已有正文动作语义而不是 `appTint` | 透明或中性表层 | 仅在确有稀缺主语义时使用；不得同时放到品牌派生表层上 |
 | 删除/警告 | `feedbackError` / `feedbackWarning` 或系统对应 role | 中性/透明表层，或经验证的反馈语义填充与中性前景 | 不得被 `appTint` 覆盖；状态必须同时由文案、图标或 role 表达 |
@@ -84,6 +104,8 @@ token 存在不等于每个层级都必须使用。`surfaceBorderStrong`、`surf
 - 用 `.opacity(...)`、自定义 overlay 或相近品牌色阶制造“看起来更淡”的同品牌配对；降低饱和度或透明度不会自动建立层级与可读性。
 
 品牌实心表层配合中性前景并非默认违规，但仅允许给页面唯一主操作，且必须提供实际测量结果。当前 `primaryActionFill + primaryActionForeground` 只证明语义配对，不证明浅色、深色和高对比度下均已达标；在完成测量前不得以 token 名称为依据复制新的突出按钮。
+
+染色玻璃会受到下层内容与系统显示设置影响；不能把实心按钮、另一种玻璃样式或旧截图中的前景—背景比例套用到当前表面。`primaryActionForeground` 继承品牌表面的普通纯白默认与辅助功能适配，不代表所有绿底都必须白字。出现不足时回到真实 owner 提出最小调整，不在单页擅自硬编码前景或顺带更改全局颜色。
 
 对比度验证必须记录前景、背景、控件状态和外观模式：普通按钮文字至少 `4.5:1`，大字号按钮文字至少 `3:1`，关键图标与控件可辨边界至少 `3:1`。动态 `Color` 无法仅凭静态源码得出比例；机器报告只标记结构和 token 风险，最终结论必须来自实际解析颜色或运行态截图测量。
 
@@ -101,7 +123,7 @@ Liquid Glass 是导航层和功能层的交互材质，不是内容背景主题�
 - 阅读正文、普通数据卡、设置分组、状态卡和列表行不使用玻璃作为“升级皮肤”。
 - 多个玻璃元素需要交互融合、过渡或共享容器时，按 [动效与手势](motion.md) 判断运动关系；平台 API、可用性和参数语义遵守 `AGENTS.md` 的 Apple 查证顺序及官方来源降级规则。
 - 不用 blur、gradient 或 material 遮罩模拟系统 scroll-edge effect。
-- feature 内已经存在的直接 `glassEffect` 默认只是局部成立；除非机器目录明确登记为跨功能入口，不得复制到另一模块。
+- [按钮样式与主操作](buttons-and-primary-actions.md) 已明确的交互式玻璃主按钮是项目设计选择，可在适用场景通过原生 API 和功能内组合实现；这不等于允许跨模块依赖某个 feature 私有类型。现存直接 `glassEffect` 及其尺寸、颜色和状态分支仍只是局部证据，公共入口继续以 catalog 为准。
 
 ## 颜色与材质验证
 

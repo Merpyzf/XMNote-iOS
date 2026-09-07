@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 AIPromptEditorViewModel、AIPromptTrialSessionViewModel、NoteRepositoryProtocol、XMBookCover、AI 生成等待反馈、标准 Sheet/搜索/状态组件、提示词变量只读渲染器与流式 Markdown 渲染器
+ * [INPUT]: 依赖 AIPromptEditorViewModel、AIPromptTrialSessionViewModel、NoteRepositoryProtocol、XMBookCover、AI 生成等待反馈、标准 Sheet/搜索/状态组件、系统交互式玻璃反馈、提示词变量只读渲染器与流式 Markdown 渲染器
  * [OUTPUT]: 对外提供提示词请求预览、可编辑书摘流式试运行、AI 标签 JSON/格式化双层结果与可中断展开反馈、本地书摘选择，以及单一 Sheet 内推进的字段优化流程
  * [POS]: Views/Personal/Sheets 的提示词编辑次级任务集合，由 AIPromptEditorView 的 item-driven Sheet 路由消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -1832,7 +1832,7 @@ private struct AIPromptOptimizationResultPage: View {
     }
 }
 
-/// 提示词优化流程私有的单一玻璃主操作；交互形变完全交给 iOS 26 regular glass。
+/// 提示词优化流程私有的单一玻璃主操作；按压与辅助功能适配交给系统，不把减少动态效果当作禁用。
 private struct AIPromptSheetGlassActionButton: View {
     let title: String
     let progressTitle: String
@@ -1840,8 +1840,6 @@ private struct AIPromptSheetGlassActionButton: View {
     let isProgressing: Bool
     let accessibilityHint: String
     let action: () -> Void
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Group {
@@ -1906,7 +1904,7 @@ private struct AIPromptSheetGlassActionButton: View {
     }
 
     private var isGlassInteractive: Bool {
-        isEnabled && !isProgressing && !reduceMotion
+        isEnabled && !isProgressing
     }
 }
 

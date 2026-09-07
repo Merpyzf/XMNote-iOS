@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖统一 NoteImport Draft、GRDB Record 与 DatabaseManager
+ * [INPUT]: 依赖统一 NoteImport Draft、GRDB Record、DatabaseManager、可选会员写入门禁与三联凭证存储
  * [OUTPUT]: 对外提供 NoteImportRepository，完成全来源书摘的本地匹配和逐书增量落库
  * [POS]: Data/Repositories 的统一导入写边界；文件、剪贴板、API 与特殊入口共享此实现
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -14,12 +14,16 @@ final class NoteImportRepository: NoteImportRepositoryProtocol {
     private let databaseManager: DatabaseManager
     private let defaults: UserDefaults
     private let bookSearchRepository: any BookSearchRepositoryProtocol
+    private let requiredMembership: (any MembershipRepositoryProtocol)?
+    private let lifeWeekCredentialStore = LifeWeekCredentialStore()
 
     init(
         databaseManager: DatabaseManager,
         defaults: UserDefaults = .standard,
-        bookSearchRepository: (any BookSearchRepositoryProtocol)? = nil
+        bookSearchRepository: (any BookSearchRepositoryProtocol)? = nil,
+        requiredMembership: (any MembershipRepositoryProtocol)? = nil
     ) {
+        self.requiredMembership = requiredMembership
         self.databaseManager = databaseManager
         self.defaults = defaults
         self.bookSearchRepository = bookSearchRepository ?? BookSearchRepository()
@@ -64,9 +68,29 @@ final class NoteImportRepository: NoteImportRepositoryProtocol {
         return content
     }
 
-    /// 在统一仓储边界内调用三联中读网络 Service；父任务取消由 async 请求链路继续传播。
-    func fetchLifeWeekBooks(phoneNumber: String, password: String) async throws -> [NoteImportDraftBook] {
-        try await LifeWeekImportService().fetchBooks(phoneNumber: phoneNumber, password: password)
+    /// 在 MainActor 编排恢复；实际凭证访问由独立 actor 串行执行，取消后由页面丢弃过期快照。
+    func loadLifeWeekLoginState() async -> LifeWeekLoginState {
+        await lifeWeekCredentialStore.load()
+    }
+
+    /// 在 MainActor 编排偏好写入；凭证 actor 原子完成删除及偏好提交，失败不伪报关闭成功。
+    func setLifeWeekRemembersPassword(_ enabled: Bool) async throws {
+        try await lifeWeekCredentialStore.setRemembersPassword(enabled)
+    }
+
+    /// MainActor 编排认证、凭证保存与抓取；认证失败不触碰存储，取消检查阻止旧任务推进，存储失败不阻断导入。
+    func fetchLifeWeekBooks(
+        phoneNumber: String,
+        password: String,
+        onAuthenticated: @MainActor @Sendable (String?) -> Void
+    ) async throws -> [NoteImportDraftBook] {
+        let service = LifeWeekImportService()
+        let ticket = try await service.login(phoneNumber: phoneNumber, password: password)
+        try Task.checkCancellation()
+        let storageMessage = await lifeWeekCredentialStore.saveAuthenticated(phoneNumber: phoneNumber, password: password)
+        try Task.checkCancellation()
+        onAuthenticated(storageMessage)
+        return try await service.fetchBooks(ticket: ticket)
     }
 
     func matchLocalBook(for draft: NoteImportDraftBook) async throws -> BookPickerBook? {
@@ -102,6 +126,30 @@ final class NoteImportRepository: NoteImportRepositoryProtocol {
                 totalPagination: record.totalPagination
             )
         }
+    }
+
+    /// MainActor 编排只读匹配；数据库读取不阻塞 UI，调用方在取消后不得应用结果。
+    func previewTargetMatch(for draft: NoteImportDraftBook) async throws -> NoteImportTargetMatch {
+        if !draft.wereadBookID.isEmpty {
+            let ids = try await databaseManager.database.dbPool.read { db in
+                // 只按可靠远端身份匹配当前有效书籍，排除根记录与删除占位；无时间字段转换。
+                try Int64.fetchAll(db, sql: "SELECT id FROM book WHERE weread_book_id = ? AND is_deleted = 0 AND id != 0", arguments: [draft.wereadBookID])
+            }
+            if ids.count == 1, let id = ids.first { return .automatic(id) }
+            if !ids.isEmpty { return .candidate }
+        }
+        return try await matchLocalBook(for: draft) == nil ? .none : .candidate
+    }
+
+    /// 使用已有编辑仓储读取资料，不执行其保存及偏好写入；取消后由预览丢弃结果。
+    func fetchPreviewBookMetadata(id: Int64) async throws -> NoteImportBookMetadata {
+        let draft = try await BookEditorRepository(databaseManager: databaseManager).fetchEditableBook(bookId: id)
+        return NoteImportBookMetadata(editor: draft)
+    }
+
+    /// 只读获取现有分组和标签，新增名称留到最终单书事务中创建。
+    func fetchPreviewEditorOptions() async throws -> BookEditorOptions {
+        try await BookEditorRepository(databaseManager: databaseManager).fetchOptions()
     }
 
     /// 显式目标校验只按主键判断存在性，刻意不排除软删除和占位书，以复刻 Android `queryByIdSuspend`。
@@ -148,6 +196,42 @@ final class NoteImportRepository: NoteImportRepositoryProtocol {
         return enriched
     }
 
+    /// 在调用方事务中写入内容与状态；时长和显式资料由提交边界统一处理。
+    nonisolated func writeImportContents(_ item: NoteImportCommitBook, bookID: Int64, ownerID: Int64, now: Int64, db: Database) throws {
+        var chapterIndex = ChapterIndex()
+        var chapterSession = try ChapterImportSession(bookID: bookID, db: db)
+        try self.upsertChapters(
+            item.draft.chapters,
+            bookID: bookID,
+            parentID: 0,
+            parentPath: [],
+            now: now,
+            db: db,
+            session: &chapterSession,
+            index: &chapterIndex
+        )
+        try self.upsertFallbackNoteChapters(
+            item.draft.notes,
+            bookID: bookID,
+            now: now,
+            db: db,
+            session: &chapterSession,
+            index: &chapterIndex
+        )
+        try self.upsertNotes(
+            item.draft.notes,
+            bookID: bookID,
+            bookPositionUnit: item.draft.currentPositionUnit,
+            chapterIndex: chapterIndex,
+            ownerID: ownerID,
+            now: now,
+            db: db
+        )
+        try self.upsertReviews(item.draft.reviews, bookID: bookID, now: now, db: db)
+        try self.upsertBookMetadata(item.draft, bookID: bookID, ownerID: ownerID, now: now, db: db)
+        try self.mergeReadStatus(item.draft, bookID: bookID, now: now, db: db)
+    }
+
     func commitImport(
         books: [NoteImportCommitBook],
         progress: @escaping (Int, Int) -> Void
@@ -155,44 +239,21 @@ final class NoteImportRepository: NoteImportRepositoryProtocol {
         guard !books.isEmpty else { throw NoteImportParserError.noteNotFound }
         let placement = defaults.object(forKey: "newAddBookPosition") as? Int ?? 0
         for (index, item) in books.enumerated() {
+            // 每本书的事务开始前重新校验，已提交的前序书不会因撤销而回滚。
+            try await requiredMembership?.requirePremium()
             try Task.checkCancellation()
+            guard !item.draft.notes.contains(where: { !$0.failedAttachmentURLs.isEmpty }) else {
+                throw NoteImportParserError.unexpected("部分图片未获取，请先处理失败内容")
+            }
             try await databaseManager.database.dbPool.write { db in
                 let now = Int64(Date().timeIntervalSince1970 * 1_000)
                 let ownerID = try DatabaseOwnerResolver.resolveOwnerID(in: db)
                 let bookID = try self.upsertBook(item, ownerID: ownerID, placement: placement, now: now, db: db)
-                var chapterIndex = ChapterIndex()
-                var chapterSession = try ChapterImportSession(bookID: bookID, db: db)
-                try self.upsertChapters(
-                    item.draft.chapters,
-                    bookID: bookID,
-                    parentID: 0,
-                    parentPath: [],
-                    now: now,
-                    db: db,
-                    session: &chapterSession,
-                    index: &chapterIndex
-                )
-                try self.upsertFallbackNoteChapters(
-                    item.draft.notes,
-                    bookID: bookID,
-                    now: now,
-                    db: db,
-                    session: &chapterSession,
-                    index: &chapterIndex
-                )
-                try self.upsertNotes(
-                    item.draft.notes,
-                    bookID: bookID,
-                    bookPositionUnit: item.draft.currentPositionUnit,
-                    chapterIndex: chapterIndex,
-                    ownerID: ownerID,
-                    now: now,
-                    db: db
-                )
-                try self.upsertReviews(item.draft.reviews, bookID: bookID, now: now, db: db)
-                try self.upsertBookMetadata(item.draft, bookID: bookID, ownerID: ownerID, now: now, db: db)
+                try self.writeImportContents(item, bookID: bookID, ownerID: ownerID, now: now, db: db)
                 try self.upsertReadingTime(item.draft, bookID: bookID, now: now, db: db)
-                try self.mergeReadStatus(item.draft, bookID: bookID, now: now, db: db)
+                if let patch = item.metadataPatch, patch.hasChanges {
+                    try self.applyPreviewMetadata(patch, bookID: bookID, ownerID: ownerID, now: now, db: db)
+                }
             }
             progress(index + 1, books.count)
         }
@@ -200,6 +261,47 @@ final class NoteImportRepository: NoteImportRepositoryProtocol {
 }
 
 private extension NoteImportRepository {
+    /// 在所属单书事务内仅应用显式修改，来源补全和其他条目不能覆盖用户编辑。
+    nonisolated func applyPreviewMetadata(
+        _ patch: NoteImportMetadataPatch, bookID: Int64, ownerID: Int64, now: Int64, db: Database
+    ) throws {
+        let old = patch.original
+        let value = patch.edited
+        if let message = value.validationMessage { throw NoteImportParserError.unexpected(message) }
+        guard var book = try BookRecord.fetchOne(db, key: bookID), book.isDeleted == 0 else { throw BookEditorError.bookNotFound }
+        if old.title != value.title { book.name = value.title.trimmingCharacters(in: .whitespacesAndNewlines) }
+        if old.author != value.author { book.author = value.author }
+        if old.translator != value.translator { book.translator = value.translator }
+        if old.authorIntro != value.authorIntro { book.authorIntro = value.authorIntro }
+        if old.press != value.press { book.press = value.press }
+        if old.isbn != value.isbn { book.isbn = value.isbn }
+        if old.publicationDate != value.publicationDate { book.pubDate = value.publicationDate }
+        if old.summary != value.summary { book.summary = value.summary }
+        if old.coverURL != value.coverURL { book.cover = value.coverURL }
+        book.updatedDate = now
+        try book.update(db)
+        if old.readingStatusID != value.readingStatusID,
+           book.readStatusId != value.readingStatusID || book.readStatusChangedDate != patch.changedAt {
+            try BookReadStatusMutation.updateBookReadStatus(
+                db, bookID: bookID, statusID: value.readingStatusID,
+                changedAt: patch.changedAt, updatedAt: now,
+                finishedRatingScore: value.readingStatusID == 3 ? 0 : nil
+            )
+        }
+        var relations = NoteImportDraftBook()
+        if old.groupName != value.groupName {
+            // 用户显式替换分组时，物理删除该书 group_book 关系；保留分组实体，操作属于当前单书事务。
+            try db.execute(sql: "DELETE FROM group_book WHERE book_id = ?", arguments: [bookID])
+            relations.group = NoteImportDraftGroup(name: value.groupName)
+        }
+        if old.tagNames != value.tagNames {
+            // 只替换书籍标签关系，不影响书摘标签和标签实体；与资料及内容写入同成同败。
+            try db.execute(sql: "DELETE FROM tag_book WHERE book_id = ?", arguments: [bookID])
+            relations.tags = value.tagNames.map { NoteImportDraftTag(name: $0) }
+        }
+        try upsertBookMetadata(relations, bookID: bookID, ownerID: ownerID, now: now, db: db)
+    }
+
     nonisolated static let kindleMaximumFileSize: Int64 = 32 * 1_024 * 1_024
     nonisolated static let kindleStorageReserve: Int64 = 4 * 1_024 * 1_024
     nonisolated static let kindleCopyBufferSize = 64 * 1_024
@@ -317,6 +419,11 @@ private extension NoteImportRepository {
         db: Database
     ) throws -> Int64 {
         let draft = item.draft
+        if item.validatesPreviewTarget, let targetID = item.targetBookID {
+            guard let target = try BookRecord.fetchOne(db, key: targetID), targetID != 0, target.isDeleted == 0 else {
+                throw BookEditorError.bookNotFound
+            }
+        }
         if let targetID = item.targetBookID, var record = try BookRecord.fetchOne(db, key: targetID) {
             // Android `addBookForImport` 对显式目标只记录本次导入的原书名，不把导入元数据
             // 回填目标书，也不刷新 book.updated_date。
@@ -1117,5 +1224,118 @@ private extension NoteImportRepository {
         let normalizedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
         let normalizedContent = plain.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
         return normalizedTitle + "\0" + normalizedContent
+    }
+}
+
+extension NoteImportRepository {
+    /// 按导入入口恢复轻量偏好，不读取旧命名方案。
+    func fetchPreviewPreferences(sourceKey: String) -> NoteImportFilter {
+        guard let data = defaults.data(forKey: "noteImport.preferences.v2.\(sourceKey)") else { return .init() }
+        return (try? JSONDecoder().decode(NoteImportFilter.self, from: data)) ?? .init()
+    }
+    /// 状态分类每次从全部开始，偏好仅保存额外筛选和排序。
+    func savePreviewPreferences(_ filter: NoteImportFilter, sourceKey: String) throws {
+        var value = filter
+        value.statuses = []
+        defaults.set(try JSONEncoder().encode(value), forKey: "noteImport.preferences.v2.\(sourceKey)")
+    }
+    /// 异步读取一次一致性快照；取消后调用方不得应用过期评估。
+    func assessImportDuration(targetID: Int64?, drafts: [NoteImportDraftBook]) async throws -> NoteImportDurationAssessment {
+        try Task.checkCancellation()
+        return try await databaseManager.database.dbPool.read { db in
+            if let targetID {
+                guard targetID != 0, let book = try BookRecord.fetchOne(db, key: targetID), book.isDeleted == 0 else { throw BookEditorError.bookNotFound }
+            }
+            return try Self.durationAssessment(records: Self.durationRecords(targetID: targetID, db: db), drafts: drafts)
+        }
+    }
+    /// 每个目标独占一个事务；网络补全已完成，取消只在事务前生效，成功后结果不会丢失。
+    func commitImportGroup(_ group: NoteImportCommitGroup) async throws -> NoteImportCommitGroupResult {
+        guard let first = group.books.first, group.books.count == group.sourceIDs.count else { throw NoteImportParserError.noteNotFound }
+        guard group.books.allSatisfy({ $0.targetBookID == first.targetBookID }), first.targetBookID != nil || group.books.count == 1 else { throw NoteImportDurationError.changed }
+        try await requiredMembership?.requirePremium()
+        try Task.checkCancellation()
+        guard !group.books.contains(where: { $0.draft.notes.contains(where: { !$0.failedAttachmentURLs.isEmpty }) }) else {
+            throw NoteImportParserError.unexpected("部分图片未获取，请先处理失败内容")
+        }
+        let placement = defaults.object(forKey: "newAddBookPosition") as? Int ?? 0
+        return try await databaseManager.database.dbPool.write { db in
+            let original = try Self.durationRecords(targetID: first.targetBookID, db: db)
+            let assessment = try Self.durationAssessment(records: original, drafts: group.books.map(\.draft))
+            if assessment.sourceSeconds != nil {
+                guard group.assessment == assessment else { throw NoteImportDurationError.changed }
+            }
+            if group.policy == .replace {
+                guard assessment.sourceSeconds != nil else { throw NoteImportDurationError.missingSource }
+                guard !assessment.hasActiveTimer else { throw NoteImportDurationError.activeTimer }
+            }
+            let now = Int64(Date().timeIntervalSince1970 * 1000)
+            let ownerID = try DatabaseOwnerResolver.resolveOwnerID(in: db)
+            var targetID: Int64 = 0
+            for item in group.books {
+                targetID = try self.upsertBook(item, ownerID: ownerID, placement: placement, now: now, db: db)
+                try self.writeImportContents(item, bookID: targetID, ownerID: ownerID, now: now, db: db)
+            }
+            if group.policy == .replace {
+                // 用户确认后清空当前目标的全部时长记录及其内嵌资料；无日期范围过滤。
+                // 与后续内容和时长写入处于同一事务，任何失败均恢复原记录。
+                try db.execute(sql: "DELETE FROM read_time_record WHERE book_id = ?", arguments: [targetID])
+            }
+            if group.policy != .keep, assessment.sourceSeconds != nil {
+                let base = group.policy == .replace ? [] : original
+                let entries = NoteImportDurationMerge.apply(group.books.map(\.draft), to: base.map(Self.durationEntry))
+                try Self.persistDuration(entries, original: base, targetID: targetID, now: now, db: db)
+            }
+            if let patch = first.metadataPatch, patch.hasChanges {
+                try self.applyPreviewMetadata(patch, bookID: targetID, ownerID: ownerID, now: now, db: db)
+            }
+            let final = try Self.durationRecords(targetID: targetID, db: db)
+            let title = try BookRecord.fetchOne(db, key: targetID)?.name ?? first.draft.name
+            return .init(targetID: targetID, sourceIDs: group.sourceIDs, title: title, policy: group.policy,
+                         finalSeconds: NoteImportDurationMerge.total(final.map(Self.durationEntry)), includesDuration: assessment.sourceSeconds != nil)
+        }
+    }
+    /// 读取目标有效记录并按主键稳定排序；快照覆盖所有状态，时间保持数据库毫秒/秒单位。
+    nonisolated private static func durationRecords(targetID: Int64?, db: Database) throws -> [ReadTimeRecordRecord] {
+        guard let targetID else { return [] }
+        // 读取当前目标的所有有效计时，包含未完成记录；排序用于确定性快照及原有同日更新顺序。
+        return try ReadTimeRecordRecord.fetchAll(db, sql: "SELECT * FROM read_time_record WHERE book_id = ? AND is_deleted = 0 ORDER BY id", arguments: [targetID])
+    }
+    /// 不丢失记录身份，纯计算不会接触内嵌感想和其他计时字段。
+    nonisolated private static func durationEntry(_ record: ReadTimeRecordRecord) -> NoteImportDurationEntry {
+        .init(id: record.id, start: record.startTime, end: record.endTime, day: record.fuzzyReadDate,
+              wereadDay: record.wereadReadDate, seconds: record.elapsedSeconds, position: record.position, status: record.status)
+    }
+    /// 编码完整记录而非仅汇总，感想和进度变动同样会使替换确认失效。
+    nonisolated private static func durationAssessment(records: [ReadTimeRecordRecord], drafts: [NoteImportDraftBook]) throws -> NoteImportDurationAssessment {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        let entries = records.map(durationEntry)
+        return .init(snapshot: try encoder.encode(records), localCount: records.count,
+                     localSeconds: NoteImportDurationMerge.total(entries), sourceSeconds: NoteImportDurationMerge.sourceSeconds(drafts),
+                     mergedSeconds: NoteImportDurationMerge.total(NoteImportDurationMerge.apply(drafts, to: entries)),
+                     hasActiveTimer: records.contains { [0, 1, 2].contains($0.status) },
+                     insightCount: records.filter { !$0.insight.isEmpty }.count,
+                     positionCount: records.filter { $0.position > 0 }.count)
+    }
+    /// 仅更新运算改变的时长和位置，保留本地记录的感想、创建日期及计时历史。
+    nonisolated private static func persistDuration(_ entries: [NoteImportDurationEntry], original: [ReadTimeRecordRecord], targetID: Int64, now: Int64, db: Database) throws {
+        let indexed = Dictionary(uniqueKeysWithValues: original.compactMap { record in record.id.map { ($0, record) } })
+        for entry in entries {
+            if let id = entry.id, var record = indexed[id] {
+                guard record.elapsedSeconds != entry.seconds || record.position != entry.position else { continue }
+                record.elapsedSeconds = entry.seconds
+                record.position = entry.position
+                record.updatedDate = now
+                try record.update(db)
+            } else {
+                var record = ReadTimeRecordRecord()
+                record.bookId = targetID; record.startTime = entry.start; record.endTime = entry.end
+                record.fuzzyReadDate = entry.day; record.wereadReadDate = entry.wereadDay
+                record.elapsedSeconds = entry.seconds; record.position = entry.position; record.status = 3
+                record.createdDate = now; record.updatedDate = now
+                try record.insert(db)
+            }
+        }
     }
 }

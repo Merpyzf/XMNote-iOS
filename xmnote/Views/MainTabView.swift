@@ -8,9 +8,9 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖可选 AppRuntimeContext、已原子恢复的 AppSceneSnapshot、scene 级 AppNavigationCoordinator、系统外观、书架整理 accessory 协调器、阅读日历、外部导入/网页动作与各业务目的页
+ * [INPUT]: 依赖可选 AppRuntimeContext、已原子恢复的 AppSceneSnapshot、scene 级 AppNavigationCoordinator、系统外观、书架整理 accessory 协调器、阅读日历、外部导入/网页动作、Kindle 分模式输入与各业务目的页
  * [OUTPUT]: 对外提供 MainTabView（五个类型安全浏览栈、四个 Reicon Filled 业务 Tab 图标、首帧 Tab 稳定显现、UIKit 全屏书摘回顾与同构启动壳层、带根级退出控件的单一全屏任务栈、恢复表面门控、按全局外观解析的书架整理稳定宿主/阅读计时交叉淡化底部 accessory、UIKit Zoom 与退场后一次性回流）
- * [POS]: 应用根导航宿主，只消费协调器状态并使用系统 push/cover；恢复目的页提交前不暴露底层根页
+ * [POS]: 应用根导航宿主，只消费协调器状态并使用系统 push/cover；导入输入页自行保护草稿退出，恢复目的页提交前不暴露底层根页
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -1016,9 +1016,9 @@ struct MainTabView: View {
                     }
             }
         case .dataImport(let destination):
-            dataImportTaskDestination(destination, repositories: runtime.repositories)
+            dataImportTaskDestination(destination, repositories: runtime.repositories, showsCancel: navigationContext == .modalRoot)
                 .appTaskRootDismissControl(
-                    isVisible: navigationContext == .modalRoot,
+                    isVisible: navigationContext == .modalRoot && !destination.ownsInputCancellation,
                     style: .text("取消")
                 )
         }
@@ -1053,7 +1053,8 @@ struct MainTabView: View {
     @ViewBuilder
     private func dataImportTaskDestination(
         _ destination: DataImportTaskDestination,
-        repositories: RepositoryContainer
+        repositories: RepositoryContainer,
+        showsCancel: Bool
     ) -> some View {
         switch destination {
         case .desktopComputer:
@@ -1065,28 +1066,29 @@ struct MainTabView: View {
                 repository: repositories.wereadImportRepository,
                 onOpenPremium: openPremiumFromFullScreenTask
             )
-        case .kindle:
+        case .kindle(let entryPoint):
             KindleImportView(
+                entryPoint: entryPoint,
                 gateway: DefaultKindleImportGateway(
                     repository: repositories.noteImportRepository
                 )
             )
         case .api:
             ApiNoteImportView(
-                repository: repositories.noteImportRepository,
-                isPremium: appState.isPremium,
+                repository: repositories.premiumNoteImportRepository,
+                membership: repositories.membershipRepository,
                 onOpenPremium: openPremiumFromFullScreenTask
             )
         case .hanwang:
             HanWangImportView(repository: repositories.noteImportRepository)
         case .file(let title, let parserID):
-            NoteImportSourceScreen(title: title, input: .file(parserID: parserID))
+            NoteImportSourceScreen(title: title, input: .file(parserID: parserID), showsCancel: showsCancel)
         case .fileCandidates(let title, let parserIDs):
-            NoteImportSourceScreen(title: title, input: .fileCandidates(parserIDs))
+            NoteImportSourceScreen(title: title, input: .fileCandidates(parserIDs), showsCancel: showsCancel)
         case .clipboard(let title, let parserID):
-            NoteImportSourceScreen(title: title, input: .clipboard(parserID: parserID))
+            NoteImportSourceScreen(title: title, input: .clipboard(parserID: parserID), showsCancel: showsCancel)
         case .clipboardCandidates(let title, let parserIDs):
-            NoteImportSourceScreen(title: title, input: .clipboardCandidates(parserIDs))
+            NoteImportSourceScreen(title: title, input: .clipboardCandidates(parserIDs), showsCancel: showsCancel)
         }
     }
 
@@ -1620,7 +1622,7 @@ struct MainTabView: View {
         case .readingTimerSettings:
             ReadingTimerSettingsView()
         case .premium:
-            Text("会员")
+            MembershipView()
         case .readReminder:
             Text("阅读提醒")
         case .dataImport:
@@ -2729,6 +2731,16 @@ private enum AppTaskRootDismissControlStyle {
     case collapse(accessibilityLabel: LocalizedStringKey)
 }
 
+private extension DataImportTaskDestination {
+    /// 通用输入页自行保护文件选择与原文草稿，宿主不再添加绕过保护的取消按钮。
+    var ownsInputCancellation: Bool {
+        switch self {
+        case .file, .fileCandidates, .clipboard, .clipboardCandidates: true
+        default: false
+        }
+    }
+}
+
 /// 为没有自带未保存拦截的任务根页提供系统取消/关闭入口。
 private struct AppTaskRootDismissControlModifier: ViewModifier {
     @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
@@ -2747,6 +2759,7 @@ private struct AppTaskRootDismissControlModifier: ViewModifier {
                             Button(title) {
                                 navigationCoordinator.dismissTask()
                             }
+                            .xmToolbarNeutralTint()
                         case .collapse(let accessibilityLabel):
                             Button {
                                 navigationCoordinator.dismissTask()

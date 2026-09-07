@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖微信读书 Repository/ViewModel、可控 API 与仓储测试桩
- * [OUTPUT]: 验证批次边界、缓存重试、详情并发/进度、Cookie 续期和授权清理边界
+ * [OUTPUT]: 验证真实书籍类型筛选、批次边界、缓存重试、详情并发/进度、Cookie 续期和授权清理边界
  * [POS]: xmnoteTests 的微信读书授权导入一致性门禁
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -12,6 +12,39 @@ import Testing
 
 @MainActor
 struct WereadImportAlignmentTests {
+    @Test(arguments: [false, true])
+    func candidatesKeepOrdinaryBooksBeforeApplyingRecentLimit(onlyNotes: Bool) async throws {
+        let membership = MembershipRepository(source: WereadTestMembershipSource())
+        await membership.refresh()
+        let api = WereadAPIProbe()
+        let mixed: [[String: Any]] = [
+            ["bookId": "other", "type": 1],
+            ["bookId": "public-account", "type": 3],
+            ["bookId": "unknown", "type": 99],
+            ["bookId": "missing-type"],
+            ["bookId": "book-a", "type": 0],
+            ["bookId": "book-b", "type": 0]
+        ]
+        api.shelfEntries = mixed
+        api.notebookEntries = mixed.map { ["bookId": $0["bookId"]!, "book": $0] }
+            + [["bookId": "missing-book", "type": 0]]
+        let defaults = try #require(UserDefaults(suiteName: UUID().uuidString))
+        let repository = WereadImportRepository(
+            databaseManager: DatabaseManager(database: try AppDatabase.empty()),
+            defaults: defaults,
+            api: api,
+            membership: membership
+        )
+        let authorization = WereadAuthorization(cookieHeader: "wr_vid=1; wr_skey=old", userID: "1")
+        var preferences = WereadImportPreferences.default
+        preferences.onlyBooksWithNotes = onlyNotes
+        let all = try await repository.fetchImportBookIDs(authorization: authorization, preferences: preferences)
+        #expect(all == ["book-a", "book-b"])
+        preferences.recentBookCount = 1
+        let recent = try await repository.fetchImportBookIDs(authorization: authorization, preferences: preferences)
+        #expect(recent == ["book-a"])
+    }
+
     @Test(arguments: [
         (0, []),
         (1, [1]),
@@ -110,6 +143,8 @@ struct WereadImportAlignmentTests {
 
     @Test
     func batchDetailsUseTwoBookGroupsAndMonotonicProgress() async throws {
+        let membership = MembershipRepository(source: WereadTestMembershipSource())
+        await membership.refresh()
         let api = WereadAPIProbe()
         let defaults = try #require(UserDefaults(suiteName: UUID().uuidString))
         defaults.set("wr_vid=1; wr_skey=old", forKey: "wereadCookie")
@@ -120,6 +155,7 @@ struct WereadImportAlignmentTests {
             databaseManager: DatabaseManager(database: database),
             defaults: defaults,
             api: api,
+            membership: membership,
             nowMillis: { 1_710_000_000_000 }
         )
         var progress: [(Int, Int)] = []
@@ -184,6 +220,8 @@ struct WereadImportAlignmentTests {
 
     @Test
     func bookmarkReviewChapterOrderingAndFinishedDateFallbackMatchAndroid() async throws {
+        let membership = MembershipRepository(source: WereadTestMembershipSource())
+        await membership.refresh()
         let api = WereadAPIProbe()
         api.usesSemanticFixture = true
         let defaults = try #require(UserDefaults(suiteName: UUID().uuidString))
@@ -194,6 +232,7 @@ struct WereadImportAlignmentTests {
             databaseManager: DatabaseManager(database: try AppDatabase.empty()),
             defaults: defaults,
             api: api,
+            membership: membership,
             nowMillis: { 1_710_000_000_000 }
         )
 
@@ -333,6 +372,8 @@ private final class WereadAPIProbe: WereadImportAPIClientProtocol {
     var usesSemanticFixture = false
     var shelfBackfillIDs: [String] = []
     var notebookBackfillIDs: [String] = []
+    var shelfEntries: [[String: Any]]?
+    var notebookEntries: [[String: Any]]?
     var backfillTitles: [String: String] = [:]
     var shelfError: Error?
     private(set) var maximumConcurrentDetailLoads = 0
@@ -378,7 +419,7 @@ private final class WereadAPIProbe: WereadImportAPIClientProtocol {
         }
         if path.contains("/api/user/notebook") {
             return response(object: [
-                "books": notebookBackfillIDs.map { ["bookId": $0, "book": ["type": 1, "bookId": $0]] }
+                "books": notebookEntries ?? notebookBackfillIDs.map { ["bookId": $0, "book": ["type": 0, "bookId": $0]] }
             ])
         }
         return response(object: [:])
@@ -440,7 +481,7 @@ private final class WereadAPIProbe: WereadImportAPIClientProtocol {
         if let shelfError { throw shelfError }
         let state: [String: Any] = [
             "shelf": [
-                "rawIndexes": shelfBackfillIDs.map { ["type": 1, "bookId": $0] }
+                "rawIndexes": shelfEntries ?? shelfBackfillIDs.map { ["type": 0, "bookId": $0] }
             ]
         ]
         let data = try JSONSerialization.data(withJSONObject: state, options: [.sortedKeys])
@@ -551,4 +592,14 @@ private final class WereadRepositoryStub: WereadImportRepositoryProtocol {
         for index in books.indices { progress(index + 1, books.count) }
         return books
     }
+}
+
+private actor WereadTestMembershipSource: MembershipSource {
+    func product() async -> MembershipProduct { .init(title: "Test", purchaseAvailable: false, isSimulation: false) }
+    func currentEntitlement() async throws -> MembershipEntitlement {
+        .init(status: .lifetime, source: .apple, transactionID: "fixture", purchasedAt: Date())
+    }
+    func purchase() async throws -> MembershipPurchaseResult { throw MembershipError.unavailable }
+    func restore() async throws -> MembershipEntitlement { try await currentEntitlement() }
+    func updates() async -> AsyncStream<Void> { AsyncStream { $0.finish() } }
 }

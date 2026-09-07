@@ -1,196 +1,15 @@
 /**
- * [INPUT]: 依赖 NoteImportParserRegistry、NoteImportRepositoryProtocol、BookPickerView 与系统文件/剪贴板能力
- * [OUTPUT]: 对外提供带 Reicon 输入方式标识的统一文件/剪贴板解析入口和全来源导入预览
- * [POS]: Views/Personal/DataImport 的全来源公共交互层；UI 只调用 Golden 验证过的 Parser Registry
+ * [INPUT]: 依赖 NoteImportPreviewViewModel、原生搜索/菜单、BookPickerView 与项目列表和 Sheet 组件
+ * [OUTPUT]: 提供解析草稿的来源标记、全来源书摘预览与确认导入
+ * [POS]: Views/Personal/DataImport 的预览与提交层；输入准备由 NoteImportSourceScreen 独立持有
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import Observation
 import SwiftUI
-import UniformTypeIdentifiers
 
-struct NoteImportSourceScreen: View {
-    enum Input {
-        case file(parserID: NoteImportParserID?)
-        case fileCandidates([NoteImportParserID])
-        case clipboard(parserID: NoteImportParserID)
-        case clipboardCandidates([NoteImportParserID])
-    }
-
-    @Environment(RepositoryContainer.self) private var repositories
-    @Environment(XMToastCenter.self) private var toastCenter
-    let title: String
-    let input: Input
-    @State private var isPickingFile = false
-    @State private var isParsing = false
-    @State private var parsedBooks: [NoteImportDraftBook] = []
-    @State private var opensPreview = false
-    @State private var errorMessage: String?
-    @State private var task: Task<Void, Never>?
-
-    var body: some View {
-        VStack(spacing: Spacing.section) {
-            Image(inputIcon)
-                .resizable()
-                .scaledToFit()
-                .foregroundStyle(Color.appTint)
-                .frame(width: 56, height: 56)
-                .accessibilityHidden(true)
-            Text(instruction)
-                .font(AppTypography.body)
-                .foregroundStyle(Color.textSecondary)
-                .multilineTextAlignment(.center)
-            Button(action: start) {
-                HStack {
-                    if isParsing { ProgressView().controlSize(.small) }
-                    Text(isParsing ? "正在解析" : actionTitle)
-                }
-                .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(isParsing)
-        }
-        .padding(Spacing.screenEdge)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.surfacePage)
-        .navigationTitle(title)
-        .navigationBarTitleDisplayMode(.inline)
-        .fileImporter(
-            isPresented: $isPickingFile,
-            allowedContentTypes: [.plainText, .html, .json, .commaSeparatedText, .database, .zip, .epub, .data],
-            allowsMultipleSelection: false
-        ) { result in
-            switch result {
-            case .success(let urls):
-                if let url = urls.first { parseFile(url) }
-            case .failure(let error):
-                errorMessage = error.localizedDescription
-            }
-        }
-        .navigationDestination(isPresented: $opensPreview) {
-            UnifiedNoteImportPreviewView(books: parsedBooks, repository: repositories.noteImportRepository)
-        }
-        .onDisappear { task?.cancel() }
-        .xmSystemAlert(
-            isPresented: Binding(
-                get: { errorMessage != nil },
-                set: { if !$0 { errorMessage = nil } }
-            ),
-            descriptor: errorMessage.map { message in
-                .init(
-                    title: "无法导入",
-                    message: message,
-                    actions: [.init(title: "知道了") { errorMessage = nil }]
-                )
-            }
-        )
-    }
-
-    private var inputIcon: ImageResource {
-        switch input {
-        case .file, .fileCandidates:
-            .reiconFilePlusOutline
-        case .clipboard, .clipboardCandidates:
-            .reiconClipboardTextOutline
-        }
-    }
-
-    private var instruction: String {
-        switch input {
-        case .file, .fileCandidates: "选择从对应阅读应用导出的原始文件。解析规则与 Android 保持一致。"
-        case .clipboard, .clipboardCandidates: "先在阅读应用中复制完整书摘内容，再返回这里导入"
-        }
-    }
-
-    private var actionTitle: String {
-        switch input { case .file, .fileCandidates: "选择文件"; case .clipboard, .clipboardCandidates: "读取剪贴板" }
-    }
-
-    private func start() {
-        switch input {
-        case .file, .fileCandidates: isPickingFile = true
-        case .clipboard(let parserID):
-            guard let content = UIPasteboard.general.string, !content.isEmpty else {
-                toastCenter.error("剪贴板中没有可导入的文本")
-                return
-            }
-            parse(data: Data(content.utf8), fileName: "clipboard.txt", parserID: parserID)
-        case .clipboardCandidates(let parserIDs):
-            guard let content = UIPasteboard.general.string, !content.isEmpty else {
-                toastCenter.error("剪贴板中没有可导入的文本")
-                return
-            }
-            parseCandidates(data: Data(content.utf8), parserIDs: parserIDs)
-        }
-    }
-
-    private func parseCandidates(data: Data, fileName: String = "clipboard.txt", parserIDs: [NoteImportParserID]) {
-        isParsing = true
-        task = Task {
-            let registry = NoteImportParserRegistry(attachmentImporter: S3NoteImportAttachmentImporter(repository: repositories.s3UploadRepository))
-            let orderedParserIDs: [NoteImportParserID]
-            if Set(parserIDs) == Set([.wereadOld, .wereadPre830, .weread830]) {
-                orderedParserIDs = NoteImportDetection.detectWereadClipboard(data: data).map { [$0] } ?? []
-            } else { orderedParserIDs = parserIDs }
-            for parserID in orderedParserIDs {
-                if let books = try? await registry.parse(data: data, fileName: fileName, fileExtension: (fileName as NSString).pathExtension, using: parserID), !books.isEmpty {
-                    parsedBooks = books.settingSource(for: parserID)
-                    opensPreview = true
-                    isParsing = false
-                    return
-                }
-            }
-            errorMessage = NoteImportParserError.noteFormat.localizedDescription
-            isParsing = false
-        }
-    }
-
-    private func parseFile(_ url: URL) {
-        let accessed = url.startAccessingSecurityScopedResource()
-        defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-        do {
-            let data = try Data(contentsOf: url)
-            if case .file(let parserID) = input {
-                parse(data: data, fileName: url.lastPathComponent, parserID: parserID)
-            } else if case .fileCandidates(let parserIDs) = input {
-                parseCandidates(data: data, fileName: url.lastPathComponent, parserIDs: parserIDs)
-            } else {
-                parse(data: data, fileName: url.lastPathComponent, parserID: nil)
-            }
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
-    private func parse(data: Data, fileName: String, parserID: NoteImportParserID?) {
-        isParsing = true
-        task = Task {
-            do {
-                let registry = NoteImportParserRegistry(attachmentImporter: S3NoteImportAttachmentImporter(repository: repositories.s3UploadRepository))
-                let fileExtension = (fileName as NSString).pathExtension
-                let result: [NoteImportDraftBook]
-                if let parserID {
-                    result = try await registry.parse(data: data, fileName: fileName, fileExtension: fileExtension, using: parserID)
-                } else {
-                    let detected = NoteImportDetection.detect(data: data, fileExtension: fileExtension)
-                        ?? (fileExtension.lowercased() == "epub" ? .ireaderEpub : nil)
-                        ?? (fileExtension.lowercased() == "zip" ? .appleBooks : nil)
-                    guard let detected else { throw NoteImportParserError.noteFormat }
-                    result = try await registry.parse(data: data, fileName: fileName, fileExtension: fileExtension, using: detected).settingSource(for: detected)
-                }
-                guard !result.isEmpty else { throw NoteImportParserError.noteNotFound }
-                parsedBooks = parserID.map { result.settingSource(for: $0) } ?? result
-                opensPreview = true
-            } catch is CancellationError {
-            } catch {
-                errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            }
-            isParsing = false
-        }
-    }
-}
-
-private extension Array where Element == NoteImportDraftBook {
+extension Array where Element == NoteImportDraftBook {
+    /// 在进入统一预览前设置来源身份，保留各导出版本共享的业务来源。
     func settingSource(for parserID: NoteImportParserID) -> [NoteImportDraftBook] {
         let sourceID: Int64 = switch parserID {
         case .kindle: 2; case .kindleApp: 3; case .wereadOld, .wereadPre830, .weread830: 4
@@ -205,314 +24,319 @@ private extension Array where Element == NoteImportDraftBook {
     }
 }
 
-@MainActor @Observable
-private final class UnifiedNoteImportPreviewModel {
-    struct Book: Identifiable {
-        let id = UUID()
-        var draft: NoteImportDraftBook
-        var isSelected: Bool
-        var selectedNotes: Set<Int>
-        var target: BookPickerBook?
-
-        var selectedNoteCount: Int { selectedNotes.count }
-    }
-
-    var books: [Book]
-    var query = ""
-    var isCommitting = false
-    var progressText = ""
-    var errorMessage: String?
-    var didCommit = false
-    private let repository: any NoteImportRepositoryProtocol
-    private var task: Task<Void, Never>?
-
-    init(books: [NoteImportDraftBook], repository: any NoteImportRepositoryProtocol) {
-        self.repository = repository
-        self.books = books.map {
-            Book(draft: $0, isSelected: books.count == 1, selectedNotes: books.count == 1 ? Set($0.notes.indices) : [])
-        }
-    }
-
-    var visibleBooks: [Book] {
-        guard !query.isEmpty else { return books }
-        return books.filter { $0.draft.name.localizedCaseInsensitiveContains(query) || $0.draft.author.localizedCaseInsensitiveContains(query) }
-    }
-
-    var selectedCount: Int { books.filter(\.isSelected).count }
-
-    func prepareMatches() async {
-        for index in books.indices where books[index].target == nil {
-            if Task.isCancelled { return }
-            books[index].target = try? await repository.matchLocalBook(for: books[index].draft)
-        }
-    }
-
-    func toggle(_ id: UUID) {
-        guard let index = books.firstIndex(where: { $0.id == id }) else { return }
-        books[index].isSelected.toggle()
-        if books[index].isSelected, books[index].selectedNotes.isEmpty { books[index].selectedNotes = Set(books[index].draft.notes.indices) }
-    }
-
-    func selectAll(_ selected: Bool) {
-        for index in books.indices {
-            books[index].isSelected = selected
-            books[index].selectedNotes = selected ? Set(books[index].draft.notes.indices) : []
-        }
-    }
-
-    func update(_ book: Book) {
-        guard let index = books.firstIndex(where: { $0.id == book.id }) else { return }
-        books[index] = book
-    }
-
-    func map(_ id: UUID, target: BookPickerBook?) {
-        guard let index = books.firstIndex(where: { $0.id == id }) else { return }
-        books[index].target = target
-    }
-
-    func commit() {
-        let selected = books.filter(\.isSelected).map { book -> NoteImportCommitBook in
-            var draft = book.draft
-            draft.notes = draft.notes.enumerated().compactMap { book.selectedNotes.contains($0.offset) ? $0.element : nil }
-            return NoteImportCommitBook(draft: draft, targetBookID: book.target?.id)
-        }
-        guard !selected.isEmpty else { errorMessage = "请先选择书籍"; return }
-        isCommitting = true
-        task = Task {
-            do {
-                try await repository.commitImport(books: selected) { [weak self] current, total in
-                    self?.progressText = "正在导入（\(current)/\(total)）"
-                }
-                didCommit = true
-            } catch is CancellationError {
-            } catch {
-                errorMessage = error.localizedDescription
-            }
-            isCommitting = false
-        }
-    }
-
-    func cancel() { task?.cancel() }
-}
-
+/// 全来源预览共享连续列表、直接选择和系统底部搜索。
 struct UnifiedNoteImportPreviewView: View {
     @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
-    @State private var model: UnifiedNoteImportPreviewModel
-    @State private var contentBook: UnifiedNoteImportPreviewModel.Book?
-    @State private var mappingBook: UnifiedNoteImportPreviewModel.Book?
-    @State private var editingBook: UnifiedNoteImportPreviewModel.Book?
-    @State private var editedTitle = ""
-    @State private var editedAuthor = ""
+    @Environment(\.dismiss) private var dismiss
+    @State private var model: NoteImportPreviewViewModel
+    @State private var isSearchActive = false
+    @State private var showsFilters = false
+    @State private var showsSelected = false
+    @State private var showsIssuesOnly = false
+    @State private var showsExitDialog = false
+    @State private var showsReplacement = false
+    @State private var isCheckingCommit = false
+    @State private var retriesAfterResultDismissal = false
+    private let onFinished: (() -> Void)?
 
-    init(books: [NoteImportDraftBook], repository: any NoteImportRepositoryProtocol) {
-        _model = State(initialValue: UnifiedNoteImportPreviewModel(books: books, repository: repository))
+    /// 来源入口持有会话，子页不重建选择身份。
+    init(books: [NoteImportDraftBook], repository: any NoteImportRepositoryProtocol, preferenceKey: String? = nil,
+         commit: NoteImportPreviewViewModel.Commit? = nil, onFinished: (() -> Void)? = nil) {
+        _model = State(initialValue: .init(books: books, repository: repository, preferenceKey: preferenceKey, commit: commit))
+        self.onFinished = onFinished
     }
-
+    /// 微信批次返回复用同一会话及完成结果。
+    init(model: NoteImportPreviewViewModel, onFinished: @escaping () -> Void) {
+        _model = State(initialValue: model); self.onFinished = onFinished
+    }
     var body: some View {
-        List {
-            Section { HStack { Button("全选") { model.selectAll(true) }; Spacer(); Button("取消全选") { model.selectAll(false) } } }
-            ForEach(model.visibleBooks) { book in
-                Section {
-                    importBookRow(book)
-                    HStack {
-                        Button(book.target == nil ? "映射已有书籍" : "更换映射") { mappingBook = book }
-                        if book.target != nil { Spacer(); Button("清除映射", role: .destructive) { model.map(book.id, target: nil) } }
-                    }
-                }
-            }
+        XMScrollEdgeChrome(presentation: .overlaySoft, edges: .top, topBar: { controls }) {
+            NoteImportPreviewBookList(model: model, books: model.visibleBooks, emptyAction: resetVisibleScope)
+                .disabled(isCheckingCommit)
         }
-        .searchable(text: $model.query, prompt: "搜索书名或作者")
-        .scrollDismissesKeyboard(.immediately)
+        .background(Color.surfaceSheet.ignoresSafeArea())
         .navigationTitle("导入预览")
         .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .bottom) {
-            Button { model.commit() } label: {
-                HStack { Spacer(); if model.isCommitting { ProgressView().controlSize(.small) }; Text(model.isCommitting ? model.progressText : "导入（\(model.selectedCount)/\(model.books.count)）"); Spacer() }
+        .searchable(text: $model.query, isPresented: $isSearchActive, placement: .toolbar, prompt: "搜索书名或作者")
+        .searchToolbarBehavior(.automatic)
+        .navigationBarBackButtonHidden(model.hasUnsavedChanges || model.isCommitting)
+        .navigationPopGuard(canPop: !model.hasUnsavedChanges && !model.isCommitting, onBlockedAttempt: requestExit)
+        .interactiveDismissDisabled(model.hasUnsavedChanges || model.isCommitting)
+        .toolbar {
+            if model.hasUnsavedChanges || model.isCommitting {
+                ToolbarItem(placement: .topBarLeading) { TopBarBackButton(action: requestExit) }
             }
-            .buttonStyle(.borderedProminent).padding(Spacing.screenEdge).background(.ultraThinMaterial).disabled(model.isCommitting)
-        }
-        .task { await model.prepareMatches() }
-        .onDisappear { model.cancel() }
-        .onChange(of: model.didCommit) { _, value in
-            if value {
-                navigationCoordinator.dismissTask()
-            }
-        }
-        .navigationDestination(isPresented: Binding(get: { contentBook != nil }, set: { if !$0 { contentBook = nil } })) {
-            if let book = contentBook { UnifiedNoteImportContentView(book: binding(for: book.id)) }
-        }
-        .sheet(item: $mappingBook) { book in
-            BookPickerView(configuration: .init(title: "映射到已有书籍", scope: .local, selectionMode: .single, defaultQuery: book.draft.name)) { result in
-                if case .single(.local(let selected)) = result { model.map(book.id, target: selected) }
-                mappingBook = nil
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(action: beginImport) {
+                    Text("导入").foregroundStyle(Color.primaryActionForeground).opacity(model.isCommitting || isCheckingCommit ? 0 : 1)
+                        .overlay { if model.isCommitting || isCheckingCommit { ProgressView().controlSize(.small).tint(Color.primaryActionForeground) } }
+                }
+                .buttonStyle(.borderedProminent).tint(Color.appTint)
+                .disabled(model.selectedCount == 0 || model.isLocked || isCheckingCommit)
+                .accessibilityLabel("导入已选书籍").accessibilityValue("已选 \(model.selectedCount) 本")
+                .accessibilityIdentifier("note-import.commit")
             }
         }
-        .xmSystemAlert(
-            isPresented: Binding(
-                get: { model.errorMessage != nil },
-                set: { if !$0 { model.errorMessage = nil } }
-            ),
-            descriptor: model.errorMessage.map { message in
-                .init(
-                    title: "无法导入",
-                    message: message,
-                    actions: [.init(title: "知道了") { model.errorMessage = nil }]
-                )
-            }
-        )
-        .xmSystemAlert(item: $editingBook) { book in
-            .init(
-                title: "编辑新书资料",
-                actions: [
-                    .init(title: "取消", role: .cancel) {},
-                    .init(
-                        title: "保存",
-                        isEnabled: !editedTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    ) {
-                        var updated = book
-                        let title = editedTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-                        updated.draft.name = title
-                        updated.draft.rawName = title
-                        updated.draft.author = editedAuthor.trimmingCharacters(in: .whitespacesAndNewlines)
-                        model.update(updated)
+        .task { await model.prepare() }
+        .sheet(isPresented: $showsFilters) { NoteImportFilterSheet(model: model) }
+        .sheet(isPresented: $model.showsResult, onDismiss: {
+            if retriesAfterResultDismissal { retriesAfterResultDismissal = false; beginImport() }
+        }) {
+            NoteImportResultSheet(model: model, onFinish: finish, onRetry: {
+                retriesAfterResultDismissal = true; model.showsResult = false
+            })
+        }
+        .navigationDestination(isPresented: $showsSelected) {
+            NoteImportPreviewBookList(model: model, books: showsIssuesOnly ? model.pendingIssues : model.selectedBooks)
+                .navigationTitle(showsIssuesOnly ? "待处理书籍" : "已选书籍")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("清空选择") { model.clearSelection() }.disabled(model.isLocked || model.selectedCount == 0)
+                            .xmToolbarNeutralTint()
                     }
-                ],
-                textFields: [
-                    .init(text: $editedTitle, placeholder: "书名"),
-                    .init(text: $editedAuthor, placeholder: "作者")
-                ]
-            )
+                }
         }
+        .confirmationDialog("替换本地阅读时长？", isPresented: $showsReplacement, titleVisibility: .visible) {
+            Button("替换并导入", role: .destructive) { model.beginCommit() }
+            Button("取消", role: .cancel) { }
+        } message: { Text(model.replacementMessage ?? "") }
+        .confirmationDialog(model.isCommitting ? "停止导入？" : "放弃本次导入的修改？", isPresented: $showsExitDialog) {
+            if model.isCommitting { Button("停止导入", role: .destructive) { model.stopImport() } }
+            else { Button("放弃修改", role: .destructive) { model.discardPendingChanges(); dismiss() } }
+            Button("继续", role: .cancel) { }
+        } message: { if model.isCommitting { Text("已完成的书籍会保留。") } }
+        .xmSystemAlert(isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } }),
+            descriptor: model.errorMessage.map { message in
+                .init(title: "无法完成操作", message: message, actions: [.init(title: "知道了") { model.errorMessage = nil }])
+            })
     }
-
-    /// 渲染同时承载选择按钮、内容预览点击与长按编辑的复合导入行。
-    private func importBookRow(_ book: UnifiedNoteImportPreviewModel.Book) -> some View {
-        HStack(alignment: .top, spacing: Spacing.base) {
-            Button {
-                model.toggle(book.id)
-            } label: {
-                XMSelectionIndicator(
-                    style: .checkbox,
-                    isSelected: book.isSelected,
-                    font: AppTypography.title2,
-                    showsUnselectedBase: true
-                )
-                .frame(
-                    width: InteractionMetrics.minimumTouchTarget,
-                    height: InteractionMetrics.minimumTouchTarget
-                )
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(book.isSelected ? "取消选择《\(book.draft.name)》" : "选择《\(book.draft.name)》")
-            .accessibilityAddTraits(book.isSelected ? .isSelected : [])
-
-            XMBookCover.fixedWidth(
-                48,
-                urlString: book.draft.cover,
-                cornerRadius: CornerRadius.inlaySmall,
-                placeholderIconSize: .small
-            )
-
-            VStack(alignment: .leading, spacing: Spacing.compact) {
-                Text(book.draft.name)
-                    .font(AppTypography.headline)
-                if !book.draft.author.isEmpty {
-                    Text(book.draft.author)
-                        .font(AppTypography.caption)
-                        .foregroundStyle(Color.textSecondary)
+    private var controls: some View {
+        VStack(spacing: Spacing.none) {
+            if model.isPreparing || model.isCommitting {
+                HStack(spacing: Spacing.cozy) {
+                    ProgressView().controlSize(.small)
+                    Text(model.isPreparing ? "正在准备预览…" : model.progressText).font(AppTypography.footnote)
+                    Spacer()
                 }
-                Text("\(book.draft.notes.count) 条书摘 · \(book.draft.reviews.count) 条书评")
-                    .font(AppTypography.caption)
-                    .foregroundStyle(Color.textSecondary)
-                if let target = book.target {
-                    Text("导入到：\(target.title)")
-                        .font(AppTypography.caption)
-                        .foregroundStyle(Color.selectionAccent)
+                .foregroundStyle(Color.textSecondary).frame(minHeight: InteractionMetrics.minimumTouchTarget)
+            } else {
+                if !model.capabilities.statuses.isEmpty { NoteImportStatusSegments(model: model) }
+                ViewThatFits(in: .horizontal) {
+                    HStack { selectionControls }
+                    VStack(alignment: .leading, spacing: Spacing.none) { selectionControls }
                 }
-            }
-
-            Spacer()
-        }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            openBookContentIfAvailable(book)
-        }
-        .onLongPressGesture {
-            beginEditing(book)
-        }
-        .accessibilityActions {
-            if !book.draft.notes.isEmpty || !book.draft.reviews.isEmpty {
-                Button("预览导入内容") {
-                    openBookContentIfAvailable(book)
-                }
-            }
-            if book.target == nil {
-                Button("编辑书籍信息") {
-                    beginEditing(book)
+                .buttonStyle(.plain)
+                .font(AppTypography.footnote)
+                .foregroundStyle(Color.textSecondary)
+                .frame(minHeight: InteractionMetrics.minimumTouchTarget)
+                if !model.filter.summary.isEmpty {
+                    HStack(spacing: Spacing.cozy) {
+                        Text(model.filter.summary).font(AppTypography.footnote).foregroundStyle(Color.textSecondary)
+                        Spacer()
+                        Button("清除") {
+                            var filter = model.filter; filter.onlyWithNotes = false; filter.duration = .all
+                            model.applyFilter(filter)
+                        }
+                        .font(AppTypography.footnote).tint(Color.textSecondary)
+                        .frame(minHeight: InteractionMetrics.minimumTouchTarget)
+                    }
                 }
             }
         }
+        .padding(.horizontal, Spacing.screenEdge)
+        .padding(.top, Spacing.cozy)
+        .disabled(model.isLocked || isCheckingCommit)
     }
-
-    /// 打开至少含一条书摘或书评的导入内容预览。
-    private func openBookContentIfAvailable(_ book: UnifiedNoteImportPreviewModel.Book) {
-        guard !book.draft.notes.isEmpty || !book.draft.reviews.isEmpty else { return }
-        contentBook = book
+    @ViewBuilder private var selectionControls: some View {
+        controlButton(model.allVisibleSelected ? "取消全选" : (model.query.isEmpty && model.filter.additionalCount == 0 && model.filter.statuses.isEmpty ? "全选" : "全选结果")) {
+            model.selectVisible(!model.allVisibleSelected)
+        }
+        .disabled(model.visibleBooks.allSatisfy(\.isCompleted))
+        Spacer(minLength: Spacing.cozy)
+        if model.selectedCount > 0 {
+            controlButton("已选 \(model.selectedCount) 本") { showsIssuesOnly = false; showsSelected = true }
+            Spacer(minLength: Spacing.cozy)
+        }
+        Button { isSearchActive = false; showsFilters = true } label: {
+            Label("筛选", systemImage: "line.3.horizontal.decrease")
+                .frame(minHeight: InteractionMetrics.minimumTouchTarget).contentShape(Rectangle())
+        }
+        .accessibilityIdentifier("note-import.filter")
     }
-
-    /// 进入未映射书籍的信息编辑态。
-    private func beginEditing(_ book: UnifiedNoteImportPreviewModel.Book) {
-        guard book.target == nil else { return }
-        editedTitle = book.draft.name
-        editedAuthor = book.draft.author
-        editingBook = book
+    /// 直接选择操作保持完整触摸高度，不依赖文字本身的小命中框。
+    private func controlButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title).frame(minHeight: InteractionMetrics.minimumTouchTarget).contentShape(Rectangle())
+        }
     }
-
-    private func binding(for id: UUID) -> Binding<UnifiedNoteImportPreviewModel.Book> {
-        Binding(get: { model.books.first(where: { $0.id == id })! }, set: model.update)
+    /// MainActor 重读提交依据；未解决问题先定位，不通过禁用掩盖原因。
+    private func beginImport() {
+        guard !isCheckingCommit else { return }
+        isSearchActive = false; isCheckingCommit = true
+        Task {
+            await model.prepareCommit()
+            isCheckingCommit = false
+            if !model.pendingIssues.isEmpty { showsIssuesOnly = true; showsSelected = true }
+            else if model.replacementMessage != nil { showsReplacement = true }
+            else { model.beginCommit() }
+        }
+    }
+    /// 无结果恢复只改变显示范围。
+    private func resetVisibleScope() {
+        if !model.query.isEmpty { model.query = "" } else { model.applyFilter(.init()) }
+    }
+    /// 优先结束搜索，草稿保护沿用现有任务退出语义。
+    private func requestExit() {
+        isSearchActive = false
+        if model.hasUnsavedChanges || model.isCommitting { showsExitDialog = true } else { dismiss() }
+    }
+    /// 批次完成返回批次列表，普通来源结束当前任务。
+    private func finish() {
+        model.showsResult = false
+        if let onFinished { onFinished() } else { navigationCoordinator.dismissTask() }
     }
 }
 
-private struct UnifiedNoteImportContentView: View {
-    @Binding var book: UnifiedNoteImportPreviewModel.Book
-
+/// 局部状态分类；大字号或多分类允许横向展开，不借用一级导航切换器。
+private struct NoteImportStatusSegments: View {
+    @Bindable var model: NoteImportPreviewViewModel
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    private var options: [NoteImportReadingStatus?] {
+        [nil] + NoteImportReadingStatus.allCases.filter { model.capabilities.statuses.contains($0) }.map(Optional.some)
+    }
+    private var selection: Binding<NoteImportReadingStatus?> {
+        Binding(get: { model.filter.statuses.first }, set: { model.filter.statuses = $0.map { [$0] } ?? [] })
+    }
     var body: some View {
-        List {
-            if !book.draft.notes.isEmpty {
-                Section { HStack { Button("全选") { selectAll(true) }; Spacer(); Button("取消全选") { selectAll(false) } } } header: { Text("书摘") }
-                ForEach(book.draft.notes.indices, id: \.self) { index in
-                    HStack(alignment: .top) {
-                        let isSelected = book.selectedNotes.contains(index)
-                        Button { toggle(index) } label: {
-                            XMSelectionIndicator(
-                                style: .checkbox,
-                                isSelected: isSelected,
-                                font: AppTypography.title2,
-                                showsUnselectedBase: true
-                            )
-                            .frame(
-                                width: InteractionMetrics.minimumTouchTarget,
-                                height: InteractionMetrics.minimumTouchTarget
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(isSelected ? "取消选择书摘" : "选择书摘")
-                        .accessibilityAddTraits(isSelected ? .isSelected : [])
-                        VStack(alignment: .leading) {
-                            Text(book.draft.notes[index].content)
-                            if !book.draft.notes[index].idea.isEmpty { Text(book.draft.notes[index].idea).font(AppTypography.caption).foregroundStyle(Color.textSecondary) }
+        Group {
+            if options.count <= 4 && !dynamicTypeSize.isAccessibilitySize {
+                Picker("阅读状态", selection: selection) {
+                    ForEach(options, id: \.self) { status in Text(title(status)).tag(status) }
+                }.pickerStyle(.segmented)
+            } else {
+                ScrollView(.horizontal) {
+                    HStack(spacing: Spacing.compact) {
+                        ForEach(options, id: \.self) { status in
+                            Button { selection.wrappedValue = status } label: {
+                                Text(title(status)).font(AppTypography.subheadline)
+                                    .padding(.horizontal, Spacing.base)
+                                    .frame(minHeight: InteractionMetrics.minimumTouchTarget)
+                                    .background(selection.wrappedValue == status ? Color.surfaceCard : Color.clear, in: .capsule)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityAddTraits(selection.wrappedValue == status ? .isSelected : [])
                         }
                     }
-                }
-            }
-            if !book.draft.reviews.isEmpty {
-                Section("书评（随书导入）") { ForEach(book.draft.reviews.indices, id: \.self) { index in VStack(alignment: .leading) { if !book.draft.reviews[index].title.isEmpty { Text(book.draft.reviews[index].title).font(AppTypography.headline) }; Text(book.draft.reviews[index].content) } } }
+                }.scrollIndicators(.hidden)
             }
         }
-        .navigationTitle(book.draft.name)
-        .navigationBarTitleDisplayMode(.inline)
+        .foregroundStyle(Color.textPrimary).tint(Color.textPrimary)
+        .padding(.bottom, Spacing.cozy)
     }
+    /// 包含当前条件下数量，零结果分类仍可识别。
+    private func title(_ status: NoteImportReadingStatus?) -> String { "\(status?.title ?? "全部") \(model.count(for: status))" }
+}
 
-    private func toggle(_ index: Int) { if book.selectedNotes.contains(index) { book.selectedNotes.remove(index) } else { book.selectedNotes.insert(index) }; book.isSelected = !book.selectedNotes.isEmpty || !book.draft.reviews.isEmpty }
-    private func selectAll(_ selected: Bool) { book.selectedNotes = selected ? Set(book.draft.notes.indices) : []; book.isSelected = selected || (!book.draft.reviews.isEmpty && book.isSelected) }
+/// 中性短菜单仅保留给书籍资料内的明确操作。
+struct NoteImportMenuLabel: View {
+    let title: String
+    var body: some View {
+        HStack(spacing: Spacing.compact) {
+            Text(title)
+            Image(systemName: "chevron.down").imageScale(.small).accessibilityHidden(true)
+        }
+        .font(AppTypography.footnote).foregroundStyle(Color.textSecondary)
+        .frame(minHeight: InteractionMetrics.minimumTouchTarget).contentShape(Rectangle())
+    }
+}
+
+/// 路由仅持有来源身份。
+struct NoteImportPreviewBookRoute: Identifiable, Hashable { let id: UUID }
+
+/// 主列表与已选列表共用布局；独立选择与单本设置各自拥有完整命中区域。
+struct NoteImportPreviewBookList: View {
+    @Bindable var model: NoteImportPreviewViewModel
+    let books: [NoteImportPreviewBook]
+    var emptyAction: (() -> Void)?
+    @State private var editingBook: NoteImportPreviewBookRoute?
+    var body: some View {
+        List {
+            ForEach(books) { book in
+                NoteImportPreviewBookRow(book: book, metadata: model.metadata(for: book),
+                    issue: book.issue ?? model.validationMessage(for: book),
+                    durationSummary: model.durationChoice(for: book)?.policy?.summary,
+                    onEdit: { editingBook = .init(id: book.id) }, onSelect: { model.toggleBook(book.id) })
+                    .disabled(model.isLocked || book.isCompleted)
+                    .listRowInsets(EdgeInsets(top: Spacing.base, leading: Spacing.screenEdge, bottom: Spacing.base, trailing: Spacing.screenEdge))
+                    .listRowBackground(Color.surfaceSheet)
+                    .listRowSeparatorTint(Color.surfaceDividerSubtle)
+                    .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] + InteractionMetrics.minimumTouchTarget + Spacing.base + 44 + Spacing.base }
+            }
+        }
+        .listStyle(.plain).scrollContentBackground(.hidden).background(Color.surfaceSheet)
+        .scrollBounceBehavior(.always).scrollDismissesKeyboard(.interactively)
+        .scrollEdgeEffectStyle(.soft, for: .bottom)
+        .overlay {
+            if books.isEmpty {
+                XMContentStateView(role: .empty, title: emptyAction == nil ? "暂无书籍" : model.query.isEmpty ? "没有符合条件的书籍" : "未找到相关书籍",
+                    action: emptyAction.map { XMStateAction(model.query.isEmpty ? "重置筛选" : "清除搜索", perform: $0) })
+            }
+        }
+        .sheet(item: $editingBook) { route in NoteImportBookSettingsSheet(model: model, bookID: route.id) }
+    }
+}
+
+/// 数量和来源时长紧邻资料，默认新建不制造重复操作标签。
+private struct NoteImportPreviewBookRow: View {
+    let book: NoteImportPreviewBook
+    let metadata: NoteImportBookMetadata
+    let issue: String?
+    let durationSummary: String?
+    let onEdit: () -> Void
+    let onSelect: () -> Void
+    var body: some View {
+        HStack(alignment: .top, spacing: Spacing.base) {
+            Button(action: onSelect) {
+                XMSelectionIndicator(style: .checkbox, isSelected: book.isSelected || book.isCompleted, font: AppTypography.body, showsUnselectedBase: true)
+                    .frame(width: InteractionMetrics.minimumTouchTarget, height: InteractionMetrics.minimumTouchTarget)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(book.isSelected ? "取消选择《\(metadata.title)》" : "选择《\(metadata.title)》")
+            .accessibilityAddTraits(book.isSelected ? .isSelected : [])
+            Button(action: onEdit) {
+                HStack(alignment: .top, spacing: Spacing.base) {
+                    XMBookCover.fixedWidth(44, urlString: metadata.coverURL, cornerRadius: CornerRadius.inlaySmall,
+                        border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline), placeholderIconSize: .medium)
+                    VStack(alignment: .leading, spacing: Spacing.compact) {
+                        Text(metadata.title.isEmpty ? "未命名书籍" : metadata.title)
+                            .font(AppTypography.bodyMedium).foregroundStyle(Color.textPrimary).lineLimit(1).truncationMode(.tail)
+                        if !metadata.author.isEmpty { Text(metadata.author).font(AppTypography.subheadline).lineLimit(1) }
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: Spacing.base) { summary }
+                            VStack(alignment: .leading, spacing: Spacing.compact) { summary }
+                        }.font(AppTypography.footnote)
+                        if book.targetID != nil { Text("存入《\(metadata.title)》").font(AppTypography.footnote).lineLimit(1) }
+                        if book.isCompleted { Text("已完成").font(AppTypography.footnote) }
+                        else if let issue { Text(issue).font(AppTypography.footnote).foregroundStyle(Color.feedbackWarning) }
+                        else if let durationSummary, book.sourceSeconds != nil, book.targetID != nil {
+                            Text(durationSummary).font(AppTypography.footnote)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Image(systemName: "chevron.right").font(AppTypography.footnote).accessibilityHidden(true)
+                }
+                .foregroundStyle(Color.textSecondary)
+                .frame(minHeight: InteractionMetrics.minimumTouchTarget).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .combine)
+            .accessibilityHint("打开书籍设置")
+        }
+    }
+    @ViewBuilder private var summary: some View {
+        if book.sourceSeconds == nil || !book.source.notes.isEmpty || !book.source.reviews.isEmpty || book.source.hasPreviewReadingPosition { Text(book.contentTitle) }
+        if let seconds = book.sourceSeconds { Text("阅读 \(NoteImportDurationMerge.text(seconds))") }
+    }
 }

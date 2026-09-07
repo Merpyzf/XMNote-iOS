@@ -8,8 +8,9 @@ struct ApiNoteImportTests {
     func hummingbirdSendRouteAcceptsAndroidDTO() async throws {
         let port = Int.random(in: 18_000...19_000)
         let probe = ApiServerProbe()
+        let membership = APIAccessProbe()
         let server = ApiNoteImportServer()
-        await server.start(port: port, accessCode: "123456", isPremium: true) { payload in
+        await server.start(port: port, accessCode: "123456", hasPremiumAccess: { await membership.isPremium }) { payload in
             await probe.receive(payload)
         } onState: { state in
             await probe.receive(state)
@@ -34,6 +35,10 @@ struct ApiNoteImportTests {
         #expect((rejectedResponse as? HTTPURLResponse)?.statusCode == 200)
         #expect(String(data: rejectedData, encoding: .utf8)?.contains("\"code\":500") == true)
         #expect(String(data: rejectedData, encoding: .utf8)?.contains("访问码不正确") == true)
+        request.setValue("123456", forHTTPHeaderField: "X-XMNote-Access-Code")
+        await membership.revoke()
+        let (revokedData, _) = try await URLSession.shared.data(for: request)
+        #expect(String(data: revokedData, encoding: .utf8)?.contains("该功能仅限会员使用") == true)
         await server.stop()
     }
 
@@ -257,4 +262,9 @@ private final class ImportBookSearchRepositoryStub: BookSearchRepositoryProtocol
     func clearRecentQueries() {}
     func fetchSearchSettings() -> BookSearchSettings { .default }
     func saveSearchSettings(_: BookSearchSettings) {}
+}
+
+private actor APIAccessProbe {
+    private(set) var isPremium = true
+    func revoke() { isPremium = false }
 }

@@ -53,11 +53,11 @@ nonisolated struct DimoNoteImportParser: NoteImportParser {
                 continue
             }
             var attachments: [NoteImportDraftAttachment] = []
-            var didFailAttachment = false
+            var failedAttachmentURLs: [String] = []
             for source in imageSources {
                 guard let imported = try await importedAttachment(source) else {
-                    didFailAttachment = true
-                    break
+                    failedAttachmentURLs.append(source)
+                    continue
                 }
                 attachments.append(NoteImportDraftAttachment(
                     imageURL: imported.url.absoluteString,
@@ -65,7 +65,6 @@ nonisolated struct DimoNoteImportParser: NoteImportParser {
                     order: Int64(attachments.count + 1)
                 ))
             }
-            guard !didFailAttachment else { continue }
             let createdDate = NoteImportTextSupport.firstCapture(pattern: "(\\d{4}-\\d{2}-\\d{2})", in: section)
                 .map(dayMilliseconds) ?? 0
             book.notes.append(NoteImportDraftNote(
@@ -75,13 +74,14 @@ nonisolated struct DimoNoteImportParser: NoteImportParser {
                 positionUnit: 2,
                 createdTime: createdDate,
                 isIncludeTime: createdDate != 0,
-                attachments: attachments
+                attachments: attachments,
+                failedAttachmentURLs: failedAttachmentURLs
             ))
         }
         return [book]
     }
 
-    /// 转存一个附件并保留内容摘要；上传取消向上传播，其他故障由调用点按封面回退或整条书摘跳过处理。
+    /// 转存一个附件并保留内容摘要；上传取消向上传播，其他故障由调用点保留失败附件供预览处理。
     private func importedAttachment(_ value: String) async throws -> NoteImportAttachmentImportResult? {
         guard let url = URL(string: value) else { return nil }
         do {
