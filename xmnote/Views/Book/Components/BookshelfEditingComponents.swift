@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 SwiftUI/UIKit 按钮、图标、搜索输入、InteractionMetrics 与动画能力
- * [OUTPUT]: 对外提供书架编辑态顶部 chrome、统一搜索 surface、整理态双态上下文检索入口、选择态封面/行遮罩与可打断管理模式转场参数
- * [POS]: Book 模块页面私有编辑态与搜索组件集合，服务默认书架与二级书籍列表的整理模式选择、检索和完成出口
+ * [OUTPUT]: 对外提供一级书架编辑态顶部 chrome、统一搜索 surface、整理态双态上下文检索入口、选择态封面/行遮罩与底部 accessory 管理模式转场参数
+ * [POS]: Book 模块页面私有编辑态与搜索组件集合，服务默认书架顶部整理栏及一、二级书籍列表的选择与检索
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -71,17 +71,6 @@ enum BookshelfManagementMotion {
 
     static func topChromeTransition(reduceMotion: Bool) -> AnyTransition {
         reduceMotion ? .opacity : .opacity.combined(with: .offset(y: -4))
-    }
-
-    static func bookListTopChromeTransition(reduceMotion: Bool) -> AnyTransition {
-        reduceMotion ? .opacity : .asymmetric(
-            insertion: .opacity
-                .combined(with: .offset(y: 5))
-                .combined(with: .scale(scale: 0.99, anchor: .center)),
-            removal: .opacity
-                .combined(with: .offset(y: -5))
-                .combined(with: .scale(scale: 0.99, anchor: .center))
-        )
     }
 
     static func editBarRevealTransition(reduceMotion: Bool) -> AnyTransition {

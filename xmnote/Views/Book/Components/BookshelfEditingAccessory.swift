@@ -1,12 +1,19 @@
 /**
- * [INPUT]: 依赖书架编辑动作快照、Reicon 模板矢量资源、SwiftUI TabView 底部 accessory/scroll-edge 环境与项目交互令牌
- * [OUTPUT]: 对外提供书架整理 accessory 展示状态机、稳定宿主、业务动作图标、菜单标签与底部操作视图
+ * [INPUT]: 依赖含活动写入动作的书架编辑快照、根 Tab 发布的系统外观、Reicon 模板矢量资源、SwiftUI TabView 底部 accessory/scroll-edge 环境与项目交互令牌
+ * [OUTPUT]: 对外提供书架整理 accessory 展示状态机、稳定宿主、显式根外观语义前景、写入进度、业务动作图标、菜单标签与底部操作视图
  * [POS]: Book 模块整理模式的页面级 accessory 契约与私有视觉实现，由 MainTabView 统一托管并隔离高频动作快照
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import Observation
 import SwiftUI
+
+private extension DynamicTypeSize {
+    /// 让整理动作图标与原位进度反馈共享同一视觉槽位。
+    var bookshelfEditingActionIconSize: CGFloat {
+        isAccessibilitySize ? 20 : 18
+    }
+}
 
 /// 书架整理业务动作使用的 Reicon 语义，避免业务状态依赖 SF Symbols 名称。
 enum BookshelfEditingIcon: Hashable, Sendable {
@@ -119,7 +126,7 @@ struct BookshelfEditingActionIcon: View {
     }
 
     private var iconSize: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 20 : 18
+        dynamicTypeSize.bookshelfEditingActionIconSize
     }
 }
 
@@ -146,7 +153,7 @@ enum BookshelfEditingAccessorySource: Hashable, Sendable {
     case mainBookshelf
     case bookList
 
-    fileprivate var actionWidth: CGFloat {
+    fileprivate var minimumActionWidth: CGFloat {
         switch self {
         case .mainBookshelf:
             return 58
@@ -164,6 +171,7 @@ struct BookshelfEditingAccessorySnapshot: Equatable, Sendable {
     let actions: [BookshelfBookListEditAction]
     let enabledActions: Set<BookshelfBookListEditAction>
     let selectedCount: Int
+    let activeAction: BookshelfBookListEditAction?
     let isBusy: Bool
 }
 
@@ -359,6 +367,7 @@ struct BookshelfEditingAccessoryHost: View {
     @Environment(\.tabViewBottomAccessoryPlacement) private var placement
     let coordinator: BookshelfEditingAccessoryCoordinator
     let presentationID: UUID
+    let colorScheme: ColorScheme
 
     var body: some View {
         if let snapshot = coordinator.snapshot,
@@ -370,6 +379,7 @@ struct BookshelfEditingAccessoryHost: View {
                 isInteractionReady: coordinator.isInteractionReady,
                 onAction: coordinator.request
             )
+            .environment(\.colorScheme, colorScheme)
             .onChange(of: placement, initial: true) {
                 confirmExpandedIfNeeded(ownerID: snapshot.ownerID)
             }
@@ -450,25 +460,45 @@ struct BookshelfEditingAccessoryView: View {
         isExpanded && presentationPhase == .editing
     }
 
-    /// 集中定义整理动作的可用与危险语义，保证图标和文字在系统底部玻璃上保持一致层级。
+    /// 以稳定枚举驱动颜色、交互与进度切换，避免图标和文字分别推导状态。
+    private enum ActionVisualState: Equatable {
+        case enabled
+        case disabled
+        case busy
+    }
+
+    /// 集中定义整理动作的稳定语义色与危险语义，避免前景随玻璃下方内容漂移。
     private struct ActionAppearance {
         let iconColor: Color
         let textColor: Color
+        let progressTint: Color
         let opacity: Double
 
-        init(isEnabled: Bool, isDestructive: Bool) {
+        init(state: ActionVisualState, isDestructive: Bool) {
             if isDestructive {
                 iconColor = .feedbackError
                 textColor = .feedbackError
-            } else if isEnabled {
-                iconColor = .iconPrimary
-                textColor = .textPrimary
-            } else {
+                progressTint = .feedbackError
+                opacity = state == .disabled ? 0.46 : 1
+            } else if state == .disabled {
                 iconColor = .iconSecondary
                 textColor = .textSecondary
+                progressTint = .iconSecondary
+                opacity = 1
+            } else {
+                iconColor = .iconPrimary
+                textColor = .textPrimary
+                progressTint = .iconPrimary
+                opacity = 1
             }
-            opacity = isEnabled ? 1 : 0.46
         }
+    }
+
+    private func visualState(for action: BookshelfBookListEditAction) -> ActionVisualState {
+        if snapshot.isBusy, snapshot.activeAction == action {
+            return .busy
+        }
+        return snapshot.enabledActions.contains(action) ? .enabled : .disabled
     }
 
     @ViewBuilder
@@ -476,8 +506,8 @@ struct BookshelfEditingAccessoryView: View {
         if destructiveActions.count == 1, let action = destructiveActions.first {
             actionButton(action)
         } else {
-            let isEnabled = destructiveActions.contains(where: snapshot.enabledActions.contains)
-            let appearance = ActionAppearance(isEnabled: isEnabled, isDestructive: true)
+            let state = destructiveControlState
+            let appearance = ActionAppearance(state: state, isDestructive: true)
 
             Menu {
                 ForEach(destructiveActions) { action in
@@ -496,22 +526,33 @@ struct BookshelfEditingAccessoryView: View {
                 actionLabel(
                     title: "删除",
                     icon: .trash,
-                    iconColor: appearance.iconColor,
-                    textColor: appearance.textColor
+                    appearance: appearance,
+                    state: state
                 )
             }
             .buttonStyle(BookshelfAccessoryActionButtonStyle(reduceMotion: reduceMotion))
-            .disabled(!isEnabled)
+            .disabled(state != .enabled)
             .opacity(appearance.opacity)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.12), value: state)
             .accessibilityLabel("删除操作")
+            .accessibilityValue(state == .busy ? "处理中" : "")
         }
+    }
+
+    private var destructiveControlState: ActionVisualState {
+        if snapshot.isBusy,
+           let activeAction = snapshot.activeAction,
+           destructiveActions.contains(activeAction) {
+            return .busy
+        }
+        return destructiveActions.contains(where: snapshot.enabledActions.contains) ? .enabled : .disabled
     }
 
     /// 以统一命中区域承载动作，并以独立图标与文字层级清楚区分可用、禁用和危险语义。
     private func actionButton(_ action: BookshelfBookListEditAction) -> some View {
-        let isEnabled = snapshot.enabledActions.contains(action)
+        let state = visualState(for: action)
         let appearance = ActionAppearance(
-            isEnabled: isEnabled,
+            state: state,
             isDestructive: action.isDestructive
         )
 
@@ -521,35 +562,55 @@ struct BookshelfEditingAccessoryView: View {
             actionLabel(
                 title: action.title,
                 icon: action.editingIcon,
-                iconColor: appearance.iconColor,
-                textColor: appearance.textColor
+                appearance: appearance,
+                state: state
             )
         }
         .buttonStyle(BookshelfAccessoryActionButtonStyle(reduceMotion: reduceMotion))
-        .disabled(!isEnabled)
+        .disabled(state != .enabled)
         .opacity(appearance.opacity)
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.12), value: isEnabled)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.12), value: state)
         .accessibilityLabel(action.title)
+        .accessibilityValue(state == .busy ? "处理中" : "")
         .accessibilityHint(snapshot.selectedCount == 0 && action.requiresSelection ? "请先选择书籍" : "")
     }
 
     private func actionLabel(
         title: String,
         icon: BookshelfEditingIcon,
-        iconColor: Color,
-        textColor: Color
+        appearance: ActionAppearance,
+        state: ActionVisualState
     ) -> some View {
         VStack(spacing: Spacing.tiny) {
-            BookshelfEditingActionIcon(icon: icon, foregroundColor: iconColor)
+            ZStack {
+                BookshelfEditingActionIcon(
+                    icon: icon,
+                    foregroundColor: appearance.iconColor
+                )
+                .opacity(state == .busy ? 0 : 1)
+
+                ProgressView()
+                    .controlSize(.small)
+                    .tint(appearance.progressTint)
+                    .opacity(state == .busy ? 1 : 0)
+                    .accessibilityHidden(true)
+            }
+            .frame(
+                width: dynamicTypeSize.bookshelfEditingActionIconSize,
+                height: dynamicTypeSize.bookshelfEditingActionIconSize
+            )
 
             Text(title)
-                .font(AppTypography.caption2)
-                .foregroundStyle(textColor)
+                .font(AppTypography.captionMedium)
+                .foregroundStyle(appearance.textColor)
                 .lineLimit(1)
-                .minimumScaleFactor(0.82)
+                .fixedSize(horizontal: true, vertical: false)
         }
-        .frame(width: snapshot.source.actionWidth)
-        .frame(minHeight: InteractionMetrics.minimumTouchTarget)
+        .padding(.horizontal, Spacing.half)
+        .frame(
+            minWidth: snapshot.source.minimumActionWidth,
+            minHeight: InteractionMetrics.minimumTouchTarget
+        )
         .contentShape(Rectangle())
     }
 
