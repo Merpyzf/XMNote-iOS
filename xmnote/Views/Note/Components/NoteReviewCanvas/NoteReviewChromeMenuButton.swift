@@ -11,7 +11,8 @@ import UIKit
 final class NoteReviewChromeMenuButton: UIButton {
     private var isMenuLifecycleActive = false
     private var menuLifecycleGeneration = 0
-    private var pendingReviewMenu: UIMenu?
+    private var latestReviewMenu: UIMenu?
+    private weak var visibleMenuInteraction: UIContextMenuInteraction?
     private var requestedLoading = false
     var onMenuWillDisplay: (() -> Void)?
     var onMenuDidEnd: (() -> Void)?
@@ -46,13 +47,15 @@ final class NoteReviewChromeMenuButton: UIButton {
         fatalError("init(coder:) has not been implemented")
     }
 
-    /// 菜单展示与收起期间只保留最新业务快照，完成收起后再更新系统菜单来源。
+    /// 菜单来源保持固定，每次展开读取最新快照；已展开时只更新菜单内容，不重建玻璃来源。
     func setReviewMenu(_ menu: UIMenu) {
-        guard isMenuLifecycleActive else {
-            self.menu = menu
-            return
+        latestReviewMenu = menu
+        if self.menu == nil {
+            self.menu = UIMenu(children: [UIDeferredMenuElement.uncached { [weak self] completion in
+                completion(self?.latestReviewMenu?.children ?? [])
+            }])
         }
-        pendingReviewMenu = menu
+        visibleMenuInteraction?.updateVisibleMenu { _ in menu }
     }
 
     /// 在主线程记录系统菜单代次；保留父类行为，不附加第二个菜单交互或重播按压效果。
@@ -63,6 +66,7 @@ final class NoteReviewChromeMenuButton: UIButton {
     ) {
         menuLifecycleGeneration += 1
         isMenuLifecycleActive = true
+        visibleMenuInteraction = interaction
         super.contextMenuInteraction(interaction, willDisplayMenuFor: configuration, animator: animator)
         onMenuWillDisplay?()
     }
@@ -73,6 +77,7 @@ final class NoteReviewChromeMenuButton: UIButton {
         willEndFor configuration: UIContextMenuConfiguration,
         animator: (any UIContextMenuInteractionAnimating)?
     ) {
+        visibleMenuInteraction = nil
         super.contextMenuInteraction(interaction, willEndFor: configuration, animator: animator)
         let generation = menuLifecycleGeneration
         guard let animator else {
@@ -88,10 +93,6 @@ final class NoteReviewChromeMenuButton: UIButton {
     private func finishMenuLifecycle(generation: Int) {
         guard generation == menuLifecycleGeneration else { return }
         isMenuLifecycleActive = false
-        if let pendingReviewMenu {
-            self.pendingReviewMenu = nil
-            menu = pendingReviewMenu
-        }
         applyLoadingState()
         onMenuDidEnd?()
     }

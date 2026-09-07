@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖已准备的纸面九宫格、文字指令、颜色和几何
- * [OUTPUT]: 提供单画布、瀑布流与共享纸张端点的同源绘制入口
+ * [OUTPUT]: 提供单画布、瀑布流与共享纸张端点的同源绘制入口，统一中性深色纸面与文字角色
  * [POS]: NoteReviewCanvas 纯 Core Graphics 绘制；不访问 UIKit 视图或可变外观
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -13,6 +13,7 @@ nonisolated struct NoteReviewCanvasPaperTextBlock: Sendable {
     let rect: CGRect
     let layout: NoteReviewCanvasTextLayout
     let truncated: Bool
+    var fadeHeight: CGFloat = 20
 }
 
 /// 纸边和固定阴影在准备阶段栅格一次，后续只做九宫格拼接。
@@ -107,9 +108,10 @@ nonisolated enum NoteReviewCanvasPaperRenderer {
         guard block.truncated, let space = paperColor.colorSpace,
               let gradient = CGGradient(colorsSpace: space,
                 colors: [paperColor.copy(alpha: 0) ?? paperColor, paperColor] as CFArray, locations: [0, 1]) else { return }
+        let fadeHeight = min(rect.height, block.fadeHeight)
         context.saveGState()
-        context.clip(to: CGRect(x: rect.minX, y: rect.maxY - 20, width: rect.width, height: 20))
-        context.drawLinearGradient(gradient, start: CGPoint(x: rect.midX, y: rect.maxY - 20),
+        context.clip(to: CGRect(x: rect.minX, y: rect.maxY - fadeHeight, width: rect.width, height: fadeHeight))
+        context.drawLinearGradient(gradient, start: CGPoint(x: rect.midX, y: rect.maxY - fadeHeight),
             end: CGPoint(x: rect.midX, y: rect.maxY), options: [])
         context.restoreGState()
     }

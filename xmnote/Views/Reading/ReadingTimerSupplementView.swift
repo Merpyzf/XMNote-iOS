@@ -3,7 +3,7 @@ import UIKit
 
 /**
  * [INPUT]: 依赖 ReadingTimerSupplementViewModel 驱动补录表单，依赖 ReadingTimerSupplementMode 提供日期/精确时间两种产品模式
- * [OUTPUT]: 对外提供 ReadingTimerSupplementView（补录阅读页面，覆盖日期时长、精确起止、位置、感悟与读完状态）
+ * [OUTPUT]: 对外提供 ReadingTimerSupplementView（补录阅读页面，覆盖日期时长、精确起止、位置、感悟与读完状态），品牌操作前景随外观配对
  * [POS]: Reading 模块阅读补录任务页，由书籍详情的“补录阅读”入口进入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -242,6 +242,7 @@ struct ReadingTimerSupplementView: View {
                 }
                 .frame(minHeight: 48)
             }
+            .foregroundStyle(Color.primaryActionForeground)
             .buttonStyle(.borderedProminent)
             .tint(Color.appTint)
             .disabled(viewModel.isSaving || viewModel.isLoading)

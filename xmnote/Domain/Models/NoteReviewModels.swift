@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Foundation 基础类型，承接 Android 书摘回顾设置与卡片数据语义
- * [OUTPUT]: 对外提供含字体与桌面卡宽偏好的 NoteReviewSettings、NoteReviewLaunchPayload、NoteReviewOverviewLayoutSource、NoteReviewCardItem、NoteReviewTagOption 与标签编辑快照等跨层模型
+ * [OUTPUT]: 对外提供含字体与桌面卡宽偏好的 NoteReviewSettings、NoteReviewLaunchPayload、NoteReviewOverviewLayoutSource、NoteReviewCardItem、NoteReviewTagOption 与标签编辑快照等跨层模型，统一中性深色纸面与文字角色
  * [POS]: Domain/Models 的书摘回顾领域模型，供 Repository、ViewModel 与回顾页面共享
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -125,16 +125,16 @@ nonisolated enum NoteReviewPalette: String, CaseIterable, Codable, Hashable, Sen
         case .paper:
             return NoteReviewCardColorSet(
                 lightSurfaceHex: 0xF7F9F7,
-                darkSurfaceHex: 0x202723,
+                darkSurfaceHex: 0x242424,
                 lightTextHex: 0x29332D,
-                darkTextHex: 0xE6ECE7
+                darkTextHex: 0xDEDEDE
             )
         case .dark:
             return NoteReviewCardColorSet(
                 lightSurfaceHex: 0x2C3430,
-                darkSurfaceHex: 0x1D2420,
+                darkSurfaceHex: 0x1C1C1C,
                 lightTextHex: 0xF3F6F3,
-                darkTextHex: 0xEAF0EB
+                darkTextHex: 0xDEDEDE
             )
         case .sageGreen:
             return NoteReviewCardColorSet(

@@ -114,7 +114,8 @@ extension NoteReviewCanvasOverviewController {
 
     /// 纸张内容准备最多四条；真实桌面中的原始矩形优先，背纸只保存实际露出的前两行区域。
     func prepareStackPreview(_ group: NoteReviewCanvasStackGroup, currentID: Int64?,
-                             work: CanvasOverviewTransitionPreparation) async throws -> CanvasStackPreview {
+                             work: CanvasOverviewTransitionPreparation,
+                             pixelBudget: Int = CanvasStackContentRenderer.previewBudget) async throws -> CanvasStackPreview {
         let interval = CanvasOverviewPreparationMetrics.signposter.beginInterval("Prepare stack preview")
         defer { CanvasOverviewPreparationMetrics.signposter.endInterval("Prepare stack preview", interval) }
         guard let sourceReader, let model = preparedModel else { throw CancellationError() }
@@ -146,6 +147,10 @@ extension NoteReviewCanvasOverviewController {
                             paper: .init(index: index, noteID: id, frame: CGRect(origin: .zero, size: size), visualFrame: .zero, rotation: 0, contentGeometry: geometry),
                             pose: .init(center: .zero, size: size, rotation: 0), style: model.style)
                         let density = min(scale, CanvasStackContentRenderer.maximumPreviewLongEdge / max(size.width, size.height))
+                        let sampledHeight = index == 0 ? size.height : min(size.height, backExposure)
+                        let rowBytes = (Int(ceil(size.width * max(0.1, density))) * 4 + 63) / 64 * 64
+                        let projectedBytes = rowBytes * Int(ceil(sampledHeight * max(0.1, density)))
+                        guard contents.reduce(projectedBytes, { $0 + $1.pixelBytes }) <= pixelBudget else { return nil }
                         guard let content = CanvasStackContentRenderer.paper(endpoint, pixelScale: density,
                             exposedHeight: index == 0 ? nil : backExposure, cancellation: work) else { return nil }
                         contents.append(content)
@@ -284,50 +289,116 @@ extension NoteReviewCanvasOverviewController {
     func bindStackBrowser(_ browser: CanvasStackBrowserView) {
         browser.onActivate = { [weak self] id in self?.expandStack(id) }
         browser.onReturn = { [weak self] in self?.dismissStackBrowser() }
-        browser.onFocus = { [weak self] _ in self?.cancelStackTargetPreparation() }
+        browser.onFocus = { [weak self] _ in
+            self?.cancelStackTargetPreparation()
+            self?.prepareStackNeighbors()
+        }
         browser.onStable = { [weak self] in self?.prepareStackNeighbors() }
         browser.onInteraction = { [weak self] in self?.cancelStackTargetPreparation() }
     }
 
-    /// 只准备相邻两堆的前三条；一次仅一个任务，全部纹理包含在同一个窗口预算中。
+    /// 主线程合并有界邻堆需求，正文准备沿用后台队列；横滑不取消有效预览，关闭与环境代次使旧结果失效。
     func prepareStackNeighbors() {
-        guard let browser = stackBrowser, !browser.isMoving, transitionState == .idle,
-              stackTask == nil, stackNeighborTask == nil, let focus = browser.focusedID else { return }
-        let token = stackRequestGeneration
+        guard let browser = stackBrowser, transitionState == .idle, stackTask == nil,
+              let focus = browser.focusedID else { return }
+        if !browser.isMoving, let pending = stackPendingPreview {
+            stackPendingPreview = nil
+            installStackNeighbor(pending, in: browser)
+        }
+        guard stackNeighborTask == nil, stackPendingPreview == nil else { return }
+        let token = stackNeighborGeneration
+        let input = generation
         let work = CanvasOverviewTransitionPreparation()
+        stackNeighborWork = work
         stackNeighborTask = Task { [weak self] in
             guard let self else { return }
-            defer { if token == stackRequestGeneration { stackNeighborTask = nil } }
-            for direction in [1, -1] {
-                var cursor = focus
-                for _ in 0..<2 {
+            defer {
+                if token == stackNeighborGeneration {
+                    stackNeighborTask = nil
+                    stackNeighborWork = nil
+                    if stackBrowser === browser, browser.focusedID != focus { prepareStackNeighbors() }
+                }
+            }
+            let preferred = browser.preferredDirection
+            for distance in 1...2 {
+                for direction in [preferred, -preferred] {
                     do {
                         try Task.checkCancellation()
-                        guard token == stackRequestGeneration, stackBrowser === browser, !browser.isMoving else { return }
-                        guard let group = try await readStack(.adjacent(cursor, direction: direction)) else { break }
-                        cursor = group.id
-                        if stackPreviews.contains(where: { $0.group.id == group.id }) { continue }
-                        let next = try await prepareStackPreview(group, currentID: nil, work: work)
-                        try Task.checkCancellation()
-                        guard token == stackRequestGeneration, stackBrowser === browser, !browser.isMoving,
-                              stackTask == nil, transitionState == .idle else { return }
-                        var values = (stackPreviews + [next]).sorted { $0.group.id.bucket < $1.group.id.bucket }
-                        // Retain the focused stack and only its nearest ready neighbors. Never evict
-                        // a moving surface, and never extend scroll range with placeholders.
-                        while values.count > 5 || values.reduce(0, { $0 + $1.pixelBytes }) > CanvasStackContentRenderer.previewBudget {
-                            guard let victim = [values.startIndex, values.index(before: values.endIndex)]
-                                .filter({ values[$0].group.id != focus })
-                                .max(by: { abs(values[$0].group.id.bucket - focus.bucket) < abs(values[$1].group.id.bucket - focus.bucket) }) else { break }
-                            values.remove(at: victim)
+                        guard token == stackNeighborGeneration, input == generation, stackBrowser === browser,
+                              browser.focusedID == focus else { return }
+                        var cursor = focus
+                        var candidate: NoteReviewCanvasStackGroup?
+                        for _ in 0..<distance {
+                            guard let group = try await readStack(.adjacent(cursor, direction: direction)) else {
+                                candidate = nil
+                                break
+                            }
+                            try Task.checkCancellation()
+                            candidate = group
+                            cursor = group.id
                         }
-                        guard values.reduce(0, { $0 + $1.pixelBytes }) <= CanvasStackContentRenderer.previewBudget else { break }
-                        guard values.contains(where: { $0.group.id == next.group.id }) else { break }
-                        stackPreviews = values
-                        browser.apply(values, preserving: focus)
-                    } catch { break }
+                        guard let group = candidate else { continue }
+                        if stackPreviews.contains(where: { $0.group.id == group.id }) { continue }
+                        reserveStackNeighborSpace(in: browser)
+                        let available = CanvasStackContentRenderer.previewBudget - stackPreviews.reduce(0, { $0 + $1.pixelBytes })
+                        let next = try await prepareStackPreview(group, currentID: nil, work: work, pixelBudget: available)
+                        try Task.checkCancellation()
+                        guard token == stackNeighborGeneration, input == generation, stackBrowser === browser,
+                              stackTask == nil, transitionState == .idle else { return }
+                        if browser.isMoving {
+                            // Pending pixels count against the same budget; never evict a moving paper.
+                            if stackPreviews.reduce(next.pixelBytes, { $0 + $1.pixelBytes }) <= CanvasStackContentRenderer.previewBudget {
+                                stackPendingPreview = next
+                            }
+                            return
+                        }
+                        installStackNeighbor(next, in: browser)
+                    } catch { return }
                 }
             }
         }
+    }
+
+    /// 静止时仅释放最远的屏外堆，为一个进行中的真实预览预留预算；移动时不改变窗口。
+    private func reserveStackNeighborSpace(in browser: CanvasStackBrowserView) {
+        guard !browser.isMoving, let focus = browser.focusedID else { return }
+        let reserve = 6 * 1_024 * 1_024
+        var values = stackPreviews
+        while values.count > 3, values.reduce(0, { $0 + $1.pixelBytes }) > CanvasStackContentRenderer.previewBudget - reserve {
+            guard let victim = [values.startIndex, values.index(before: values.endIndex)]
+                .filter({ abs(values[$0].group.id.bucket - focus.bucket) > 1 })
+                .max(by: { abs(values[$0].group.id.bucket - focus.bucket) < abs(values[$1].group.id.bucket - focus.bucket) }) else { break }
+            values.remove(at: victim)
+        }
+        if values.count != stackPreviews.count {
+            stackPreviews = values
+            browser.apply(values, preserving: focus)
+        }
+    }
+
+    /// 仅静止时提交连续邻堆并补偿原点；屏外回收和待交接纹理共用既有预算。
+    private func installStackNeighbor(_ preview: CanvasStackPreview, in browser: CanvasStackBrowserView) {
+        guard !browser.isMoving, let focus = browser.focusedID,
+              abs(preview.group.id.bucket - focus.bucket) <= 2,
+              !stackPreviews.contains(where: { $0.group.id == preview.group.id }) else { return }
+        var values = (stackPreviews + [preview]).sorted { $0.group.id.bucket < $1.group.id.bucket }
+        while values.count > 5 || values.reduce(0, { $0 + $1.pixelBytes }) > CanvasStackContentRenderer.previewBudget {
+            guard let victim = [values.startIndex, values.index(before: values.endIndex)]
+                .filter({ values[$0].group.id != focus })
+                .max(by: { abs(values[$0].group.id.bucket - focus.bucket) < abs(values[$1].group.id.bucket - focus.bucket) }) else { return }
+            values.remove(at: victim)
+        }
+        guard values.contains(where: { $0.group.id == preview.group.id }) else { return }
+        stackPreviews = values
+        browser.apply(values, preserving: focus)
+    }
+
+    /// 只有离开浏览、展开或环境失效才取消邻堆任务；取消后禁止后台下一工作单元与迟到提交。
+    private func cancelStackNeighbors() {
+        stackNeighborGeneration += 1
+        stackNeighborTask?.cancel(); stackNeighborTask = nil
+        stackNeighborWork?.cancel(); stackNeighborWork = nil
+        stackPendingPreview = nil
     }
 
     /// 只有点按才准备整组；源堆保持可滑动，新的拖动立即取消待展开目标。
@@ -336,7 +407,7 @@ extension NoteReviewCanvasOverviewController {
               transitionState == .idle, let preview = stackPreviews.first(where: { $0.group.id == id }),
               let target = stackViewports[id]?.noteID ?? preview.group.noteIDs.first else { return }
         cancelStackTargetPreparation()
-        stackNeighborTask?.cancel(); stackNeighborTask = nil
+        cancelStackNeighbors()
         browser.scrollView.stopScrollingAndZooming()
         let token = stackRequestGeneration
         let work = CanvasOverviewTransitionPreparation(); stackWork = work
@@ -409,7 +480,7 @@ extension NoteReviewCanvasOverviewController {
             return
         }
         cancelStackTargetPreparation()
-        stackNeighborTask?.cancel(); stackNeighborTask = nil
+        cancelStackNeighbors()
         browser.scrollView.stopScrollingAndZooming()
         if stackPreviews.contains(where: { $0.group.id == session.group.id }) {
             browser.focus(session.group.id) { [weak self] in self?.expandStack(session.group.id) }
@@ -440,7 +511,6 @@ extension NoteReviewCanvasOverviewController {
         guard stackSession?.animator == nil else { return }
         stackRequestGeneration += 1
         stackTask?.cancel(); stackTask = nil
-        stackNeighborTask?.cancel(); stackNeighborTask = nil
         stackWork?.cancel(); stackWork = nil
         transitionPreviewPins.removeAll()
         if let session = stackSession, session.hasCommittedTarget { restoreStackHomeModel(session) }
@@ -470,7 +540,8 @@ extension NoteReviewCanvasOverviewController {
     /// 生命周期和环境变化立即撤销全部资格；不等待排版、不让旧动画回调再次显示纸张。
     func cancelStackBrowsingImmediately() {
         stackRequestGeneration += 1
-        stackTask?.cancel(); stackTask = nil; stackNeighborTask?.cancel(); stackNeighborTask = nil
+        stackTask?.cancel(); stackTask = nil
+        cancelStackNeighbors()
         stackWork?.cancel(); stackWork = nil
         guard let session = stackSession else { return }
         session.animator?.stopAnimation(true); session.animator = nil

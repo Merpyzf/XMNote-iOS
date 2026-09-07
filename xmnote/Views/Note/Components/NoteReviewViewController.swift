@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 接收回顾启动负载、唯一 Session、共享单画布总览与现有单条阅读 Cell
- * [OUTPUT]: 提供三模式生产回顾、稳定身份、业务操作和确认后偏好保存
+ * [OUTPUT]: 提供三模式生产回顾、稳定身份、业务操作和确认后偏好保存，统一中性深色纸面与文字角色，不额外标记当前条目
  * [POS]: 书摘回顾页面 owner；总览与测试中心共用实现，业务会话不进入画布
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -50,7 +50,9 @@ final class NoteReviewViewController: UIViewController {
     private let tagButton = NoteReviewChromeMenuButton(frame: .zero)
     private let overviewButton = UIButton(type: .system)
     private let moreButton = NoteReviewChromeMenuButton(frame: .zero)
-    private let progressLabel = UILabel()
+    private let progressState = NoteReviewProgressState()
+    private lazy var progressHost = UIHostingController(rootView: NoteReviewProgressView(state: progressState))
+    private var progressLabel: UIView { progressHost.view }
     private let emptyLabel = UILabel()
     private let topChromeContainer = NoteReviewPassthroughChromeView()
     private let bottomChromeContainer = NoteReviewPassthroughChromeView()
@@ -65,9 +67,8 @@ final class NoteReviewViewController: UIViewController {
     private var feedbackHost: UIHostingController<NoteReviewCanvasPageFeedbackView>?
     private var deferredNoteAction: (() -> Void)?
     private var readingObjectMenuConfiguration: UIContextMenuConfiguration?
-    private var isReadingChromeMenuPresented = false
     private var isReadingObjectMenuPresented: Bool {
-        readingObjectMenuConfiguration != nil || isReadingChromeMenuPresented
+        readingObjectMenuConfiguration != nil
     }
     private var deleteTasks: [Int64: Task<Void, Never>] = [:]
     private var actionItemTask: Task<Void, Never>?
@@ -108,7 +109,6 @@ final class NoteReviewViewController: UIViewController {
         actionItemTask?.cancel()
         deferredNoteAction = nil
         readingObjectMenuConfiguration = nil
-        isReadingChromeMenuPresented = false
         coordinator.dispose()
         overview.disposeCanvas()
         session.dispose()
@@ -126,6 +126,14 @@ final class NoteReviewViewController: UIViewController {
         buildFeedback()
         bindSession()
         observeSystemChanges()
+        registerForTraitChanges([UITraitUserInterfaceStyle.self, UITraitAccessibilityContrast.self]) {
+            (controller: NoteReviewViewController, _) in
+            guard !controller.isDisposed else { return }
+            controller.refreshVisibleCells(changedIDs: Set(controller.collectionView.indexPathsForVisibleItems.compactMap {
+                controller.session.noteID(at: $0.item)
+            }))
+            controller.updateModeAppearance()
+        }
         session.start()
         updateProgress()
         updateModeAppearance()
@@ -159,7 +167,6 @@ final class NoteReviewViewController: UIViewController {
         super.viewDidDisappear(animated)
         deferredNoteAction = nil
         readingObjectMenuConfiguration = nil
-        isReadingChromeMenuPresented = false
         if !isDisposed { overview.pauseCanvas(); coordinator.setPaused(true) }
     }
 
@@ -762,8 +769,8 @@ final class NoteReviewViewController: UIViewController {
 
     private func updateProgress() {
         let count = session.count == 0 ? 0 : session.currentIndex + 1
-        progressLabel.text = "\(count) / \(session.count)"
-        progressLabel.accessibilityValue = "第 \(count) 条，共 \(session.count) 条"
+        progressState.update(current: count, total: session.count,
+            animated: mode != .desktop && coordinator.state == .idle && !areControlsHidden && view.window != nil)
         emptyLabel.isHidden = true
         tagButton.isEnabled = session.count > 0 && tagPreparationTask == nil
         overviewButton.isEnabled = session.count > 0
@@ -774,7 +781,7 @@ final class NoteReviewViewController: UIViewController {
     }
 
     private func updateMoreMenu() {
-        tagButton.isEnabled = session.count > 0 && (coordinator.state == .idle || coordinator.state == .preparing)
+        tagButton.isEnabled = session.count > 0 && tagPreparationTask == nil && (coordinator.state == .idle || coordinator.state == .preparing)
         let modes = NoteReviewPresentationMode.allCases.map { value in
             let pending = coordinator.state == .preparing && coordinator.requestedMode == value && value != mode
             return UIAction(title: title(for: value), subtitle: pending ? "准备中" : nil,
@@ -817,6 +824,9 @@ final class NoteReviewViewController: UIViewController {
         overviewGlass.alpha = 1
         view.backgroundColor = mode == .immersive ? session.settings.cardAppearance.uiSurface : NoteReviewCanvasAppearance.backgroundColor
         tagGlass.isHidden = mode != .immersive
+        progressLabel.isHidden = mode == .desktop
+        progressLabel.alpha = mode == .desktop ? 0 : 1
+        progressLabel.accessibilityElementsHidden = mode == .desktop
         overviewGlass.isHidden = mode != .desktop
         closeButton.configuration?.image = UIImage(systemName: mode == .immersive && transientReturnMode != nil ? "chevron.left" : "xmark")
         overviewButton.configuration?.image = UIImage(systemName: overview.desktopOverviewIcon)
@@ -832,6 +842,9 @@ final class NoteReviewViewController: UIViewController {
         overviewGlass.isHidden = from != .desktop && to != .desktop
         tagGlass.alpha = (from == .immersive ? 1 - p : 0) + (to == .immersive ? p : 0)
         overviewGlass.alpha = (from == .desktop ? 1 - p : 0) + (to == .desktop ? p : 0)
+        progressLabel.isHidden = from == .desktop && to == .desktop
+        progressLabel.alpha = (from != .desktop ? 1 - p : 0) + (to != .desktop ? p : 0)
+        progressLabel.accessibilityElementsHidden = true
         CATransaction.commit()
     }
 
@@ -1015,7 +1028,16 @@ final class NoteReviewViewController: UIViewController {
 
     func buildChrome() {
         configureChromeButton(closeButton, systemName: "xmark", accessibilityLabel: "关闭全屏回顾")
-        configureChromeButton(tagButton, systemName: "text.bubble", accessibilityLabel: "书摘操作")
+        configureChromeButton(tagButton, systemName: "tag", accessibilityLabel: "设置标签")
+        tagButton.configuration?.image = UIImage(resource: .reiconTag2Outline).withRenderingMode(.alwaysTemplate)
+        tagButton.showsMenuAsPrimaryAction = false
+        tagButton.addAction(UIAction { [weak self] _ in
+            guard let self, mode == .immersive, session.count > 0,
+                  coordinator.state == .idle || coordinator.state == .preparing else { return }
+            let id = session.currentNoteID
+            cancelSwitchForDirectManipulation()
+            handleTag(noteID: id)
+        }, for: .touchUpInside)
         tagButton.loadingAccessibilityValue = "正在读取标签"
         configureChromeButton(overviewButton, systemName: "scope", accessibilityLabel: "回到全景")
         configureChromeButton(moreButton, systemName: "ellipsis", accessibilityLabel: "更多操作")
@@ -1034,11 +1056,6 @@ final class NoteReviewViewController: UIViewController {
 
         [closeGlass, overviewGlass].forEach(configureGlassHost)
         tagGlass.translatesAutoresizingMaskIntoConstraints = false
-        tagButton.onMenuWillDisplay = { [weak self] in self?.isReadingChromeMenuPresented = true }
-        tagButton.onMenuDidEnd = { [weak self] in
-            self?.isReadingChromeMenuPresented = false
-            self?.performDeferredNoteAction()
-        }
         // The menu button owns its glass and capsule; this outer view only positions it.
         moreGlass.translatesAutoresizingMaskIntoConstraints = false
         embed(closeButton, in: closeGlass)
@@ -1058,12 +1075,11 @@ final class NoteReviewViewController: UIViewController {
         bottomChromeContainer.addSubview(overviewGlass)
 
         progressLabel.translatesAutoresizingMaskIntoConstraints = false
-        progressLabel.font = ReadingContentTypography.uiMetadataMedium
-        progressLabel.textColor = .secondaryLabel
-        progressLabel.textAlignment = .center
-        progressLabel.adjustsFontForContentSizeCategory = true
-        progressLabel.accessibilityLabel = "回顾进度"
+        progressHost.view.backgroundColor = .clear
+        progressHost.sizingOptions = .intrinsicContentSize
+        addChild(progressHost)
         bottomChromeContainer.addSubview(progressLabel)
+        progressHost.didMove(toParent: self)
 
         emptyLabel.translatesAutoresizingMaskIntoConstraints = false
         emptyLabel.text = "当前筛选下没有书摘"
@@ -1152,8 +1168,7 @@ final class NoteReviewViewController: UIViewController {
 
     /// 保留现有回顾页面的 业务展示行为。
     func updateTagButton() {
-        tagButton.accessibilityLabel = "书摘操作"
-        tagButton.setReviewMenu(noteActionMenu(noteID: session.currentNoteID) ?? UIMenu(children: []))
+        tagButton.accessibilityLabel = "设置标签"
     }
 
     /// 保留现有回顾页面的 业务展示行为。
@@ -1177,7 +1192,7 @@ final class NoteReviewViewController: UIViewController {
     /// 保留现有回顾页面的 业务展示行为。
     func updateChromeColors() {
         [closeButton, tagButton, overviewButton, moreButton].forEach {
-            $0.configuration?.baseForegroundColor = .label
+            $0.configuration?.baseForegroundColor = NoteReviewCanvasAppearance.chromeForeground
         }
     }
 
@@ -1254,8 +1269,8 @@ final class NoteReviewViewController: UIViewController {
     /// 保留现有回顾页面的 业务展示行为。
     func setTagLoading(_ isLoading: Bool) {
         tagButton.setReviewLoading(isLoading)
-        tagButton.isEnabled = session.count > 0
-        tagButton.accessibilityLabel = isLoading ? "正在读取标签" : "书摘操作"
+        tagButton.isEnabled = session.count > 0 && !isLoading
+        tagButton.accessibilityLabel = isLoading ? "正在读取标签" : "设置标签"
     }
 
     /// 保留现有回顾页面的 图片浏览入口。

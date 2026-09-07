@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 SwiftUI、SF Symbols Magic Replace / drawOn / drawOff Symbol Effect 与项目 DesignTokens
- * [OUTPUT]: 对外提供 XMSelectionIndicator 与 XMSelectionIndicatorStyle，统一自定义选择指示器替换与绘制动效
+ * [OUTPUT]: 对外提供 XMSelectionIndicator 与 XMSelectionIndicatorStyle，统一自定义选择指示器替换与绘制动效，品牌填充内容使用成对前景
  * [POS]: UIComponents/Controls/Selection 的选择状态指示组件，被书架、选书、批量编辑与调试页复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -103,7 +103,7 @@ struct XMSelectionIndicator: View {
             Image(systemName: "checkmark.circle.fill")
                 .fontWeight(.semibold)
                 .symbolRenderingMode(.palette)
-                .foregroundStyle(Color.white, Color.selectionAccent)
+                .foregroundStyle(Color.primaryActionForeground, Color.selectionAccent)
         case .radio:
             Image(systemName: "largecircle.fill.circle")
                 .fontWeight(.semibold)
@@ -160,7 +160,7 @@ struct XMSelectionIndicator: View {
         guard isSelected else { return Color.selectionInactive }
         switch style {
         case .checkbox:
-            return Color.white
+            return Color.primaryActionForeground
         case .radio:
             return Color.selectionAccent
         case .checkmarkOnly:

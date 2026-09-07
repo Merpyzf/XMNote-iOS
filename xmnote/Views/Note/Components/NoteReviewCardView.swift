@@ -90,7 +90,7 @@ struct NoteReviewCardView: View {
             VStack(alignment: .leading, spacing: NoteReviewCardLayout.footerTextSpacing) {
                 Text(bookTitle)
                     .font(NoteReviewCardTypography.footerTitle(for: settings))
-                    .foregroundStyle(appearance.bodyForegroundColor)
+                    .foregroundStyle(appearance.sourceForegroundColor)
                     .lineLimit(1)
                     .multilineTextAlignment(.leading)
 

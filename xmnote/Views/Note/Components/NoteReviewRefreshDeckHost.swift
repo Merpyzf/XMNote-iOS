@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 NoteReviewViewModel 的候选页准备/提交、设置驱动的数据重载与一级操作状态，依赖 NoteReviewPagingDeck，以及页面注入的卡片内容、AI 助手与业务动作闭包
- * [OUTPUT]: 对外提供 NoteReviewLoadingShell、NoteReviewRefreshDeckHost、不会误取消设置重载的视觉会话清理、紧凑低强调的四项卡片操作栏、随机换组 latest-wins 协调器与可测动效规格
+ * [OUTPUT]: 对外提供 NoteReviewLoadingShell、NoteReviewRefreshDeckHost、不会误取消设置重载的视觉会话清理、紧凑低强调的四项卡片操作栏、随机换组 latest-wins 协调器与可测动效规格，统一中性深色纸面与文字角色
  * [POS]: Note/Components 的回顾卡组与卡片操作宿主，以稳定 live deck 和预挂载新组完成连续替换，不作为跨模块组件
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -1172,11 +1172,9 @@ private struct NoteReviewPrimaryActionLabel: View {
             }
         }
         .foregroundStyle(
-            Color.textSecondary.opacity(
-                isDisabled
-                    ? NoteReviewPrimaryActionMetrics.disabledOpacity
-                    : NoteReviewPrimaryActionMetrics.enabledOpacity
-            )
+            isDisabled
+                ? Color.textSecondary.opacity(NoteReviewPrimaryActionMetrics.disabledOpacity)
+                : NoteReviewCanvasAppearance.actionForeground
         )
         .frame(
             minWidth: NoteReviewBottomLayout.actionRowMinHeight,
@@ -1196,7 +1194,7 @@ private struct NoteReviewPrimaryActionLabel: View {
 
             ProgressView()
                 .controlSize(.mini)
-                .tint(Color.textSecondary.opacity(NoteReviewPrimaryActionMetrics.progressOpacity))
+                .tint(NoteReviewCanvasAppearance.actionForeground.opacity(NoteReviewPrimaryActionMetrics.progressOpacity))
                 .opacity(showsProgress ? 1 : 0)
                 .accessibilityHidden(true)
         }

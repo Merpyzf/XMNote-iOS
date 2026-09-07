@@ -7,6 +7,50 @@
 import UIKit
 
 extension NoteReviewCanvasOverviewController {
+    /// 外观换代只能复用位置，不能复用旧字形和补底；主 actor 读取有界批次，队列内准备，取消后拒绝返回。
+    func rebuildWaterfallAppearance(model: CanvasOverviewPreparedModel, previous: CanvasOverviewPreparedModel,
+                                   work: CanvasOverviewTransitionPreparation) async throws -> CanvasOverviewWaterfallGeometry {
+        let ids = previous.waterfallGeometry.notes.map(\.id)
+        guard !ids.isEmpty else { return model.waterfallGeometry }
+        guard ids.count <= 128, let sourceReader else { throw NoteReviewDirectoryError.invalidBatch }
+        var sources: [NoteReviewOverviewLayoutSource] = []
+        try await NoteReviewCanvasSourceAdapter(read: { ids, priority in
+            guard !work.isCancelled else { throw CancellationError() }
+            return try await sourceReader(ids, priority)
+        }).consume(ids: ids) { batch in
+            try Task.checkCancellation()
+            guard !work.isCancelled else { throw CancellationError() }
+            sources.append(contentsOf: batch.sources)
+        }
+        try Task.checkCancellation()
+        var input = model
+        input.waterfallGeometry = previous.waterfallGeometry
+        let keepsLayout = previous.style.bodyFont == model.style.bodyFont
+            && previous.style.annotationFont == model.style.annotationFont
+            && previous.style.display == model.style.display
+            && previous.style.alignment == model.style.alignment
+            && previous.style.traits.preferredContentSizeCategory == model.style.traits.preferredContentSizeCategory
+        let viewport = waterfallView.bounds.size
+        let store = previewStore
+        let queue = preparationQueue
+        let preparedInput = input
+        let preparedSources = sources
+        let availableIDs = Set(preparedSources.map(\.noteID))
+        let orderedIDs = ids.filter { availableIDs.contains($0) }
+        let result: CanvasOverviewWaterfallGeometry? = await withCheckedContinuation { continuation in
+            queue.async {
+                continuation.resume(returning: autoreleasepool {
+                    CanvasOverviewWaterfallWindowPreparation.make(ids: orderedIDs, model: preparedInput,
+                        sources: preparedSources, pins: [:], store: store, viewport: viewport, work: work,
+                        reusesContent: false, retainsFrames: keepsLayout)
+                })
+            }
+        }
+        try Task.checkCancellation()
+        guard !work.isCancelled, let result else { throw CancellationError() }
+        return result
+    }
+
     /// 取消只撤销未交付页，已显示身份及字形继续可用；下一次需求可重新准备。
     func cancelWaterfallPagePreparation() {
         waterfallPageGeneration += 1
@@ -135,7 +179,8 @@ nonisolated enum CanvasOverviewWaterfallWindowPreparation {
                      sources: [NoteReviewOverviewLayoutSource],
                      pins: [Int64: NoteReviewCanvasResourceLease<CanvasOverviewPreviewPayload>],
                      store: CanvasOverviewPreviewStore, viewport: CGSize,
-                     work: CanvasOverviewTransitionPreparation) -> CanvasOverviewWaterfallGeometry? {
+                     work: CanvasOverviewTransitionPreparation, reusesContent: Bool = true,
+                     retainsFrames: Bool = true) -> CanvasOverviewWaterfallGeometry? {
         let byID = Dictionary(sources.map { ($0.noteID, $0) }, uniquingKeysWith: { _, last in last })
         let atlas = CanvasOverviewFallbackAtlas(count: ids.count)
         let generation = UUID()
@@ -146,7 +191,7 @@ nonisolated enum CanvasOverviewWaterfallWindowPreparation {
         var contents: [CanvasOverviewPaperContentGeometry] = []
         for (index, id) in ids.enumerated() {
             guard !work.isCancelled else { return nil }
-            if let existing = model.waterfallGeometry.indexByID[id] {
+            if reusesContent, let existing = model.waterfallGeometry.indexByID[id] {
                 notes.append(model.waterfallGeometry.notes[existing])
                 contents.append(model.waterfallGeometry.contentGeometries[existing])
                 continue
@@ -163,9 +208,9 @@ nonisolated enum CanvasOverviewWaterfallWindowPreparation {
             contents.append(content.cached(in: store, key: .init(generation: generation, noteID: id, width: -Int(width)), fallback: fallback))
         }
         atlas.finish()
-        let frames = Dictionary(uniqueKeysWithValues: model.waterfallGeometry.notes.enumerated().map {
+        let frames = retainsFrames ? Dictionary(uniqueKeysWithValues: model.waterfallGeometry.notes.enumerated().map {
             ($0.element.id, model.waterfallGeometry.frames[$0.offset])
-        })
+        }) : [:]
         return CanvasOverviewGeometryBuilder.makeWaterfall(notes: notes, viewportSize: viewport,
             traits: model.style.traits, cancellation: work, preparedContents: contents, retainingFrames: frames)
     }

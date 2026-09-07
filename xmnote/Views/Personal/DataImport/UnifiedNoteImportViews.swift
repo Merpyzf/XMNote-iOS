@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 NoteImportParserRegistry、NoteImportRepositoryProtocol、BookPickerView 与系统文件/剪贴板能力
- * [OUTPUT]: 对外提供带 Reicon 输入方式标识的统一文件/剪贴板解析入口和全来源导入预览
+ * [OUTPUT]: 对外提供带 Reicon 输入方式标识的统一文件/剪贴板解析入口和全来源导入预览，品牌操作前景随外观配对
  * [POS]: Views/Personal/DataImport 的全来源公共交互层；UI 只调用 Golden 验证过的 Parser Registry
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -19,6 +19,7 @@ struct NoteImportSourceScreen: View {
 
     @Environment(RepositoryContainer.self) private var repositories
     @Environment(XMToastCenter.self) private var toastCenter
+    @Environment(\.colorScheme) private var colorScheme
     let title: String
     let input: Input
     @State private var isPickingFile = false
@@ -31,6 +32,7 @@ struct NoteImportSourceScreen: View {
     var body: some View {
         VStack(spacing: Spacing.section) {
             Image(inputIcon)
+                .renderingMode(colorScheme == .dark ? .template : .original)
                 .resizable()
                 .scaledToFit()
                 .foregroundStyle(Color.appTint)
@@ -42,11 +44,12 @@ struct NoteImportSourceScreen: View {
                 .multilineTextAlignment(.center)
             Button(action: start) {
                 HStack {
-                    if isParsing { ProgressView().controlSize(.small) }
+                    if isParsing { ProgressView().controlSize(.small).tint(Color.primaryActionForeground) }
                     Text(isParsing ? "正在解析" : actionTitle)
                 }
                 .frame(maxWidth: .infinity)
             }
+            .foregroundStyle(Color.primaryActionForeground)
             .buttonStyle(.borderedProminent)
             .disabled(isParsing)
         }
@@ -327,8 +330,9 @@ struct UnifiedNoteImportPreviewView: View {
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {
             Button { model.commit() } label: {
-                HStack { Spacer(); if model.isCommitting { ProgressView().controlSize(.small) }; Text(model.isCommitting ? model.progressText : "导入（\(model.selectedCount)/\(model.books.count)）"); Spacer() }
+                HStack { Spacer(); if model.isCommitting { ProgressView().controlSize(.small).tint(Color.primaryActionForeground) }; Text(model.isCommitting ? model.progressText : "导入（\(model.selectedCount)/\(model.books.count)）"); Spacer() }
             }
+            .foregroundStyle(Color.primaryActionForeground)
             .buttonStyle(.borderedProminent).padding(Spacing.screenEdge).background(.ultraThinMaterial).disabled(model.isCommitting)
         }
         .task { await model.prepareMatches() }

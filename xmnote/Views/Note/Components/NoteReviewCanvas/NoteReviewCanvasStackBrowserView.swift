@@ -21,20 +21,20 @@ nonisolated enum CanvasStackLayout {
     }
 }
 
-/// 原生滚动只浏览堆叠，不分页吸附、不启动整组正文准备。
+/// 原生惯性在真实纸堆中心吸附；浏览不启动整组正文准备。
 @MainActor
 final class CanvasStackBrowserView: UIView, UIScrollViewDelegate {
     let scrollView = CanvasStackScrollView()
     let material = UIVisualEffectView(effect: nil)
     let backdrop = UIImageView()
-    private let titleLabel = UILabel()
-    private let hintLabel = UILabel()
-    let returnButton = UIButton(type: .system)
     private(set) var previews: [CanvasStackPreview] = []
     private var piles: [NoteReviewCanvasStackID: CanvasStackPileView] = [:]
     private var applying = false
     private var lastFocusedID: NoteReviewCanvasStackID?
     private var focusCompletion: (() -> Void)?
+    private var chromeVisible = true
+    private var lastLayoutWidth: CGFloat = 0
+    private(set) var preferredDirection = 1
     var onFocus: ((NoteReviewCanvasStackID) -> Void)?
     var onActivate: ((NoteReviewCanvasStackID) -> Void)?
     var onReturn: (() -> Void)?
@@ -42,7 +42,7 @@ final class CanvasStackBrowserView: UIView, UIScrollViewDelegate {
     var onInteraction: (() -> Void)?
     var contentInsets: UIEdgeInsets = .zero
     let reduced: Bool
-    var step: CGFloat { cardWidth + Spacing.double * 2 }
+    var step: CGFloat { cardWidth + Spacing.screenEdge }
     var cardWidth: CGFloat { min(320, bounds.width * 0.72) }
     var isMoving: Bool { scrollView.isDragging || scrollView.isDecelerating || focusCompletion != nil }
     var focusedID: NoteReviewCanvasStackID? {
@@ -70,29 +70,12 @@ final class CanvasStackBrowserView: UIView, UIScrollViewDelegate {
         scrollView.delegate = self
         scrollView.alwaysBounceHorizontal = true
         scrollView.isPagingEnabled = false
-        scrollView.decelerationRate = .normal
+        scrollView.decelerationRate = .fast
         scrollView.showsHorizontalScrollIndicator = false
         scrollView.showsVerticalScrollIndicator = false
         scrollView.contentInsetAdjustmentBehavior = .never
         scrollView.scrollsToTop = false
         addSubview(scrollView)
-        titleLabel.text = "浏览卡片堆"
-        titleLabel.font = ReadingContentTypography.uiAnnotationSemibold
-        titleLabel.textColor = NoteReviewCanvasAppearance.primary
-        titleLabel.textAlignment = .center
-        addSubview(titleLabel)
-        hintLabel.text = "左右滑动浏览 · 点按卡片堆展开"
-        hintLabel.font = ReadingContentTypography.uiMetadata
-        hintLabel.textColor = NoteReviewCanvasAppearance.secondary
-        hintLabel.textAlignment = .center
-        hintLabel.numberOfLines = 0
-        addSubview(hintLabel)
-        var config = UIButton.Configuration.plain()
-        config.title = "返回当前桌面"
-        config.baseForegroundColor = NoteReviewCanvasAppearance.primary
-        returnButton.configuration = config
-        returnButton.addAction(UIAction { [weak self] _ in self?.onReturn?() }, for: .touchUpInside)
-        addSubview(returnButton)
     }
     /// 该表面依赖就绪端点，只通过代码创建。
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -100,12 +83,15 @@ final class CanvasStackBrowserView: UIView, UIScrollViewDelegate {
     /// 只摆放覆盖控件和小窗口纸堆，不向桌面提交几何。
     override func layoutSubviews() {
         super.layoutSubviews()
-        titleLabel.frame = CGRect(x: Spacing.screenEdge, y: contentInsets.top + Spacing.base,
-            width: bounds.width - Spacing.screenEdge * 2, height: 32)
-        let bottom = bounds.height - contentInsets.bottom
-        returnButton.frame = CGRect(x: Spacing.screenEdge, y: bottom - 56, width: bounds.width - Spacing.screenEdge * 2, height: 48)
-        hintLabel.frame = CGRect(x: Spacing.screenEdge, y: bottom - 90, width: bounds.width - Spacing.screenEdge * 2, height: 32)
+        let oldStep = min(320, lastLayoutWidth * 0.72) + Spacing.screenEdge
+        let page = scrollView.contentOffset.x / max(1, oldStep)
         layoutPiles()
+        if lastLayoutWidth > 0, lastLayoutWidth != bounds.width {
+            applying = true
+            scrollView.contentOffset.x = page * step
+            applying = false
+        }
+        lastLayoutWidth = bounds.width
     }
 
     /// 仅在静止时重置小窗口原点，等量补偿当前堆的屏幕 X，惯性期间不改滚动状态。
@@ -124,8 +110,9 @@ final class CanvasStackBrowserView: UIView, UIScrollViewDelegate {
             let pile = CanvasStackPileView(preview: preview, reduced: reduced)
             pile.onActivate = { [weak self] in
                 guard let self, !isMoving else { return }
-                onActivate?(preview.group.id)
+                focus(preview.group.id) { [weak self] in self?.onActivate?(preview.group.id) }
             }
+            pile.countLabel.alpha = chromeVisible ? 1 : 0
             scrollView.addSubview(pile)
             piles[preview.group.id] = pile
             if window != nil { pile.alpha = 0; entering.append(pile) }
@@ -146,13 +133,13 @@ final class CanvasStackBrowserView: UIView, UIScrollViewDelegate {
     /// 几何只与视口和至多五个真实堆有关，不依赖全量目录或正文。
     private func layoutPiles() {
         scrollView.contentSize = CGSize(width: bounds.width + CGFloat(max(0, previews.count - 1)) * step, height: bounds.height)
-        let top = contentInsets.top + 70
-        let bottom = bounds.height - contentInsets.bottom - 100
-        let centerY = top + max(100, bottom - top) * 0.57
+        let top = contentInsets.top + Spacing.double
+        let bottom = bounds.height - contentInsets.bottom - Spacing.double
+        let centerY = (top + bottom) / 2
         for (index, preview) in previews.enumerated() {
             guard let pile = piles[preview.group.id] else { continue }
             pile.frame = CGRect(x: CGFloat(physicalIndex(index)) * step, y: 0, width: bounds.width, height: bounds.height)
-            pile.arrange(center: CGPoint(x: bounds.midX, y: centerY), width: cardWidth)
+            pile.arrangeCentered(center: CGPoint(x: bounds.midX, y: centerY), width: cardWidth)
         }
     }
 
@@ -183,13 +170,34 @@ final class CanvasStackBrowserView: UIView, UIScrollViewDelegate {
 
     /// 控件在同一时间轴渐显，不与独立纸面争夺显示权。
     func setChromeVisible(_ visible: Bool) {
-        titleLabel.alpha = visible ? 1 : 0; hintLabel.alpha = visible ? 1 : 0; returnButton.alpha = visible ? 1 : 0
+        chromeVisible = visible
+        piles.values.forEach { $0.countLabel.alpha = visible ? 1 : 0 }
     }
 
     /// 新手势取消程序性返回和待展开请求，但不改变阅读身份。
-    func scrollViewWillBeginDragging(_ scrollView: UIScrollView) { focusCompletion = nil; onInteraction?() }
+    func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        focusCompletion = nil
+        onInteraction?()
+    }
+    /// 由系统预测减速落点，快滑可跨多堆；慢拖按最近中心吸附，不在结束后追加纠偏。
+    func scrollViewWillEndDragging(_ scrollView: UIScrollView, withVelocity velocity: CGPoint,
+                                  targetContentOffset: UnsafeMutablePointer<CGPoint>) {
+        guard !previews.isEmpty else { return }
+        var page = (targetContentOffset.pointee.x / step).rounded()
+        if abs(velocity.x) > 0.35 {
+            let currentPage = scrollView.contentOffset.x / step
+            page = velocity.x > 0 ? max(page, floor(currentPage) + 1) : min(page, ceil(currentPage) - 1)
+        }
+        targetContentOffset.pointee.x = min(CGFloat(previews.count - 1), max(0, page)) * step
+    }
     /// 浏览焦点只用于预览需求，不回写当前书摘。
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        if scrollView.isDragging {
+            let velocity = scrollView.panGestureRecognizer.velocity(in: scrollView).x
+            if abs(velocity) > 1 {
+                preferredDirection = (velocity < 0 ? 1 : -1) * (effectiveUserInterfaceLayoutDirection == .rightToLeft ? -1 : 1)
+            }
+        }
         guard !applying, focusCompletion == nil, let id = focusedID, id != lastFocusedID else { return }
         lastFocusedID = id
         onFocus?(id)
@@ -214,9 +222,10 @@ final class CanvasStackBrowserView: UIView, UIScrollViewDelegate {
         let delta = direction == .left ? 1 : direction == .right ? -1 : 0
         let next = index + (effectiveUserInterfaceLayoutDirection == .rightToLeft ? -delta : delta)
         guard next != index, previews.indices.contains(next) else { return false }
-        focus(previews[next].group.id) { [weak self] in
+        let nextPreview = previews[next]
+        focus(nextPreview.group.id) { [weak self] in
             self?.onStable?()
-            UIAccessibility.post(notification: .pageScrolled, argument: "\(self?.previews[next].group.members.count ?? 0) 条书摘")
+            UIAccessibility.post(notification: .pageScrolled, argument: "\(nextPreview.group.members.count) 条书摘")
         }
         return true
     }
@@ -273,6 +282,15 @@ private final class CanvasStackPileView: UIControl {
         for (paper, pose) in zip(papers, poses) { paper.apply(pose) }
         let bottom = poses.first?.boundingFrame.maxY ?? center.y
         countLabel.frame = CGRect(x: center.x - width / 2, y: bottom + Spacing.double, width: width, height: 28)
+    }
+
+    /// 以整个真实纸堆（含背纸和数量）的边界居中，不以最前纸张中心代替整体中心。
+    func arrangeCentered(center: CGPoint, width: CGFloat) {
+        let poses = CanvasStackLayout.poses(sizes: papers.map { $0.content.logicalSize }, center: center, cardWidth: width, reduced: reduced)
+        let paperBounds = poses.reduce(CGRect.null) { $0.union($1.boundingFrame) }
+        let countBottom = (poses.first?.boundingFrame.maxY ?? center.y) + Spacing.double + 28
+        let middle = (paperBounds.minY + max(paperBounds.maxY, countBottom)) / 2
+        arrange(center: CGPoint(x: center.x, y: center.y + center.y - middle), width: width)
     }
 
     /// 捕获端点的等比变换，供收拢或展开时直接连续接管。

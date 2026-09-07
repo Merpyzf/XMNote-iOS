@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 HorizonCalendar 的 CalendarViewRepresentable/CalendarViewProxy，依赖 TimelineViewModel 提供事件与日历标记数据，依赖外部跳转回调承接内容查看与书籍详情
- * [OUTPUT]: 对外提供 ReadingTimelineView（首页时间线模块：日历与事件列表联动）
+ * [OUTPUT]: 对外提供 ReadingTimelineView（首页时间线模块：日历与事件列表联动），品牌填充内容使用成对前景
  * [POS]: Reading 模块正式时间线页面，承载月份切换、日期选择、分类过滤、按日时间线渲染与事件点击跳转
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -1356,7 +1356,7 @@ private struct TimelineCalendarDayCell: View {
 
             Text("\(dayNumber)")
                 .font(dayNumberFont)
-                .foregroundStyle(isSelected ? Color.white : Color.textPrimary)
+                .foregroundStyle(isSelected ? Color.primaryActionForeground : Color.textPrimary)
         }
         .frame(width: TimelineCalendarStyle.dayCellSize, height: TimelineCalendarStyle.dayCellSize)
     }

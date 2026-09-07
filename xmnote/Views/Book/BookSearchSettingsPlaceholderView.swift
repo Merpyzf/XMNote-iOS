@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 BookSearchViewModel 提供搜索设置状态与持久化写入，依赖 DesignTokens 提供页面样式
- * [OUTPUT]: 对外提供 BookSearchSettingsView，承接“添加书籍设置”入口的真实偏好配置页
+ * [OUTPUT]: 对外提供 BookSearchSettingsView，承接“添加书籍设置”入口的真实偏好配置页，品牌填充内容使用成对前景
  * [POS]: Book 模块的二级设置页面，用于配置默认搜索源、快捷切换和添加后返回书架偏好
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -45,7 +45,7 @@ struct BookSearchSettingsView: View {
                                         ? AppTypography.footnoteSemibold
                                         : AppTypography.footnoteMedium
                                 )
-                                .foregroundStyle(source == viewModel.searchSettings.defaultSource ? .white : Color.textPrimary)
+                                .foregroundStyle(source == viewModel.searchSettings.defaultSource ? Color.primaryActionForeground : Color.textPrimary)
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 36)
                                 .background(

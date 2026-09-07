@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 NoteReviewCardItem、NoteReviewSettings、RichText 共享解析缓存、TopSwitcherQuote 资源、Nuke 图片管线与设计系统令牌
- * [OUTPUT]: 对外提供三模式 NoteReviewCollectionCell、可并发生成的概览快照、一次性纸张测量与桌面远景分块绘制模型
+ * [OUTPUT]: 对外提供三模式 NoteReviewCollectionCell、可并发生成的概览快照、一次性纸张测量与桌面远景分块绘制模型，统一中性深色纸面与文字角色
  * [POS]: Views/Note/Components 的全屏回顾 Cell 层；沉浸阅读保留完整内容，桌面与瀑布流共享可虚拟化的纸张预览
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -105,6 +105,9 @@ nonisolated struct NoteReviewDesktopRasterStyle: Sendable {
     let shadowColor: NoteReviewDesktopRGBAColor
     let bodyTextColor: NoteReviewDesktopRGBAColor
     let supplementTextColor: NoteReviewDesktopRGBAColor
+    let sourceTextColor: NoteReviewDesktopRGBAColor
+    let metadataTextColor: NoteReviewDesktopRGBAColor
+    let isDarkAppearance: Bool
     let bodyFont: NoteReviewOverviewMeasurementDescriptor.Font
     let ideaFont: NoteReviewOverviewMeasurementDescriptor.Font
     let bookFont: NoteReviewOverviewMeasurementDescriptor.Font
@@ -128,6 +131,9 @@ struct NoteReviewDesktopTileStyle {
     let surfaceColor: UIColor
     let bodyTextColor: UIColor
     let supplementTextColor: UIColor
+    let sourceTextColor: UIColor
+    let metadataTextColor: UIColor
+    let isDarkAppearance: Bool
     let bodyFont: UIFont
     let ideaFont: UIFont
     let bookFont: UIFont
@@ -160,6 +166,7 @@ final class NoteReviewCollectionCell: UICollectionViewCell {
         let mode: NoteReviewPresentationMode
         let contentRevision: Int
         let appearanceGeneration: Int
+        let appearanceTraits: Int
         let widthBucket: Int
     }
 
@@ -368,6 +375,7 @@ final class NoteReviewCollectionCell: UICollectionViewCell {
             mode: mode,
             contentRevision: contentRevision ?? Self.fallbackContentRevision(item: item),
             appearanceGeneration: appearanceGeneration ?? settings.hashValue,
+            appearanceTraits: traitCollection.userInterfaceStyle.rawValue * 10 + traitCollection.accessibilityContrast.rawValue,
             widthBucket: Self.widthBucket(for: paperWidth, traitCollection: traitCollection)
         )
 
@@ -469,6 +477,7 @@ final class NoteReviewCollectionCell: UICollectionViewCell {
             mode: mode,
             contentRevision: contentRevision,
             appearanceGeneration: appearanceGeneration,
+            appearanceTraits: traitCollection.userInterfaceStyle.rawValue * 10 + traitCollection.accessibilityContrast.rawValue,
             widthBucket: Self.widthBucket(for: paperWidth, traitCollection: traitCollection)
         )
         let resolvedMeasurement = measurement
@@ -910,6 +919,9 @@ final class NoteReviewCollectionCell: UICollectionViewCell {
                 shadowColor: NoteReviewDesktopRGBAColor(red: 0, green: 0, blue: 0, alpha: 0.065),
                 bodyTextColor: desktopRGBA(bodyTextColor),
                 supplementTextColor: desktopRGBA(supplementTextColor),
+                sourceTextColor: desktopRGBA(appearance.sourceTextColor.resolvedColor(with: traitCollection)),
+                metadataTextColor: desktopRGBA(appearance.metadataTextColor.resolvedColor(with: traitCollection)),
+                isDarkAppearance: traitCollection.userInterfaceStyle == .dark,
                 bodyFont: measurementFontDescriptor(fonts.body),
                 ideaFont: measurementFontDescriptor(fonts.idea),
                 bookFont: measurementFontDescriptor(fonts.book),
@@ -929,6 +941,9 @@ final class NoteReviewCollectionCell: UICollectionViewCell {
             surfaceColor: surfaceColor,
             bodyTextColor: bodyTextColor,
             supplementTextColor: supplementTextColor,
+            sourceTextColor: appearance.sourceTextColor.resolvedColor(with: traitCollection),
+            metadataTextColor: appearance.metadataTextColor.resolvedColor(with: traitCollection),
+            isDarkAppearance: traitCollection.userInterfaceStyle == .dark,
             bodyFont: fonts.body,
             ideaFont: fonts.idea,
             bookFont: fonts.book,
@@ -1220,7 +1235,7 @@ private extension NoteReviewCollectionCell {
         paperPlaceholderView.mode = .desktop
         immersivePlaceholderView.mode = .immersive
 
-        quoteDecorationImageView.tintColor = .tertiaryLabel
+        quoteDecorationImageView.tintColor = NoteReviewCanvasAppearance.decoration
         quoteDecorationImageView.alpha = 1
         ideaSurface.backgroundColor = .clear
         ideaRule.backgroundColor = .separator
@@ -1268,8 +1283,9 @@ private extension NoteReviewCollectionCell {
         let display = settings.immersiveDisplay
         let bodyFont = settings.fontSelection.uiFont(base: ReadingContentTypography.uiBody)
         let annotationFont = settings.fontSelection.uiFont(base: ReadingContentTypography.uiAnnotation)
-        let bodyColor = UIColor.label
-        let secondaryColor = UIColor.secondaryLabel
+        let appearance = settings.cardAppearance
+        let bodyColor = appearance.immersiveBodyTextColor
+        let secondaryColor = appearance.immersiveSupplementTextColor
         let contentPlainText = RichTextPlainTextExtractor.plainText(from: item.contentHTML)
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -1306,7 +1322,8 @@ private extension NoteReviewCollectionCell {
         configureSourceAttribution(
             item: item,
             display: display,
-            titleFont: Font(annotationFont as CTFont)
+            titleFont: Font(annotationFont as CTFont),
+            appearance: appearance
         )
         updateSemanticProximity()
     }
@@ -1329,7 +1346,8 @@ private extension NoteReviewCollectionCell {
     func configureSourceAttribution(
         item: NoteReviewCardItem,
         display: NoteReviewImmersiveDisplaySettings,
-        titleFont: Font
+        titleFont: Font,
+        appearance: NoteReviewCardAppearance
     ) {
         let title = display.showsBookInfo
             ? Self.normalizedBookTitle(item.bookTitle)
@@ -1345,7 +1363,9 @@ private extension NoteReviewCollectionCell {
             NoteReviewSourceAttributionView(
                 title: title,
                 chapter: chapter,
-                titleFont: titleFont
+                titleFont: titleFont,
+                sourceColor: appearance.immersiveSourceColor,
+                chapterColor: appearance.immersiveChapterColor
             )
         }
         .margins(.all, Spacing.none)
@@ -1413,8 +1433,8 @@ private extension NoteReviewCollectionCell {
         paperChapterLabel.textAlignment = settings.textAlignment.auxiliaryNSTextAlignment
         paperPreviewStack.isHidden = snapshot.body.isEmpty && snapshot.idea.isEmpty
         paperFooterStack.isHidden = snapshot.bookTitle == nil && snapshot.chapter == nil
-        paperBookLabel.textColor = appearance.bodyTextColor
-        paperChapterLabel.textColor = appearance.supplementTextColor
+        paperBookLabel.textColor = appearance.sourceTextColor
+        paperChapterLabel.textColor = appearance.metadataTextColor
         configurePaperSurface(appearance: appearance)
         configureOverviewAccessibility(snapshot: snapshot)
         applyOverviewMeasurement(
@@ -1600,6 +1620,9 @@ private extension NoteReviewCollectionCell {
             return
         }
         paperBodyFadeLayer.frame = paperBodyLabel.bounds
+        let fadeStart = traitCollection.userInterfaceStyle == .dark
+            ? max(0, 1 - 8 / max(1, paperBodyLabel.bounds.height)) : 0.68
+        paperBodyFadeLayer.locations = [0, NSNumber(value: Double(fadeStart)), 1]
         paperBodyLabel.layer.mask = paperBodyFadeLayer
     }
 
@@ -2120,7 +2143,7 @@ nonisolated enum NoteReviewDesktopTileRasterizer {
                 chapter,
                 in: CGRect(x: contentRect.minX, y: footerTop, width: contentRect.width, height: height),
                 font: style.chapterFont,
-                color: style.supplementTextColor.cgColor(in: colorSpace),
+                color: style.metadataTextColor.cgColor(in: colorSpace),
                 lineSpacing: 0,
                 alignment: style.auxiliaryAlignment,
                 context: context
@@ -2140,7 +2163,7 @@ nonisolated enum NoteReviewDesktopTileRasterizer {
                 bookTitle,
                 in: CGRect(x: contentRect.minX, y: footerTop, width: contentRect.width, height: height),
                 font: style.bookFont,
-                color: style.bodyTextColor.cgColor(in: colorSpace),
+                color: style.sourceTextColor.cgColor(in: colorSpace),
                 lineSpacing: 0,
                 alignment: style.auxiliaryAlignment,
                 context: context
@@ -2179,6 +2202,7 @@ nonisolated enum NoteReviewDesktopTileRasterizer {
                 drawFade(
                     in: bodyRect,
                     surfaceColor: style.surfaceColor.cgColor(in: colorSpace),
+                    isDarkAppearance: style.isDarkAppearance,
                     context: context
                 )
             }
@@ -2307,13 +2331,15 @@ nonisolated enum NoteReviewDesktopTileRasterizer {
     private static func drawFade(
         in rect: CGRect,
         surfaceColor: CGColor,
+        isDarkAppearance: Bool,
         context: CGContext
     ) {
+        let fadeHeight = isDarkAppearance ? min(8, rect.height) : rect.height * 0.32
         let fadeRect = CGRect(
             x: rect.minX,
-            y: rect.minY + rect.height * 0.68,
+            y: rect.maxY - fadeHeight,
             width: rect.width,
-            height: rect.height * 0.32
+            height: fadeHeight
         )
         guard fadeRect.height > 0,
               let transparent = surfaceColor.copy(alpha: 0),
@@ -2519,7 +2545,7 @@ private extension NoteReviewDesktopTileOverlayView {
                 chapter,
                 in: CGRect(x: contentRect.minX, y: footerTop, width: contentRect.width, height: height),
                 font: style.chapterFont,
-                color: style.supplementTextColor,
+                color: style.metadataTextColor,
                 lineSpacing: 0,
                 alignment: style.auxiliaryAlignment
             )
@@ -2537,7 +2563,7 @@ private extension NoteReviewDesktopTileOverlayView {
                 bookTitle,
                 in: CGRect(x: contentRect.minX, y: footerTop, width: contentRect.width, height: height),
                 font: style.bookFont,
-                color: style.bodyTextColor,
+                color: style.sourceTextColor,
                 lineSpacing: 0,
                 alignment: style.auxiliaryAlignment
             )
@@ -2573,7 +2599,7 @@ private extension NoteReviewDesktopTileOverlayView {
                 alignment: style.bodyAlignment
             )
             if item.isBodyTruncated {
-                drawFade(in: bodyRect, surfaceColor: style.surfaceColor)
+                drawFade(in: bodyRect, surfaceColor: style.surfaceColor, isDarkAppearance: style.isDarkAppearance)
             }
             nextPreviewY = bodyRect.maxY
         }
@@ -2667,9 +2693,9 @@ private extension NoteReviewDesktopTileOverlayView {
         )
     }
 
-    func drawFade(in rect: CGRect, surfaceColor: UIColor) {
+    func drawFade(in rect: CGRect, surfaceColor: UIColor, isDarkAppearance: Bool) {
         guard let context = UIGraphicsGetCurrentContext() else { return }
-        let fadeHeight = rect.height * (1 - 0.68)
+        let fadeHeight = isDarkAppearance ? min(8, rect.height) : rect.height * (1 - 0.68)
         let fadeRect = CGRect(
             x: rect.minX,
             y: max(rect.minY, rect.maxY - fadeHeight),
@@ -2707,13 +2733,15 @@ private struct NoteReviewSourceAttributionView: View {
     let title: String
     let chapter: String
     let titleFont: Font
+    let sourceColor: Color
+    let chapterColor: Color
 
     var body: some View {
         VStack(alignment: .center, spacing: Spacing.compact) {
             if !title.isEmpty {
                 Text(title)
                     .font(titleFont)
-                    .foregroundStyle(Color.textPrimary)
+                    .foregroundStyle(sourceColor)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -2721,7 +2749,7 @@ private struct NoteReviewSourceAttributionView: View {
             if !chapter.isEmpty {
                 Text(chapter)
                     .font(ReadingContentTypography.metadata)
-                    .foregroundStyle(Color.textSecondary)
+                    .foregroundStyle(chapterColor)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -2777,7 +2805,8 @@ private final class NoteReviewReadOnlyRichTextView: UITextView {
         lineSpacing: CGFloat,
         alignment: NSTextAlignment
     ) {
-        let signature = "\(html.hashValue)|\(baseFont.fontName)|\(baseFont.pointSize)|\(lineSpacing)|\(alignment.rawValue)|\(traitCollection.userInterfaceStyle.rawValue)"
+        let resolvedColor = textColor.resolvedColor(with: traitCollection)
+        let signature = "\(String(describing: resolvedColor.cgColor.components))|\(traitCollection.accessibilityContrast.rawValue)|\(html.hashValue)|\(baseFont.fontName)|\(baseFont.pointSize)|\(lineSpacing)|\(alignment.rawValue)|\(traitCollection.userInterfaceStyle.rawValue)"
         guard signature != contentSignature else { return }
         contentSignature = signature
         textStorage.setAttributedString(

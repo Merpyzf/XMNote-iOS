@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer 或 Debug 仓储替身提供本地书与在线搜索，Debug 可附带固定远端预选；依赖 BookPickerViewModel 维护共享选择草稿，并复用 XMScrollEdgeChrome 协调固定控件与滚动内容
- * [OUTPUT]: 对外提供生产与测试中心共用的 iOS 26 系统样式 BookPickerView，并支持确定性异步确认验证
+ * [OUTPUT]: 对外提供生产与测试中心共用的 iOS 26 系统样式 BookPickerView，并支持确定性异步确认验证，品牌操作前景随外观配对
  * [POS]: Book 模块业务 Sheet，负责统一书籍选择流，不承担具体业务页保存逻辑
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -247,6 +247,7 @@ private struct BookPickerResolvedView: View {
                         .opacity(viewModel.isResolvingRemoteSelections ? 1 : 0)
                 }
         }
+        .foregroundStyle(Color.primaryActionForeground)
         .buttonStyle(.borderedProminent)
         .tint(Color.appTint)
         .disabled(!canConfirmMultipleSelection(viewModel))
@@ -651,7 +652,7 @@ private struct BookPickerResolvedView: View {
                                             ? AppTypography.footnoteSemibold
                                             : AppTypography.footnoteMedium
                                     )
-                                    .foregroundStyle(viewModel.selectedOnlineSource == source ? .white : Color.textSecondary)
+                                    .foregroundStyle(viewModel.selectedOnlineSource == source ? Color.primaryActionForeground : Color.textSecondary)
                                     .padding(.horizontal, Spacing.base)
                                     .frame(height: 34)
                                     .background(

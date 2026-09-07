@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer、BookshelfBatchEditOptions 中的标签、来源、阅读状态候选项、XMRatingBar、InteractionMetrics、surfaceDividerDefault、xmSheetContentPanel、BookshelfMoveGroupOption 分组封面数据与 BookCollectionSummary 书单候选项，依赖外层 ViewModel 闭包提交批量写入意图
- * [OUTPUT]: 对外提供移组、加入书单、标签、来源与阅读状态等批量编辑 Sheet；标签选择仅在多本操作时显示精简上下文
+ * [OUTPUT]: 对外提供移组、加入书单、标签、来源与阅读状态等批量编辑 Sheet；标签选择仅在多本操作时显示精简上下文，品牌操作前景随外观配对
  * [POS]: Book 模块业务 Sheet，被 BookshelfBookListView 的编辑态批量操作入口唤起
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -1149,6 +1149,7 @@ private struct BookshelfBatchCreateField: View {
 
                 Button(actionTitle, action: onSubmit)
                     .font(AppTypography.subheadlineSemibold)
+                    .foregroundStyle(Color.primaryActionForeground)
                     .buttonStyle(.borderedProminent)
                     .tint(Color.primaryActionFill)
                     .disabled(trimmedText.isEmpty || isProcessing)

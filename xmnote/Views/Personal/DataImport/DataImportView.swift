@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 AppNavigationCoordinator、微信读书导入 ViewModel、WebView、BookPickerView、Photos 与统一反馈组件
- * [OUTPUT]: 对外提供书摘导入入口、授权、分批、WereadImportBatchStatusView、导入预览和单书内容预览页面
+ * [OUTPUT]: 对外提供书摘导入入口、授权、分批、WereadImportBatchStatusView、导入预览和单书内容预览页面，品牌操作前景随外观配对
  * [POS]: Views/Personal/DataImport 的完整微信读书扫码授权导入交互流
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -163,8 +163,9 @@ struct WereadImportAuthView: View {
                     Toggle("仅导入包含笔记的书籍", isOn: Binding(get: { viewModel.preferences.onlyBooksWithNotes }, set: { value in viewModel.updatePreferences { $0.onlyBooksWithNotes = value } }))
 
                     Button(action: primaryAction) {
-                        HStack { Spacer(); if viewModel.isWorking { ProgressView().controlSize(.small) }; Text(primaryTitle); Spacer() }
+                        HStack { Spacer(); if viewModel.isWorking { ProgressView().controlSize(.small).tint(Color.primaryActionForeground) }; Text(primaryTitle); Spacer() }
                     }
+                    .foregroundStyle(Color.primaryActionForeground)
                     .buttonStyle(.borderedProminent)
                     .disabled(viewModel.isWorking || phaseIsLoading)
 
@@ -350,7 +351,8 @@ private struct WereadImportPreviewView: View {
         .navigationTitle("导入预览")
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {
-            Button { viewModel.beginCommit() } label: { HStack { Spacer(); if viewModel.isCommitting { ProgressView().controlSize(.small) }; Text(viewModel.isCommitting ? viewModel.progressText : "导入（\(viewModel.selectedCount)/\(viewModel.books.count)）"); Spacer() } }
+            Button { viewModel.beginCommit() } label: { HStack { Spacer(); if viewModel.isCommitting { ProgressView().controlSize(.small).tint(Color.primaryActionForeground) }; Text(viewModel.isCommitting ? viewModel.progressText : "导入（\(viewModel.selectedCount)/\(viewModel.books.count)）"); Spacer() } }
+                .foregroundStyle(Color.primaryActionForeground)
                 .buttonStyle(.borderedProminent).padding(Spacing.screenEdge).background(.ultraThinMaterial).disabled(viewModel.isCommitting)
         }
         .navigationDestination(item: $contentBook) { book in WereadBookContentPreviewView(book: binding(for: book.id)) }

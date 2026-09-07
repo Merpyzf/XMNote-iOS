@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 NoteReviewPalette / NoteReviewTextAlignment / NoteReviewFontSelection、SwiftUI/UIKit 颜色与内置思源宋体资源
- * [OUTPUT]: 对外提供书摘回顾卡片配色、桌面画布底色、思源宋体解析、想法中性轻托底与文本对齐的 UI 映射
+ * [OUTPUT]: 对外提供书摘回顾卡片分级配色、中性画布外观、思源宋体解析、想法中性轻托底与文本对齐的 UI 映射
  * [POS]: Note 模块页面私有 UI 辅助，供回顾卡片和设置 Sheet 共享外观映射
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -9,7 +9,7 @@ import SwiftUI
 import UIKit
 import os
 
-/// 书摘桌面的页面私有表层语义；低饱和灰绿只承担方案 2 画布底板，不扩散到其他页面。
+/// 书摘桌面的页面私有表层语义；深色使用中性炭灰，普通装饰不染入品牌绿色。
 enum NoteReviewCanvasAppearance {
     static let page = UIColor.xmResolved(Color.surfacePage)
     static let paper = UIColor.xmResolved(Color.surfaceCard)
@@ -20,6 +20,26 @@ enum NoteReviewCanvasAppearance {
     static let accent = UIColor.xmResolved(Color.selectionAccent)
     static let border = UIColor.xmResolved(Color.surfaceBorderDefault)
     static let subtleBorder = UIColor.xmResolved(Color.surfaceBorderSubtle)
+    static let progressSurface = Color.xmResolved(UIColor.xmAdaptive(lightHex: 0x303030, darkHex: 0x303030))
+    static let progressForeground = Color.xmResolved(UIColor.xmAdaptive(lightHex: 0xBBBBBB, darkHex: 0xBBBBBB,
+        highContrastDarkHex: 0xF2F2F2))
+    static let decoration = UIColor { traits in
+        (traits.userInterfaceStyle == .dark ? UIColor.xmAdaptive(lightHex: 0x626262, darkHex: 0x626262) : UIColor.tertiaryLabel)
+            .resolvedColor(with: traits)
+    }
+    static let canvasTint = UIColor { traits in
+        traits.userInterfaceStyle == .dark ? .clear : accent.resolvedColor(with: traits).withAlphaComponent(0.025)
+    }
+    static let actionForeground = Color.xmResolved(UIColor { traits in
+        let color = traits.userInterfaceStyle == .dark
+            ? UIColor.xmResolved(traits.accessibilityContrast == .high ? Color.iconPrimary : Color.iconSecondary)
+            : UIColor.xmResolved(Color.textSecondary).withAlphaComponent(0.94)
+        return color.resolvedColor(with: traits)
+    })
+    static let chromeForeground = UIColor { traits in
+        (traits.userInterfaceStyle == .dark ? UIColor.xmResolved(Color.iconPrimary) : UIColor.label)
+            .resolvedColor(with: traits)
+    }
 
     /// 离屏纸面回到 UIKit 代理时沿用已解析颜色，不重新选择深浅主题。
     static func resolvedPaper(_ color: CGColor) -> UIColor { UIColor(cgColor: color) }
@@ -37,7 +57,7 @@ enum NoteReviewCanvasAppearance {
 
     static let backgroundColor = UIColor.xmAdaptive(
         lightHex: 0xF0F2F1,
-        darkHex: 0x1B1E1D,
+        darkHex: 0x121212,
         highContrastLightHex: 0xE8ECEA,
         highContrastDarkHex: 0x111312
     )
@@ -68,7 +88,7 @@ extension NoteReviewPalette {
     }
 }
 
-/// 回顾卡片的单一外观描述，确保所有前景层级均由同一 on-surface 颜色派生。
+/// 回顾卡片的单一外观描述，中性深色使用明确文字角色，其他主题保留 on-surface 派生层级。
 struct NoteReviewCardAppearance {
     /// 用于颜色模式卡片与图片加载失败的纯色表面。
     let surface: Color
@@ -83,29 +103,83 @@ struct NoteReviewCardAppearance {
     /// UIKit 富文本所需的动态 on-surface 前景色。
     let uiOnSurface: UIColor
 
-    /// 正文使用的 92% on-surface UIKit 颜色。
+    let usesNeutralDarkAppearance: Bool
+
+    /// 保留浅色及自定义主题的原有颜色；中性深色角色随高对比度动态解析。
+    func neutralDarkColor(_ neutral: UIColor, fallback: UIColor) -> UIColor {
+        let usesNeutral = usesNeutralDarkAppearance
+        return UIColor { traits in
+            (usesNeutral && traits.userInterfaceStyle == .dark ? neutral : fallback).resolvedColor(with: traits)
+        }
+    }
+
+    /// 正文在中性深色中使用完整柔白，其他外观沿用原透明度。
     var bodyTextColor: UIColor {
-        uiOnSurface.withOpacity(0.92)
+        neutralDarkColor(UIColor.xmResolved(Color.textPrimary), fallback: uiOnSurface.withOpacity(0.92))
     }
 
     /// 辅助富文本使用的 76% on-surface UIKit 颜色。
     var supplementTextColor: UIColor {
-        uiOnSurface.withOpacity(0.76)
+        neutralDarkColor(UIColor.xmResolved(Color.textSecondary), fallback: uiOnSurface.withOpacity(0.76))
     }
 
     /// SwiftUI 辅助文字使用的 76% on-surface 颜色。
     var secondaryTextColor: Color {
-        onSurface.opacity(0.76)
+        Color.xmResolved(metadataTextColor)
     }
 
     /// 页脚标题等主要 SwiftUI 文字使用的 92% on-surface 颜色。
     var bodyForegroundColor: Color {
-        onSurface.opacity(0.92)
+        Color.xmResolved(bodyTextColor)
     }
 
-    /// 卡片边框使用的 on-surface 派生颜色。
+    /// 出处低于正文；非中性外观保留已有页脚标题亮度。
+    var sourceTextColor: UIColor {
+        neutralDarkColor(UIColor.xmResolved(Color.textSecondary), fallback: uiOnSurface.withOpacity(0.92))
+    }
+
+    /// 作者和章节属于较弱元数据，不能比出处更亮。
+    var metadataTextColor: UIColor {
+        neutralDarkColor(UIColor.xmResolved(Color.textHint), fallback: uiOnSurface.withOpacity(0.76))
+    }
+
+    /// 总览原有完整 on-surface 前景仅在中性深色中归一到正文角色。
+    var canvasBodyTextColor: UIColor {
+        neutralDarkColor(UIColor.xmResolved(Color.textPrimary), fallback: uiOnSurface)
+    }
+
+    /// 总览保留彩色主题原有辅助透明度。
+    var canvasSecondaryTextColor: UIColor {
+        neutralDarkColor(UIColor.xmResolved(Color.textSecondary), fallback: uiOnSurface.withOpacity(0.72))
+    }
+
+    /// 总览书名在中性深色中使用出处色，其余主题保留原前景。
+    var canvasSourceTextColor: UIColor {
+        neutralDarkColor(UIColor.xmResolved(Color.textSecondary), fallback: uiOnSurface)
+    }
+
+    /// 总览章节与作者使用元数据色，其他主题维持原辅助前景。
+    var canvasMetadataTextColor: UIColor {
+        neutralDarkColor(UIColor.xmResolved(Color.textHint), fallback: uiOnSurface.withOpacity(0.72))
+    }
+
+    var sourceForegroundColor: Color { Color.xmResolved(sourceTextColor) }
+    var immersiveBodyTextColor: UIColor {
+        neutralDarkColor(UIColor.xmResolved(Color.textPrimary), fallback: .label)
+    }
+    var immersiveSupplementTextColor: UIColor {
+        neutralDarkColor(UIColor.xmResolved(Color.textSecondary), fallback: .secondaryLabel)
+    }
+    var immersiveSourceColor: Color {
+        Color.xmResolved(neutralDarkColor(UIColor.xmResolved(Color.textSecondary), fallback: UIColor.xmResolved(Color.textPrimary)))
+    }
+    var immersiveChapterColor: Color {
+        Color.xmResolved(neutralDarkColor(UIColor.xmResolved(Color.textHint), fallback: UIColor.xmResolved(Color.textSecondary)))
+    }
+
+    /// 卡片边框在中性深色中使用中性边界，其余主题沿用原派生色。
     var borderColor: Color {
-        onSurface.opacity(0.16)
+        Color.xmResolved(neutralDarkColor(UIColor.xmResolved(Color.surfaceBorderDefault), fallback: uiOnSurface.withOpacity(0.16)))
     }
 
     /// 页脚分隔线使用的 on-surface 派生颜色。
@@ -145,9 +219,20 @@ extension NoteReviewSettings {
     var cardAppearance: NoteReviewCardAppearance {
         let imageURL = normalizedBackgroundImageURL
         let lightSurfaceHex = UInt(cardSurfaceHex(isDarkAppearance: false))
-        let darkSurfaceHex = UInt(cardSurfaceHex(isDarkAppearance: true))
+        var darkSurfaceHex = UInt(cardSurfaceHex(isDarkAppearance: true))
         let lightTextHex = UInt(cardTextHex(isDarkAppearance: false))
-        let darkTextHex = UInt(cardTextHex(isDarkAppearance: true))
+        var darkTextHex = UInt(cardTextHex(isDarkAppearance: true))
+        if !usesNeutralDarkAppearance {
+            let legacySurface: UInt?
+            let legacyText: UInt?
+            switch palette.canonicalPalette {
+            case .paper: legacySurface = 0x202723; legacyText = 0xE6ECE7
+            case .dark: legacySurface = 0x1D2420; legacyText = 0xEAF0EB
+            default: legacySurface = nil; legacyText = nil
+            }
+            if backgroundMode == .image, let legacySurface { darkSurfaceHex = legacySurface }
+            if (backgroundMode == .color || customTextColorHex == nil), let legacyText { darkTextHex = legacyText }
+        }
         let uiSurface = UIColor.xmAdaptive(lightHex: lightSurfaceHex, darkHex: darkSurfaceHex)
         let uiOnSurface = UIColor.xmAdaptive(lightHex: lightTextHex, darkHex: darkTextHex)
         let uiIdeaBackground = NoteReviewIdeaSurfaceStyle.backgroundColor(
@@ -164,8 +249,16 @@ extension NoteReviewSettings {
             backgroundImageURL: imageURL,
             onSurface: Color.xmResolved(uiOnSurface),
             ideaBackgroundColor: Color.xmResolved(uiIdeaBackground),
-            uiOnSurface: uiOnSurface
+            uiOnSurface: uiOnSurface,
+            usesNeutralDarkAppearance: usesNeutralDarkAppearance
         )
+    }
+
+    /// 仅标准中性纯色主题参与角色统一，保留自定义背景和主动选择的彩色主题。
+    var usesNeutralDarkAppearance: Bool {
+        backgroundMode == .color
+            && customBackgroundStartHex == nil && customBackgroundEndHex == nil
+            && (palette.canonicalPalette == .paper || palette.canonicalPalette == .dark)
     }
 
     /// 规范化图片地址，避免空白字符串触发无效的远程图片请求。

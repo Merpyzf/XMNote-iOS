@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 DesignSystem 与 XMScrollEdgeChrome，接收标题、副标题、交互锁定、关闭动作及类型安全的顶部/底部/标题栏内容槽位
- * [OUTPUT]: 对外提供基于 iOS 26 系统导航标题与副标题的统一 Sheet 根骨架、标准内容顶部间距、Sheet 主复合面板的 xmSheetContentPanel 同心圆角语义，并组合滚动回弹、安全区边缘及可选固定栏
+ * [OUTPUT]: 对外提供基于 iOS 26 系统导航标题与副标题的统一 Sheet 根骨架、标准内容顶部间距、Sheet 主复合面板的 xmSheetContentPanel 同心圆角语义，并组合滚动回弹、安全区边缘及可选固定栏，品牌操作前景随外观配对
  * [POS]: UIComponents/Sheet 的通用业务 Sheet 根骨架；Settings、Book、Tag 等模块共享，禁止 AnyView 类型擦除
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -43,6 +43,7 @@ struct XMSheetConfirmationAction: View {
                         .opacity(isConfirming ? 1 : 0)
                 }
         }
+        .foregroundStyle(Color.primaryActionForeground)
         .buttonStyle(.borderedProminent)
         .tint(Color.appTint)
         .disabled(isDisabled || isConfirming)
@@ -580,6 +581,7 @@ struct XMSheetScaffold<
         },
         bottomBar: {
             Button("完成") { }
+                .foregroundStyle(Color.primaryActionForeground)
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .padding(.horizontal, Spacing.screenEdge)

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer、BookEditorViewModel、BookEditorMode 与 AppTaskNavigationContext
- * [OUTPUT]: 对外提供 BookEditorView，承载搜索结果确认、手动创建、有效书编辑与相关占位书资料编辑
+ * [OUTPUT]: 对外提供 BookEditorView，承载搜索结果确认、手动创建、有效书编辑与相关占位书资料编辑，品牌操作前景随外观配对
  * [POS]: Book 模块录入页壳层，负责按模式展示字段、未保存拦截与保存动作
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -435,7 +435,7 @@ struct BookEditorView: View {
                     Spacer()
                     Text(viewModel.isSaving ? "正在保存…" : saveButtonTitle)
                         .font(AppTypography.headlineSemibold)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Color.primaryActionForeground)
                     Spacer()
                 }
                 .padding(.vertical, Spacing.base)
@@ -577,7 +577,7 @@ struct BookEditorView: View {
         Button(action: action) {
             Text(title)
                 .font(AppTypography.footnoteMedium)
-                .foregroundStyle(isSelected ? .white : Color.textPrimary)
+                .foregroundStyle(isSelected ? Color.primaryActionForeground : Color.textPrimary)
                 .padding(.horizontal, Spacing.base)
                 .padding(.vertical, Spacing.cozy)
                 .background(isSelected ? Color.selectionAccent : Color.surfaceNested, in: Capsule())

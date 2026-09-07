@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 AITextResultViewModel/AIAutoTagViewModel、AIRepositoryProtocol、AIMarkdownResultView、AIGenerationWaitingView、XMPopupButton、系统 NavigationStack/Toolbar/scrollEdgeEffectStyle、iOS 26 Liquid Glass、LoadingGate、xmMinimumHitTarget 与现有反馈组件
- * [OUTPUT]: 对外提供 AITextResultSheet、AIAutoTagSheet 及可复现等待/空结果/失败状态的业务展示单元；AI 释义承接模型切换、流式结果和编辑器请求，AI 标签承接系统确认与写回生命周期
+ * [OUTPUT]: 对外提供 AITextResultSheet、AIAutoTagSheet 及可复现等待/空结果/失败状态的业务展示单元；AI 释义承接模型切换、流式结果和编辑器请求，AI 标签承接系统确认与写回生命周期，品牌操作前景随外观配对
  * [POS]: Views/Content/Sheets 的 AI 业务 Sheet，被通用 viewer 及单页详情入口复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -216,6 +216,7 @@ struct AITextResultSheet: View {
             }
             .frame(maxWidth: .infinity)
         }
+        .foregroundStyle(Color.primaryActionForeground)
         .buttonStyle(.glassProminent)
         .controlSize(.extraLarge)
         .tint(Color.appTint)

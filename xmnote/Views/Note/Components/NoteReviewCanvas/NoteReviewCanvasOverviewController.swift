@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 接收有序书摘身份、可取消源读取闭包、外观及页面动作回调
- * [OUTPUT]: 提供生产与测试中心共用的单画布、瀑布流、调宽和连续纸张转场
+ * [OUTPUT]: 提供生产与测试中心共用的单画布、瀑布流、调宽和连续纸张转场，统一中性深色纸面与文字角色，总览保持无选中框的自由浏览
  * [POS]: NoteReviewCanvas 页面内部总览实现；不访问 Repository、偏好或导航
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -106,6 +106,9 @@ class NoteReviewCanvasOverviewController: UIViewController {
     let startStackAnimation: (UIViewPropertyAnimator) -> Void
     var stackTask: Task<Void, Never>?
     var stackNeighborTask: Task<Void, Never>?
+    var stackNeighborWork: CanvasOverviewTransitionPreparation?
+    var stackNeighborGeneration = 0
+    var stackPendingPreview: CanvasStackPreview?
     var stackWork: CanvasOverviewTransitionPreparation?
     var stackRequestGeneration = 0
     var stackPreviews: [CanvasStackPreview] = []
@@ -474,8 +477,9 @@ class NoteReviewCanvasOverviewController: UIViewController {
     }
 
     func updateAppearance() {
-        view.backgroundColor = NoteReviewCanvasAppearance.page
-        tintBackdropView.backgroundColor = NoteReviewCanvasAppearance.accent.withAlphaComponent(0.025)
+        let displayedTraits = preparedModel?.style.traits ?? traitCollection
+        view.backgroundColor = NoteReviewCanvasAppearance.page.resolvedColor(with: displayedTraits)
+        tintBackdropView.backgroundColor = NoteReviewCanvasAppearance.canvasTint.resolvedColor(with: displayedTraits)
         zoomContentView.backgroundColor = .clear
         waterfallView.backgroundColor = .clear
         topControlPanel.backgroundColor = NoteReviewCanvasAppearance.paper.withAlphaComponent(0.96)
@@ -568,16 +572,21 @@ class NoteReviewCanvasOverviewController: UIViewController {
                     preparesWaterfall: requestedPreparationMode == .waterfall)
                 try Task.checkCancellation()
                 guard generation == token else { return }
-                modelPreparation = nil
-                realDataTask = nil
-                preparationIsPending = false
                 if var model {
                     if directoryRegionReader != nil, currentMode == .waterfall, let old = preparedModel {
-                        model.waterfallGeometry = old.waterfallGeometry
-                        model.isWaterfallPrepared = old.isWaterfallPrepared
+                        model.waterfallGeometry = try await rebuildWaterfallAppearance(model: model, previous: old, work: work)
+                        try Task.checkCancellation()
+                        guard generation == token, !work.isCancelled else { return }
+                        model.isWaterfallPrepared = true
                     }
+                    modelPreparation = nil
+                    realDataTask = nil
+                    preparationIsPending = false
                     commit(model: seedRegionalWindow(model), preservingCurrentID: preservingCurrentID)
                 } else if ids.isEmpty {
+                    modelPreparation = nil
+                    realDataTask = nil
+                    preparationIsPending = false
                     preparedModel = nil
                     waterfallLayout.geometry = nil
                     waterfallView.reloadData()
@@ -694,6 +703,7 @@ class NoteReviewCanvasOverviewController: UIViewController {
         clearDirectoryCatalogSurface()
 
         preparedModel = model
+        updateAppearance()
         zoomContentView.isHidden = false
         selectedDesktopCardWidth = model.canvasGeometry.cardWidth
         desktopPacking = model.canvasGeometry.parameters.packing
@@ -1327,6 +1337,7 @@ extension NoteReviewCanvasOverviewController: UICollectionViewDataSource, UIColl
             cell.configure(note: note, geometry: model.waterfallGeometry.contentGeometries[indexPath.item],
                 size: model.waterfallGeometry.frames[indexPath.item].size, style: model.waterfallStyle)
             cell.accessibilityCustomActions = onNoteAccessibilityActions?(note.id)
+            cell.accessibilityHint = "轻点阅读完整书摘"
         }
         return cell
     }
@@ -1855,6 +1866,7 @@ nonisolated struct CanvasOverviewTextAsset: @unchecked Sendable {
     let attributedText: NSAttributedString
     let attributeKeys: NoteReviewCanvasTextAttributes
     var hasRichFormatting: Bool = false
+    var fadeHeight: CGFloat = 20
 
     static func containsFormatting(_ attributes: [NSAttributedString.Key: Any]) -> Bool {
         let traits = (attributes[.font] as? UIFont)?.fontDescriptor.symbolicTraits ?? []
@@ -1885,6 +1897,8 @@ nonisolated struct CanvasOverviewPaperStyle: Sendable {
     let primaryTextColor: UIColor
     let secondaryTextColor: UIColor
     let hintTextColor: UIColor
+    let sourceTextColor: UIColor
+    let metadataTextColor: UIColor
     let bodyFont: UIFont
     let annotationFont: UIFont
     let metadataFont: UIFont
@@ -1926,12 +1940,14 @@ nonisolated struct CanvasOverviewPaperStyle: Sendable {
             color.resolvedColor(with: traits)
         }
         canvasBaseColor = resolved(NoteReviewCanvasAppearance.page).cgColor
-        canvasTintColor = resolved(NoteReviewCanvasAppearance.accent).withAlphaComponent(0.025).cgColor
+        canvasTintColor = resolved(NoteReviewCanvasAppearance.canvasTint).cgColor
         paperColor = settings?.cardAppearance.uiSurface.resolvedColor(with: traits).cgColor ?? resolved(isFlat ? NoteReviewCanvasAppearance.sheet : NoteReviewCanvasAppearance.paper).cgColor
         borderColor = resolved(isFlat ? NoteReviewCanvasAppearance.border : NoteReviewCanvasAppearance.subtleBorder).cgColor
-        primaryTextColor = settings?.cardAppearance.uiOnSurface.resolvedColor(with: traits) ?? resolved(NoteReviewCanvasAppearance.primary)
-        secondaryTextColor = settings?.cardAppearance.uiOnSurface.resolvedColor(with: traits).withAlphaComponent(0.72) ?? resolved(NoteReviewCanvasAppearance.secondary)
+        primaryTextColor = settings?.cardAppearance.canvasBodyTextColor.resolvedColor(with: traits) ?? resolved(NoteReviewCanvasAppearance.primary)
+        secondaryTextColor = settings?.cardAppearance.canvasSecondaryTextColor.resolvedColor(with: traits) ?? resolved(NoteReviewCanvasAppearance.secondary)
         hintTextColor = resolved(NoteReviewCanvasAppearance.hint)
+        sourceTextColor = settings?.cardAppearance.canvasSourceTextColor.resolvedColor(with: traits) ?? primaryTextColor
+        metadataTextColor = settings?.cardAppearance.canvasMetadataTextColor.resolvedColor(with: traits) ?? secondaryTextColor
         bodyFont = settings?.fontSelection.uiFont(base: ReadingContentTypography.uiBody) ?? ReadingContentTypography.uiBody
         annotationFont = settings?.fontSelection.uiFont(base: ReadingContentTypography.uiAnnotation) ?? ReadingContentTypography.uiAnnotation
         metadataFont = ReadingContentTypography.uiMetadata
@@ -2008,10 +2024,12 @@ nonisolated struct CanvasOverviewTextBlock: Sendable {
     let signature: String
     let truncated: Bool
     let hasVisibleFormatting: Bool
+    let fadeHeight: CGFloat
 
     init(asset: CanvasOverviewTextAsset, rect: CGRect, truncated: Bool = false) {
         self.rect = rect
         self.truncated = truncated
+        fadeHeight = asset.fadeHeight
         layout = NoteReviewCanvasTextLayout(text: asset.attributedText, size: rect.size, attributes: asset.attributeKeys)
         var formatted = false
         if asset.hasRichFormatting, layout.visibleRange.length > 0 {
@@ -2022,7 +2040,7 @@ nonisolated struct CanvasOverviewTextBlock: Sendable {
         hasVisibleFormatting = formatted
         signature = layout.metrics.map {
             "\($0.range.location):\($0.range.length):\(rect.height - $0.origin.y)"
-        }.joined(separator: "|") + (truncated ? "fade" : "full") + ":\(asset.attributedText.hash)"
+        }.joined(separator: "|") + (truncated ? "fade:\(fadeHeight)" : "full") + ":\(asset.attributedText.hash)"
     }
 }
 
@@ -2699,8 +2717,8 @@ nonisolated enum CanvasOverviewTextFactory {
             let chapter = style.display.showsChapter ? source.chapterTitle : ""
             notes.append(CanvasOverviewNote(id: source.noteID, quote: quote.text, thought: thought.text,
                 bookTitle: book, chapter: chapter, quoteAsset: visibleQuote, thoughtAsset: thought,
-                bookAsset: makeTextAsset(book, font: style.metadataMediumFont, color: style.primaryTextColor, lineSpacing: 0, keys: style.textAttributes, alignment: style.metadataAlignment),
-                chapterAsset: makeTextAsset(chapter, font: style.metadataFont, color: style.secondaryTextColor, lineSpacing: 0, keys: style.textAttributes, alignment: style.metadataAlignment),
+                bookAsset: makeTextAsset(book, font: style.metadataMediumFont, color: style.sourceTextColor, lineSpacing: 0, keys: style.textAttributes, alignment: style.metadataAlignment),
+                chapterAsset: makeTextAsset(chapter, font: style.metadataFont, color: style.metadataTextColor, lineSpacing: 0, keys: style.textAttributes, alignment: style.metadataAlignment),
                 revision: CanvasOverviewSourceRevision(source)))
         }
         return notes
@@ -2730,7 +2748,7 @@ nonisolated enum CanvasOverviewTextFactory {
         }
         let immutable = NSAttributedString(attributedString: parsed)
         return CanvasOverviewTextAsset(text: immutable.string, attributedText: immutable, attributeKeys: style.textAttributes,
-            hasRichFormatting: hasFormatting)
+            hasRichFormatting: hasFormatting, fadeHeight: style.traits.userInterfaceStyle == .dark ? 8 : 20)
     }
 
     static func makeTextAsset(
@@ -3198,13 +3216,13 @@ nonisolated enum CanvasOverviewPaperRenderer {
             cornerRadius: style.cornerRadius, skin: style.drawingSkin, paperColor: style.paperColor,
             backgroundImage: style.backgroundImage, backgroundOverlay: style.backgroundOverlay,
             blocks: blocks.map {
-                NoteReviewCanvasPaperTextBlock(rect: $0.rect, layout: $0.layout, truncated: $0.truncated)
+                NoteReviewCanvasPaperTextBlock(rect: $0.rect, layout: $0.layout, truncated: $0.truncated, fadeHeight: $0.fadeHeight)
             }, in: context)
     }
 
     static func draw(block: CanvasOverviewTextBlock, paperColor: CGColor, in context: CGContext) {
         NoteReviewCanvasPaperRenderer.draw(block: NoteReviewCanvasPaperTextBlock(rect: block.rect,
-            layout: block.layout, truncated: block.truncated), paperColor: paperColor, in: context)
+            layout: block.layout, truncated: block.truncated, fadeHeight: block.fadeHeight), paperColor: paperColor, in: context)
     }
 }
 
@@ -4320,7 +4338,7 @@ nonisolated enum CanvasOverviewWidthBuilder {
     static func independentNote(_ note: CanvasOverviewNote) -> CanvasOverviewNote {
         func asset(_ old: CanvasOverviewTextAsset) -> CanvasOverviewTextAsset {
             CanvasOverviewTextAsset(text: old.text, attributedText: old.attributedText, attributeKeys: old.attributeKeys,
-                hasRichFormatting: old.hasRichFormatting)
+                hasRichFormatting: old.hasRichFormatting, fadeHeight: old.fadeHeight)
         }
         return CanvasOverviewNote(id: note.id, quote: note.quote, thought: note.thought,
             bookTitle: note.bookTitle, chapter: note.chapter, quoteAsset: asset(note.quoteAsset),

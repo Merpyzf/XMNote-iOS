@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 SwiftUI、UniformTypeIdentifiers、KindleImportViewModel 与统一导入预览/反馈组件
- * [OUTPUT]: 对外提供 KindleImportView，以 Reicon 区分连接设备与普通 My Clippings.txt 两个真实系统文件入口
+ * [OUTPUT]: 对外提供 KindleImportView，以 Reicon 区分连接设备与普通 My Clippings.txt 两个真实系统文件入口，品牌操作前景随外观配对
  * [POS]: Views/Personal/DataImport 的 Kindle 平台页面，不宣称 iOS 能自动枚举 MTP
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -128,6 +128,7 @@ struct KindleImportView: View {
                 Text(actionTitle)
                     .frame(maxWidth: .infinity)
             }
+            .foregroundStyle(Color.primaryActionForeground)
             .buttonStyle(.borderedProminent)
             .disabled(viewModel.isParsing)
         }
