@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 接收 NoteReviewCardItem 或 NoteContentDetail，复用 AppTypography、NotePositionUnitFormatter 与 RichText HTML 解析能力
- * [OUTPUT]: 对外提供 NoteReviewShareImageRenderer，将回顾卡片或查看器书摘离屏渲染为临时 PNG 文件
+ * [INPUT]: 接收 NoteReviewCardItem 或 NoteContentDetail，复用 AppTypography、回顾字体选择、NotePositionUnitFormatter 与 RichText HTML 解析能力
+ * [OUTPUT]: 对外提供 NoteReviewShareImageRenderer，以选择字体渲染正文、想法和书名并将书摘离屏输出为临时 PNG 文件
  * [POS]: ViewModels/Note 的共享书摘分享图基础能力，供回顾与 ContentViewer 复用同一视觉语言
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -305,11 +305,11 @@ struct NoteReviewShareImageRenderer: @unchecked Sendable {
             content: content,
             idea: idea,
             titleFont: settings.fontSelection.uiFont(base: Typography.title),
-            authorFont: settings.fontSelection.uiFont(base: Typography.author),
-            eyebrowFont: settings.fontSelection.uiFont(base: Typography.eyebrow),
-            metadataLabelFont: settings.fontSelection.uiFont(base: Typography.metadataLabel),
-            metadataValueFont: settings.fontSelection.uiFont(base: Typography.metadataValue),
-            footerFont: settings.fontSelection.uiFont(base: Typography.footer),
+            authorFont: Typography.author,
+            eyebrowFont: Typography.eyebrow,
+            metadataLabelFont: Typography.metadataLabel,
+            metadataValueFont: Typography.metadataValue,
+            footerFont: Typography.footer,
             primaryTextColor: primaryTextColor,
             secondaryTextColor: secondaryTextColor,
             accentColor: accentColor,

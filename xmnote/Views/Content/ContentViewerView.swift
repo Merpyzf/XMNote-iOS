@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入内容/AI 仓储，依赖 AppNavigationCoordinator 交接 AI 想法编辑请求，依赖 ContentViewerViewModel 驱动分页与详情状态
- * [OUTPUT]: 对外提供 ContentViewerView，以首帧稳定导航标题统一承接分页查看、原文跳转、书摘朗读、页面级系统分享、关联应用配置引导、统一标签编辑、AI 释义/标签、编辑器交接与内容操作反馈
+ * [INPUT]: 依赖 RepositoryContainer 注入内容/AI 仓储、入口明确的 Scene 选中项恢复策略、AppNavigationCoordinator 编辑请求与 ContentViewerViewModel 分页详情状态
+ * [OUTPUT]: 对外提供 ContentViewerView，区分显式目标与 Scene 恢复，并以首帧稳定导航标题统一承接分页、原文、朗读、分享、标签、AI、编辑交接与操作反馈
  * [POS]: Content 模块查看页壳层，被时间线与书籍详情共同复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -25,6 +25,7 @@ struct ContentViewerView: View {
     let source: ContentViewerSourceContext
     let initialItemID: ContentViewerItemID
     let keyword: String
+    let restoresSelectionFromScene: Bool
 
     @Environment(RepositoryContainer.self) private var repositories
     @Environment(SceneStateStore.self) private var sceneStateStore
@@ -34,6 +35,27 @@ struct ContentViewerView: View {
     @State private var showsDeleteDialog = false
     @State private var didBootstrapFromScene = false
     @State private var bootstrapLoadingGate = LoadingGate()
+
+    /// 可恢复浏览页沿用历史锚点；明确指向某条内容的临时全屏任务必须关闭恢复，避免旧选择覆盖本次目标。
+    init(source: ContentViewerSourceContext, initialItemID: ContentViewerItemID, keyword: String,
+         restoresSelectionFromScene: Bool = true) {
+        self.source = source
+        self.initialItemID = initialItemID
+        self.keyword = keyword
+        self.restoresSelectionFromScene = restoresSelectionFromScene
+    }
+
+    /// 只读取本入口允许且来源一致的恢复锚点；实际首次选中仍由现有 ViewModel 处理。
+    func restoredSelection(from snapshot: ContentViewerSceneSnapshot?) -> ContentViewerItemID? {
+        guard restoresSelectionFromScene, let snapshot, snapshot.source == source else { return nil }
+        return snapshot.selectedItemID
+    }
+
+    /// 临时任务不写回浏览恢复状态，防止其对象动作污染之后真正需要恢复的页面。
+    func persistSelection(_ selection: ContentViewerItemID?, in store: SceneStateStore) {
+        guard restoresSelectionFromScene, let selection else { return }
+        store.updateContentViewer(ContentViewerSceneSnapshot(source: source, selectedItemID: selection))
+    }
 
     private var presentationStyle: ContentViewerPresentationStyle {
         ContentViewerPresentationStyle(source: source)
@@ -66,13 +88,7 @@ struct ContentViewerView: View {
             didBootstrapFromScene = true
             guard viewModel == nil else { return }
             bootstrapLoadingGate.update(intent: .read)
-            let restoredSelectedItemID: ContentViewerItemID? = {
-                guard let snapshot = sceneStateStore.snapshot.contentViewer,
-                      snapshot.source == source else {
-                    return nil
-                }
-                return snapshot.selectedItemID
-            }()
+            let restoredSelectedItemID = restoredSelection(from: sceneStateStore.snapshot.contentViewer)
             let newViewModel = ContentViewerViewModel(
                 source: source,
                 initialItemID: initialItemID,
@@ -89,10 +105,7 @@ struct ContentViewerView: View {
             newViewModel.startObservation()
         }
         .onChange(of: viewModel?.selectedItemID, initial: false) { _, newValue in
-            guard let newValue else { return }
-            sceneStateStore.updateContentViewer(
-                ContentViewerSceneSnapshot(source: source, selectedItemID: newValue)
-            )
+            persistSelection(newValue, in: sceneStateStore)
         }
         .onDisappear {
             bootstrapLoadingGate.hideImmediately()

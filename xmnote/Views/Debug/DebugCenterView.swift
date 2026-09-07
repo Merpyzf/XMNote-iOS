@@ -113,6 +113,13 @@ struct DebugCenterView: View {
             subtitle: "Bottom Accessory 液态玻璃退场的 XMNote 对照与纯系统框架归因"
         ),
         DebugCenterItem(
+            category: .experimentsAndReproductions,
+            destination: .noteReviewSingleCanvasTransition,
+            icon: "rectangle.3.group.bubble.left",
+            title: "单画布转场实验",
+            subtitle: "固定数据验证二维单画布与瀑布流之间的共享纸张转场"
+        ),
+        DebugCenterItem(
             category: .controlsAndInteraction,
             destination: .scopeSelector,
             icon: "rectangle.split.3x1",
@@ -355,6 +362,8 @@ struct DebugCenterView: View {
             SelectionMotionTestView()
         case .appleMusicTransition:
             AppleMusicTransitionLabView()
+        case .noteReviewSingleCanvasTransition:
+            NoteReviewSingleCanvasTransitionLabView(repository: repositories.noteRepository)
         case .scopeSelector:
             XMScopeSelectorTestView()
         case .searchHistory:
@@ -444,6 +453,7 @@ private enum DebugCenterDestination: Hashable {
     case bookSelection
     case selectionMotion
     case appleMusicTransition
+    case noteReviewSingleCanvasTransition
     case scopeSelector
     case searchHistory
     case searchableSystemReproduction

@@ -53,6 +53,7 @@ struct ReadCalendarMonthRecordPlaceholderSheet: View {
                         .font(AppTypography.subheadlineSemibold)
                         .frame(minHeight: Layout.buttonHeight)
                 }
+                .foregroundStyle(Color.primaryActionForeground)
                 .buttonStyle(.borderedProminent)
             }
             .frame(maxWidth: .infinity, alignment: .center)

@@ -214,6 +214,7 @@
       "matchInferred": true,
       "allowedPaths": [
         "xmnote/Utilities/DesignSystem/ColorConstruction.swift",
+        "xmnote/Views/Note/Components/NoteReviewPalette+UI.swift",
         "xmnote/RichTextEditor/HighlightColors.swift",
         "xmnote/ViewModels/Book/BookCollectionDetailViewModel.swift",
         "xmnote/ViewModels/Note/NoteReviewShareImageRenderer.swift",

@@ -75,6 +75,7 @@
 	<key>UIAppFonts</key>
 	<array>
 		<string>RozhaOne-Regular.ttf</string>
+		<string>SourceHanSerifSC-SemiBold.otf</string>
 	</array>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>

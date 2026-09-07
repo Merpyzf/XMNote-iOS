@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 NoteImportPreviewViewModel、原生搜索/菜单、BookPickerView 与项目列表和 Sheet 组件
- * [OUTPUT]: 提供解析草稿的来源标记、全来源书摘预览与确认导入
+ * [OUTPUT]: 提供解析草稿的来源标记、全来源书摘预览与确认导入；主操作前景由语义令牌随外观配对
  * [POS]: Views/Personal/DataImport 的预览与提交层；输入准备由 NoteImportSourceScreen 独立持有
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */

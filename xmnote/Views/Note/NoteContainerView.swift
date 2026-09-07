@@ -198,8 +198,8 @@ private struct NoteContentView: View {
                 .scaledToFit()
                 .foregroundStyle(Color.iconPrimary.opacity(0.88))
                 .frame(
-                    width: NoteTopBarMetrics.leadingIconSize,
-                    height: NoteTopBarMetrics.leadingIconSize
+                    width: NoteTopBarMetrics.fullScreenReviewIconSize,
+                    height: NoteTopBarMetrics.fullScreenReviewIconSize
                 )
                 .accessibilityHidden(true)
                 .frame(
@@ -416,6 +416,7 @@ private extension BookReviewSortRule {
 private enum NoteTopBarMetrics {
     static let leadingIconSize: CGFloat = 14
     static let trailingIconSize: CGFloat = 15
+    static let fullScreenReviewIconSize: CGFloat = 17
 }
 
 #Preview {

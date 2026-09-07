@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 SwiftUI、UniformTypeIdentifiers、带 Kindle 角标的导入插画与分模式引导、KindleImportViewModel、导入交互式玻璃主按钮与统一导入预览/反馈组件
- * [OUTPUT]: 对外提供 KindleImportView，按前置选择展示单一模式指引并通过系统文件入口导入 My Clippings.txt
+ * [OUTPUT]: 对外提供 KindleImportView，按前置选择展示单一模式指引并通过系统文件入口导入 My Clippings.txt；品牌操作前景由主按钮语义令牌配对
  * [POS]: Views/Personal/DataImport 的 Kindle 平台页面，不宣称 iOS 能自动枚举 MTP
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 BookshelfDimension、BookshelfAggregateGroup 等只读书架模型，以及 ReadingStatusPresentation、XMRatingAppearance 与 InteractionMetrics
- * [OUTPUT]: 对外提供 Book 页面私有的维度 rail、聚合卡、搜索栏与默认书架列表行组件
+ * [OUTPUT]: 对外提供 Book 页面私有的维度 rail、聚合卡、搜索栏与默认书架列表行组件，品牌填充内容使用成对前景
  * [POS]: Book 模块页面私有子视图集合，服务 Phase 2 书架维度骨架，不承担数据读取与写入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -35,7 +35,7 @@ struct BookshelfDimensionRail: View {
                     } label: {
                         Text(dimension.title)
                             .font(isSelected ? AppTypography.captionMedium : AppTypography.caption)
-                            .foregroundStyle(isSelected ? .white : .primary)
+                            .foregroundStyle(isSelected ? Color.primaryActionForeground : Color.textPrimary)
                             .padding(.horizontal, Style.horizontalPadding)
                             .frame(minHeight: Style.visualMinHeight)
                             .background(

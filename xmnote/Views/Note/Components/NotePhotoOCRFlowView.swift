@@ -2723,6 +2723,7 @@ private extension OCRSettingsScreen {
                 Button("清除鉴权缓存") {
                     viewModel.clearAuthorizationCache()
                 }
+                .foregroundStyle(Color.primaryActionForeground)
                 .buttonStyle(.borderedProminent)
                 .tint(Color.primaryActionFill)
                 .disabled(viewModel.isRecognizing)

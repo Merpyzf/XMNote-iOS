@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer 注入搜索仓储与本地书仓储，依赖 BookSearchViewModel 驱动远端查询状态，依赖统一状态组件、搜索结果行与登录/验证弹层承接搜索和回流
- * [OUTPUT]: 对外提供 BookSearchView，承载完整书籍搜索体验、豆瓣登录恢复、番茄风控恢复与可选的新书回填
+ * [OUTPUT]: 对外提供 BookSearchView，承载完整书籍搜索体验、豆瓣登录恢复、番茄风控恢复与可选的新书回填，品牌填充内容使用成对前景
  * [POS]: Book 模块搜索页壳层，负责在线来源切换、最近搜索、豆瓣/番茄风控回流与结果进入录入页
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -287,7 +287,7 @@ struct BookSearchView: View {
                     } label: {
                         Text(source.title)
                             .font(isSelected ? AppTypography.footnoteSemibold : AppTypography.footnoteMedium)
-                            .foregroundStyle(isSelected ? .white : Color.textSecondary)
+                            .foregroundStyle(isSelected ? Color.primaryActionForeground : Color.textSecondary)
                             .padding(.horizontal, SearchPageLayout.sourceChipHorizontalPadding)
                             .frame(height: SearchPageLayout.sourceChipVisualHeight)
                             .background(

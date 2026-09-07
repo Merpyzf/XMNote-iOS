@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 VisionKit DataScannerViewController 识别条码，接收 BookSearchView 注入的 ISBN 回填闭包
- * [OUTPUT]: 对外提供 BookScanPlaceholderView，承接“扫码录入”入口并将有效 ISBN 回填到搜索页
+ * [OUTPUT]: 对外提供 BookScanPlaceholderView，承接“扫码录入”入口并将有效 ISBN 回填到搜索页，品牌操作前景随外观配对
  * [POS]: Book 模块添加书籍扫码页面，在扫码不可用时提供手动 ISBN 兜底
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -97,6 +97,7 @@ struct BookScanPlaceholderView: View {
                     submitISBNCandidate(manualISBN)
                 }
                 .font(AppTypography.bodyMedium)
+                .foregroundStyle(Color.primaryActionForeground)
                 .buttonStyle(.borderedProminent)
                 .disabled(normalizedISBN(manualISBN) == nil)
             }

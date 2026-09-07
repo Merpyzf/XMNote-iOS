@@ -68,6 +68,10 @@ final class ContentViewerViewModel {
     private var hasAppliedInitialSelection = false
     private var pendingDeletedSelection: PendingDeletedSelection?
     private var listObservationTask: Task<Void, Never>?
+    private var directoryPageTask: Task<Void, Never>?
+    private var directoryPageGeneration: UInt64 = 0
+    private var directoryFirstOrdinal = 0
+    private var directoryTotalCount: Int?
     private var externalAppObservationTask: Task<Void, Never>?
     private let restoredSelectedItemID: ContentViewerItemID?
 
@@ -104,6 +108,7 @@ final class ContentViewerViewModel {
     /// 释放 Viewer 时取消数据库和配置观察流；在途网络发送遵循调用 View Task 的结构化取消。
     isolated deinit {
         listObservationTask?.cancel()
+        directoryPageTask?.cancel()
         externalAppObservationTask?.cancel()
     }
 
@@ -132,19 +137,25 @@ final class ContentViewerViewModel {
     }
 
     var selectedPageProgress: ContentViewerPageProgress? {
-        guard items.count > 1 else { return nil }
+        let total = directoryTotalCount ?? items.count
+        guard total > 1 else { return nil }
         guard
             let selectedItemID,
             let selectedIndex = items.firstIndex(where: { $0.id == selectedItemID })
         else {
-            return ContentViewerPageProgress(current: 1, total: items.count)
+            return ContentViewerPageProgress(current: directoryFirstOrdinal + 1, total: total)
         }
-        return ContentViewerPageProgress(current: selectedIndex + 1, total: items.count)
+        return ContentViewerPageProgress(current: directoryFirstOrdinal + selectedIndex + 1, total: total)
     }
 
     /// 启动 feed 观察，持续同步来源列表并维护当前分页选择。
     func startObservation() {
         guard listObservationTask == nil else { return }
+        if case .noteReviewDirectory = source {
+            requestDirectoryWindow(around: restoredSelectedItemID ?? selectedItemID ?? initialItemID)
+            startExternalAppObservation()
+            return
+        }
         isLoadingList = true
         listErrorMessage = nil
         listErrorRecovery = nil
@@ -290,7 +301,60 @@ final class ContentViewerViewModel {
     func select(_ itemID: ContentViewerItemID) {
         guard itemID != selectedItemID else { return }
         selectedItemID = itemID
+        if case .noteReviewDirectory = source, let index = items.firstIndex(where: { $0.id == itemID }) {
+            let hasLeadingRoom = index >= 16 || directoryFirstOrdinal == 0
+            let hasTrailingRoom = index < items.count - 16
+                || directoryFirstOrdinal + items.count >= (directoryTotalCount ?? items.count)
+            if !hasLeadingRoom || !hasTrailingRoom { requestDirectoryWindow(around: itemID) }
+        }
         Task { await loadDetailIfNeeded(itemID: itemID) }
+    }
+
+    /// 回顾详情借用原目录取得最多 128 项，再使用原 Repository 观察这些身份的业务元数据。
+    /// 主 actor 合并最新窗口；退出或后续请求取消查询与旧观察，不改变其他来源的完整 feed 语义。
+    private func requestDirectoryWindow(around itemID: ContentViewerItemID) {
+        guard case .noteReviewDirectory(let reference) = source, case .note(let id) = itemID else { return }
+        directoryPageTask?.cancel()
+        directoryPageGeneration &+= 1
+        let token = directoryPageGeneration
+        if items.isEmpty { isLoadingList = true }
+        directoryPageTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                guard let provider = reference.provider else { throw NoteReviewDirectoryError.closed }
+                let page = try await provider.page(around: .noteID(id))
+                try Task.checkCancellation()
+                guard token == directoryPageGeneration else { return }
+                guard let page else {
+                    applyObservedItems([])
+                    return
+                }
+                listObservationTask?.cancel()
+                let stream = repository.observeViewerItems(source: .noteReview(noteIDs: page.members.map(\.record.noteID)))
+                listObservationTask = Task { [weak self] in
+                    do {
+                        for try await values in stream {
+                            guard let self, !Task.isCancelled, token == directoryPageGeneration else { return }
+                            directoryTotalCount = Int(page.totalCount)
+                            directoryFirstOrdinal = Int(page.firstOrdinal)
+                            listErrorMessage = nil; listErrorRecovery = nil
+                            applyObservedItems(values)
+                        }
+                    } catch is CancellationError { return }
+                    catch {
+                        guard let self, !Task.isCancelled, token == directoryPageGeneration else { return }
+                        isLoadingList = false
+                        listErrorMessage = "暂时无法更新书摘，请重试"; listErrorRecovery = .retry
+                    }
+                }
+            } catch is CancellationError { return }
+            catch {
+                guard token == directoryPageGeneration else { return }
+                isLoadingList = false
+                listErrorMessage = "回顾会话已失效，请返回回顾后重新打开"
+                listErrorRecovery = .dismiss
+            }
+        }
     }
 
     /// 读取单页详情；命中缓存时可跳过，供分页切换和懒加载使用。

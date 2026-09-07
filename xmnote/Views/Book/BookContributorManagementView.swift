@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer 注入 BookRepositoryProtocol，依赖 BookContributorManagementViewModel、XMSystemAlert 与原生 Toolbar/安全区操作栏提供单项和批量管理交互
- * [OUTPUT]: 对外提供 BookContributorManagementView，承接作者/出版社资料编辑、删除及书籍字段批量修改入口
+ * [OUTPUT]: 对外提供 BookContributorManagementView，承接作者/出版社资料编辑、删除及书籍字段批量修改入口，品牌操作前景随外观配对
  * [POS]: Book 模块作者/出版社管理页面壳层，被个人页路由与书籍 Tab 导航消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -180,6 +180,7 @@ private struct BookContributorManagementContentView: View {
                 viewModel.presentBatchNameEdit()
             }
             .font(AppTypography.callout)
+            .foregroundStyle(Color.primaryActionForeground)
             .buttonStyle(.borderedProminent)
             .tint(Color.primaryActionFill)
             .disabled(viewModel.selectedNames.isEmpty || viewModel.activeWriteAction != nil)

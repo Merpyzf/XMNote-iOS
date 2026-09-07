@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 NoteRepositoryProtocol 提供书摘回顾设置、分页卡片、标签与书籍回显数据，依赖 ExternalAppIntegrationRepositoryProtocol/AIRepositoryProtocol 提供外部发送与 AI 配置预检，并向页面私有换组宿主提供候选页准备与无动画提交能力
- * [OUTPUT]: 对外提供 NoteReviewContentState 与 NoteReviewViewModel，显式区分首轮结果未知、内容、真实空态和持久失败，并提供全屏回顾有界启动负载、设置 Sheet、分页刷新、随机换组交接、一级操作与分享反馈状态
+ * [OUTPUT]: 对外提供 NoteReviewContentState 与 NoteReviewViewModel，显式区分首轮结果未知、内容、真实空态和持久失败，并提供幂等设置对账、全屏回顾有界启动负载、分页刷新、随机换组交接、一级操作与分享反馈状态
  * [POS]: ViewModels/Note 的书摘回顾状态编排器，被 NoteReviewView 与 NoteContainerView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -70,6 +70,11 @@ final class NoteReviewViewModel {
         static let pageSize = 20
     }
 
+    private enum SettingsUpdateOrigin {
+        case local
+        case external
+    }
+
     var settings: NoteReviewSettings = .defaultValue
     var items: [NoteReviewCardItem] = []
     private(set) var contentState: NoteReviewContentState = .idle
@@ -96,7 +101,6 @@ final class NoteReviewViewModel {
     private var canLoadMore = true
     private var hasLoadedOnce = false
     private var loadingGeneration = 0
-    private var isSavingLocalSettings = false
     private var isApplyingLocalDataChange = false
     private var hasPendingExternalDataRefresh = false
     private var settingObservationTask: Task<Void, Never>?
@@ -360,13 +364,22 @@ final class NoteReviewViewModel {
 
     /// 保存新设置，并按变化类型决定是否重载数据；外观变化只触发布局刷新。
     func updateSettings(_ nextSettings: NoteReviewSettings) async {
+        await applySettings(nextSettings, origin: .local)
+    }
+
+    /// 在主线程先提交设置快照，再按来源决定是否持久化；后续异步查询沿用既有 generation 丢弃过期响应并响应任务取消。
+    private func applySettings(
+        _ nextSettings: NoteReviewSettings,
+        origin: SettingsUpdateOrigin
+    ) async {
         let previous = settings
         guard nextSettings != previous else { return }
 
         cancelPreparedRefresh()
         settings = nextSettings
-        isSavingLocalSettings = true
-        repository.saveNoteReviewSettings(nextSettings)
+        if origin == .local {
+            repository.saveNoteReviewSettings(nextSettings)
+        }
 
         if previous.selectedBookIDs != nextSettings.selectedBookIDs {
             await reloadSelectedBooks(for: nextSettings.selectedBookIDs)
@@ -821,12 +834,6 @@ private extension NoteReviewViewModel {
             guard let self else { return }
             for await _ in repository.observeNoteReviewSettingChanges() {
                 guard !Task.isCancelled else { return }
-                await MainActor.run {
-                    guard !self.isSavingLocalSettings else {
-                        self.isSavingLocalSettings = false
-                        return
-                    }
-                }
                 await self.reloadStoredSettingsFromExternalChange()
             }
         }
@@ -908,9 +915,9 @@ private extension NoteReviewViewModel {
     }
 
     func reloadStoredSettingsFromExternalChange() async {
-        let next = repository.fetchNoteReviewSettings()
+        let next = resolvedStoredSettings(repository.fetchNoteReviewSettings())
         guard next != settings else { return }
-        await updateSettings(next)
+        await applySettings(next, origin: .external)
     }
 
     func reloadForSettingsChange() async {

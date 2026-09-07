@@ -20,6 +20,7 @@ nonisolated enum ContentViewerSourceContext: Hashable, Sendable, Codable {
     case timeline(startTimestamp: Int64, endTimestamp: Int64, filter: TimelineContentFilter)
     case bookNotes(bookId: Int64)
     case noteReview(noteIDs: [Int64])
+    case noteReviewDirectory(NoteReviewDirectoryReference)
     case noteExcerpts(
         scope: NoteExcerptScope,
         query: String,

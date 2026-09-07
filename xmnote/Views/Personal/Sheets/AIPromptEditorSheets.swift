@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 AIPromptEditorViewModel、AIPromptTrialSessionViewModel、NoteRepositoryProtocol、XMBookCover、AI 生成等待反馈、标准 Sheet/搜索/状态组件、系统交互式玻璃反馈、提示词变量只读渲染器与流式 Markdown 渲染器
- * [OUTPUT]: 对外提供提示词请求预览、可编辑书摘流式试运行、AI 标签 JSON/格式化双层结果与可中断展开反馈、本地书摘选择，以及单一 Sheet 内推进的字段优化流程
+ * [OUTPUT]: 对外提供提示词请求预览、可编辑书摘流式试运行、AI 标签 JSON/格式化双层结果与可中断展开反馈、本地书摘选择，以及单一 Sheet 内推进的字段优化流程，品牌操作前景随外观配对
  * [POS]: Views/Personal/Sheets 的提示词编辑次级任务集合，由 AIPromptEditorView 的 item-driven Sheet 路由消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -246,6 +246,7 @@ struct AIPromptTrialSheet: View {
             Text(preparationActionTitle)
                 .frame(maxWidth: .infinity)
         }
+        .foregroundStyle(Color.primaryActionForeground)
         .buttonStyle(.glassProminent)
         .controlSize(.extraLarge)
         .tint(Color.appTint)
@@ -624,6 +625,7 @@ private struct AIPromptTrialResultView: View {
             Text("重新生成")
                 .frame(maxWidth: .infinity)
         }
+        .foregroundStyle(Color.primaryActionForeground)
         .buttonStyle(.glassProminent)
         .controlSize(.extraLarge)
         .tint(Color.appTint)

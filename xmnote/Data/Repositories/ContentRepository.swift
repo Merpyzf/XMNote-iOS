@@ -44,6 +44,9 @@ struct ContentRepository: ContentRepositoryProtocol {
                 try fetchBookNoteViewerItems(db, bookId: bookId)
             case .noteReview(let noteIDs):
                 try fetchNoteReviewViewerItems(db, noteIDs: noteIDs)
+            case .noteReviewDirectory:
+                // Resolve a bounded directory page before observing business metadata.
+                throw NoteReviewDirectoryError.unavailable
             case .noteExcerpts(let scope, let query, let sort, let randomSeed):
                 try fetchNoteExcerptViewerItems(
                     db,

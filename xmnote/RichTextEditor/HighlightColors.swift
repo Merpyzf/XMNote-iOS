@@ -9,7 +9,7 @@ import UIKit
 
 /// 13 组高亮色 light↔dark 映射，移植自 Android Constant.java
 /// 使用 ARGB UInt32 作为字典 key，避免 UIColor 浮点精度问题
-enum HighlightColors {
+nonisolated enum HighlightColors {
 
     // MARK: - 默认高亮色
 
